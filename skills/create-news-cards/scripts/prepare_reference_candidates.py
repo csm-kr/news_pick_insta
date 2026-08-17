@@ -149,6 +149,13 @@ FORBIDDEN
 
 
 def prepare(board: dict, board_path: Path, work: Path, target: str) -> dict:
+    work = work.resolve()
+    try:
+        work.relative_to(Path(__file__).resolve().parent.parent)
+    except ValueError:
+        pass
+    else:
+        raise ValueError("work-dir은 create-news-cards skill 폴더 밖에 있어야 한다.")
     if not re.fullmatch(r"\d{2,5}x\d{2,5}", target):
         raise ValueError("target_size는 WxH 형식이어야 한다.")
     count = board.get("card_count")

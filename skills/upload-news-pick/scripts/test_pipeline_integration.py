@@ -61,7 +61,11 @@ class PipelineIntegrationTests(unittest.TestCase):
             for card in range(1, 4):
                 (slides / f"{card:02d}.png").write_bytes(b"synthetic-final-png")
             (run / "03-create" / "selection.json").write_text(json.dumps({"story_id": "story-1", "direction_id": "direction-01", "card_count": 3}), encoding="utf-8")
-            (run / "03-create" / "qa-report.json").write_text(json.dumps({"passed": True}), encoding="utf-8")
+            (run / "03-create" / "duplicate-qa.json").write_text(json.dumps({"passed": True}), encoding="utf-8")
+            (run / "03-create" / "qa-report.json").write_text(
+                json.dumps({"passed": True, "checks": {"no_exact_or_near_duplicate": True}}),
+                encoding="utf-8",
+            )
             MOD.complete_stage(run, "create-news-cards")
 
             (run / "04-publish" / "publish-job.json").write_text("{}", encoding="utf-8")

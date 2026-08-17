@@ -21,4 +21,4 @@
 
 ## 폴더 계약
 
-모든 산출물은 run 폴더 안에 있어야 한다. 절대 경로나 `..`로 run 밖의 파일을 출력 계약에 넣지 않는다. 각 JSON은 UTF-8, 정렬 가능한 키, 명시적 `schema_version`을 사용한다.
+모든 산출물은 `NEWS_PICK_OUTPUT_ROOT` 아래에 있어야 한다. 사건별 산출물은 `runs/<run_id>`, 게시 queue와 선택적 backend는 `publish-news-pick`, 프로필 후보는 `profile-candidates`에 둔다. skill 폴더에는 실행물을 쓰지 않는다. 절대 경로나 `..`로 output root 밖의 파일을 출력 계약에 넣지 않는다. 각 JSON은 UTF-8, 정렬 가능한 키, 명시적 `schema_version`을 사용한다.

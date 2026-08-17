@@ -39,7 +39,7 @@ upload-news-pick                  전체 실행·체크포인트·실패 복구
 한 번의 오케스트레이터 실행은 하나의 `run_id`를 가진다. 한 게시물은 하나의 핵심 사건만 다룬다.
 
 ```text
-runs/<run_id>/
+output/runs/<run_id>/
   run.json
   01-search/news-candidates.json
   01-search/selected-story.json

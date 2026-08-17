@@ -162,10 +162,17 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.command == "discover":
+            output = args.output.resolve()
+            try:
+                output.relative_to(Path(__file__).resolve().parent.parent)
+            except ValueError:
+                pass
+            else:
+                raise ValueError("output은 search-news skill 폴더 밖에 있어야 한다.")
             payload = discover(parse_time(args.since), parse_time(args.until), args.registry)
-            args.output.parent.mkdir(parents=True, exist_ok=True)
-            args.output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            result = {"output": str(args.output.resolve()), "candidates": len(payload["candidates"]), "sources_ok": sum(x["ok"] for x in payload["source_health"])}
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            result = {"output": str(output), "candidates": len(payload["candidates"]), "sources_ok": sum(x["ok"] for x in payload["source_health"])}
         else:
             validate_story(json.loads(args.input.read_text(encoding="utf-8")))
             result = {"valid": True, "input": str(args.input.resolve())}
@@ -178,4 +185,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -1,6 +1,6 @@
 # 공개 프로필 검증
 
-Browser Harness background target으로 `https://www.instagram.com/newspick_studio/`와 제출 결과의 shortcode URL을 연다.
+Browser Harness background target으로 `https://www.instagram.com/<IG_ACCOUNT>/`와 제출 결과의 shortcode URL을 연다.
 
 확인:
 

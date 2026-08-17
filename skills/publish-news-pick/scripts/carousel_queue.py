@@ -23,7 +23,20 @@ from urllib.parse import urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent.parent
-LOCAL_ROOT = ROOT / ".local"
+
+
+def default_output_root() -> Path:
+    configured = os.environ.get("NEWS_PICK_OUTPUT_ROOT")
+    output = Path(configured).expanduser().resolve() if configured else (Path.cwd() / "output").resolve()
+    skills_root = Path(__file__).resolve().parents[2]
+    try:
+        output.relative_to(skills_root)
+    except ValueError:
+        return output
+    raise ValueError("NEWS_PICK_OUTPUT_ROOT는 설치된 skills 폴더 밖에 있어야 한다.")
+
+
+LOCAL_ROOT = Path(os.environ.get("NEWS_PICK_PUBLISH_ROOT") or (default_output_root() / "publish-news-pick")).expanduser().resolve()
 JOBS_ROOT = LOCAL_ROOT / "jobs"
 CONFIG_PATH = LOCAL_ROOT / "config.json"
 LOCK_PATH = LOCAL_ROOT / "queue.lock"

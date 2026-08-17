@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 PATH = Path(__file__).with_name("carousel_queue.py")
@@ -13,6 +14,16 @@ SPEC.loader.exec_module(MOD)
 
 
 class QueueTests(unittest.TestCase):
+    def test_output_root_uses_environment(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {"NEWS_PICK_OUTPUT_ROOT": tmp}):
+            self.assertEqual(MOD.default_output_root(), Path(tmp).resolve())
+
+    def test_output_root_inside_installed_skills_is_rejected(self):
+        skills_root = Path(MOD.__file__).resolve().parents[2]
+        with patch.dict("os.environ", {"NEWS_PICK_OUTPUT_ROOT": str(skills_root / "runtime-output")}):
+            with self.assertRaisesRegex(ValueError, "skills"):
+                MOD.default_output_root()
+
     def files(self, root, count=3):
         result = []
         for i in range(count):

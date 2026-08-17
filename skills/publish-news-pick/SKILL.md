@@ -1,6 +1,6 @@
 ---
 name: publish-news-pick
-description: 승인된 3~4장 PNG를 @newspick_studio Instagram 사진 캐러셀로 게시한다. 전용 Chrome Profile 3의 Instagram 웹 UI를 Browser Harness로 제어하고 private API는 선택적 보조 경로로만 사용한다. 불변 payload 승인, AI 라벨, 중복 방지, 모호한 제출의 needs_review, 공개 프로필 검증이 필요한 뉴스픽 업로드에 사용한다.
+description: 승인된 3~4장 PNG를 설정된 Instagram 계정의 사진 캐러셀로 게시한다. 사용자가 고른 전용 Chrome profile의 Instagram 웹 UI를 Browser Harness로 제어하고 private API는 선택적 보조 경로로만 사용한다. 불변 payload 승인, AI 라벨, 중복 방지, 모호한 제출의 needs_review, 공개 프로필 검증이 필요한 뉴스픽 업로드에 사용한다.
 ---
 
 # Publish News Pick
@@ -13,17 +13,18 @@ description: 승인된 3~4장 PNG를 @newspick_studio Instagram 사진 캐러셀
 
 - 승인된 1024×1024 PNG 3~4장과 고정된 순서
 - 2200자 이하 caption과 게시 시각
-- `@newspick_studio`에 로그인된 표시형 Chrome `Profile 3`
+- `IG_ACCOUNT`의 계정에 로그인된 `NEWS_PICK_CHROME_PROFILE` 표시형 Chrome
+- skill 폴더 밖의 절대 `NEWS_PICK_OUTPUT_ROOT`
 - Browser Harness 기본 연결
 - exact payload에 대한 사용자 게시 승인
 
-웹 UI 경로에는 password, cookie export, `sessionid`, 앱 비밀번호가 필요 없다. Chrome Profile 3의 기존 로그인 세션을 그대로 사용한다.
+기본값은 `IG_ACCOUNT=newspick_studio`, `NEWS_PICK_CHROME_PROFILE=Profile 3`이지만 다른 workspace에서는 명시적으로 바꿀 수 있다. 웹 UI 경로에는 password, cookie export, `sessionid`, 앱 비밀번호가 필요 없다. 선택한 Chrome profile의 기존 로그인 세션을 그대로 사용한다.
 
 ## 불변조건
 
-- 대상 계정은 `@newspick_studio`다.
-- 사용자가 로그인한 전용 Chrome Profile 3과 loopback CDP만 사용한다.
-- Browser Harness에서 Profile 3의 Instagram 탭 하나만 제어한다. 다른 탭을 닫거나 탐색하지 않는다.
+- 대상 계정은 승인 payload의 계정 및 `IG_ACCOUNT`와 일치해야 한다.
+- 사용자가 로그인한 `NEWS_PICK_CHROME_PROFILE` 전용 Chrome과 loopback CDP만 사용한다.
+- Browser Harness에서 설정된 profile의 Instagram 탭 하나만 제어한다. 다른 탭을 닫거나 탐색하지 않는다.
 - 웹 UI 게시 경로에서는 해당 Instagram 탭의 활성화·탐색·파일 선택을 허용한다. 공개 검증은 background target으로 수행한다.
 - password, MFA, CAPTCHA, 동의 화면을 자동 처리하지 않는다.
 - cookie·Authorization·client settings를 출력하거나 저장하지 않는다.
@@ -40,18 +41,22 @@ description: 승인된 3~4장 PNG를 @newspick_studio Instagram 사진 캐러셀
 현재 Browser Harness 기본 연결과 기대 프로필을 등록한다.
 
 ```powershell
-python scripts/carousel_queue.py configure --browser-harness-connection default --expected-profile "Profile 3" --dedicated-profile
+$env:NEWS_PICK_OUTPUT_ROOT = '<workspace>/output'
+$env:IG_ACCOUNT = 'newspick_studio'
+$env:NEWS_PICK_CHROME_PROFILE = 'Profile 3'
+python scripts/launch_chrome_profile.py --profile $env:NEWS_PICK_CHROME_PROFILE --account $env:IG_ACCOUNT
+python scripts/carousel_queue.py configure --browser-harness-connection default --expected-profile $env:NEWS_PICK_CHROME_PROFILE --dedicated-profile
 ```
 
 별도 Chrome이 loopback CDP URL을 직접 노출하는 환경에서는 `--endpoint http://127.0.0.1:<port>`를 대신 사용할 수 있다.
 
-Profile 3 Instagram 로그인을 읽기 전용으로 확인한다.
+설정된 Chrome profile의 Instagram 로그인을 읽기 전용으로 확인한다.
 
 ```powershell
 browser-harness < scripts/browser_web_preflight.py
 ```
 
-`ready=true`, target account, `프로필 편집`, `새로운 게시물`, login/challenge 부재를 모두 확인해야 한다. 실패하면 사용자가 Profile 3 창에서 로그인·MFA·challenge를 직접 완료할 때까지 멈춘다.
+`ready=true`, target account, `프로필 편집`, `새로운 게시물`, login/challenge 부재를 모두 확인해야 한다. 실패하면 사용자가 설정된 profile 창에서 로그인·MFA·challenge를 직접 완료할 때까지 멈춘다.
 
 비공식 backend 설치를 사용자가 승인한 뒤에만 project-local venv를 만든다.
 
@@ -59,12 +64,12 @@ browser-harness < scripts/browser_web_preflight.py
 python scripts/setup_backend.py
 ```
 
-Windows에서는 `.local/private-venv/Scripts/python.exe`, POSIX에서는 `bin/python`을 자동 선택한다.
+선택적 backend는 `<NEWS_PICK_OUTPUT_ROOT>/publish-news-pick/private-venv`에 만들며 skill 폴더에는 쓰지 않는다. Windows에서는 `Scripts/python.exe`, POSIX에서는 `bin/python`을 자동 선택한다.
 
 ## 선택적 private API probe
 
 ```powershell
-python scripts/carousel_queue.py probe --account newspick_studio
+python scripts/carousel_queue.py probe --account $env:IG_ACCOUNT
 ```
 
 `probe_only`, `session_persisted=false`, `active_preserved`, `existing_target_preserved`, private client account 일치가 모두 필요하다.
@@ -72,7 +77,7 @@ python scripts/carousel_queue.py probe --account newspick_studio
 ## 준비와 승인
 
 ```powershell
-python scripts/carousel_queue.py prepare --account newspick_studio --scheduled-at <ISO-8601> --timezone Asia/Seoul --media <01.png> --media <02.png> --media <03.png> --caption-file <caption.txt>
+python scripts/carousel_queue.py prepare --account $env:IG_ACCOUNT --scheduled-at <ISO-8601> --timezone Asia/Seoul --media <01.png> --media <02.png> --media <03.png> --caption-file <caption.txt>
 ```
 
 표시된 계정, 시각, caption 글자 수, 정확한 이미지 순서, 각 SHA-256, `payload_sha256`을 확인한다. 사용자가 이 exact payload의 실게시를 승인한 뒤에만:
@@ -85,7 +90,7 @@ python scripts/carousel_queue.py approve <job_id> --sha256 <payload_sha256>
 
 ## 제출 — 기본 웹 UI 경로
 
-Browser Harness로 Profile 3의 Instagram 작성 화면을 열고 다음 순서를 지킨다.
+Browser Harness로 설정된 Chrome profile의 Instagram 작성 화면을 열고 다음 순서를 지킨다.
 
 1. `새로운 게시물` → `컴퓨터에서 선택`
 2. 승인된 PNG 3~4장을 번호 순서로 한 번에 선택
@@ -118,7 +123,7 @@ private API가 shortcode를 반환해도 상태는 `submitted`다. 제출 호출
 [references/post-publish-verification.md](references/post-publish-verification.md)에 따라 Browser Harness background target으로 프로필과 게시물을 읽는다. `scripts/browser_web_verify.py`로 caption과 `AI 콘텐츠` 표시를 확인하고, shortcode, 카드 장수와 첫 카드까지 모두 맞을 때만:
 
 ```powershell
-$env:IG_POST_URL='https://www.instagram.com/newspick_studio/p/<code>/'
+$env:IG_POST_URL="https://www.instagram.com/$env:IG_ACCOUNT/p/<code>/"
 $env:IG_CAPTION_PREFIX='<caption 첫 문장>'
 $env:IG_REQUIRE_AI_LABEL='1'
 browser-harness < scripts/browser_web_verify.py

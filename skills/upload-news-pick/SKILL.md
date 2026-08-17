@@ -1,11 +1,13 @@
 ---
 name: upload-news-pick
-description: 한국 종합 이슈 하나를 탐색·검증하고, 중립적 강후킹의 3~4장 Instagram 카드뉴스로 기획·제작한 뒤 @newspick_studio에 캐러셀로 안전하게 게시하는 전체 오케스트레이터. 오늘의 뉴스픽 제작, 카드뉴스 자동화, 네 단계 일괄 실행, 중단된 run 재개, 실게시 전 검증을 요청할 때 사용한다.
+description: 한국 종합 이슈 하나를 탐색·검증하고, 중립적 강후킹의 3~4장 Instagram 카드뉴스로 기획·제작한 뒤 설정된 계정에 캐러셀로 안전하게 게시하는 portable 전체 오케스트레이터. 오늘의 뉴스픽 제작, 카드뉴스 자동화, 네 단계 일괄 실행, 새 workspace 설치, 중단된 run 재개, 실게시 전 검증을 요청할 때 사용한다.
 ---
 
 # Upload News Pick
 
 하나의 `run_id` 아래 네 전문 스킬을 순서대로 연결한다. 이 스킬은 각 단계의 일을 직접 대신하지 않고 입력·출력 계약, hash, 중단·재개와 게시 승인 경계만 관리한다.
+
+실행 전 [references/portable-layout.md](references/portable-layout.md)를 읽고 다섯 스킬이 같은 부모 폴더에 설치됐는지 확인한다. skill 폴더는 읽기 전용으로 유지하고 모든 실행물은 별도 `NEWS_PICK_OUTPUT_ROOT` 아래에 쓴다.
 
 ## 고정 구성
 
@@ -21,10 +23,11 @@ description: 한국 종합 이슈 하나를 탐색·검증하고, 중립적 강�
 새 실행은 다음으로 만든다.
 
 ```powershell
-python scripts/orchestrate.py init --runs-root <project>/runs --edition-at <ISO-8601> --account newspick_studio
+$env:NEWS_PICK_OUTPUT_ROOT = '<workspace>/output'
+python scripts/orchestrate.py init --output-root $env:NEWS_PICK_OUTPUT_ROOT --edition-at <ISO-8601> --account <instagram-account>
 ```
 
-기존 실행은 먼저 상태를 읽는다.
+이 명령은 `<output-root>/runs`, `publish-news-pick`, `profile-candidates`, `cache`, `logs`를 만들고 run은 `<output-root>/runs/<run_id>`에 둔다. 기존 실행은 먼저 상태를 읽는다.
 
 ```powershell
 python scripts/orchestrate.py status --run <run-directory>
@@ -89,7 +92,7 @@ python scripts/orchestrate.py complete-stage --run <run-directory> --stage searc
 
 ## 4단계 — 업로드
 
-`publish-news-pick`에 최종 slides, caption, `@newspick_studio`, 게시 시각을 전달한다. caption에 `AI로 재구성한 인포그래픽` 계열 문구가 없어야 하며, AI 공개 표시는 Instagram `AI 콘텐츠` 라벨로 처리한다. MVP에서는 payload hash를 사람에게 보여주고 명시적으로 승인받은 뒤에만 제출한다.
+`publish-news-pick`에 최종 slides, caption, run의 설정 계정, 게시 시각을 전달한다. run의 `account`, `IG_ACCOUNT`, 실제 로그인 계정이 모두 같아야 한다. caption에 `AI로 재구성한 인포그래픽` 계열 문구가 없어야 하며, AI 공개 표시는 Instagram `AI 콘텐츠` 라벨로 처리한다. MVP에서는 payload hash를 사람에게 보여주고 명시적으로 승인받은 뒤에만 제출한다.
 
 제출 후 오류나 timeout은 자동 재시도하지 않는다. `needs_review`에서 프로필을 읽기 전용으로 확인한다. private API 응답만으로 완료하지 말고 공개 프로필에서 shortcode, 카드 장수, 첫 장, caption을 검증한다.
 

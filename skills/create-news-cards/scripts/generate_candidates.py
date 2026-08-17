@@ -22,9 +22,36 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def tibo_root() -> Path:
+def tibo_roots() -> list[Path]:
+    candidates = []
     configured = os.environ.get("GOD_TIBO_SKILL_ROOT")
-    return Path(configured).expanduser() if configured else Path.home() / ".codex" / "skills" / "god-tibo-gpt-image2-skill"
+    if configured:
+        candidates.append(Path(configured).expanduser())
+    codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")).expanduser()
+    candidates.extend(
+        [
+            Path(__file__).resolve().parents[2] / "god-tibo-gpt-image2-skill",
+            codex_home / "skills" / "god-tibo-gpt-image2-skill",
+            Path.home() / ".agents" / "skills" / "god-tibo-gpt-image2-skill",
+        ]
+    )
+    unique = []
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved not in unique:
+            unique.append(resolved)
+    return unique
+
+
+def tibo_root() -> Path:
+    for candidate in tibo_roots():
+        if (candidate / "scripts" / "tibo-batch.mjs").is_file():
+            return candidate
+    searched = ", ".join(str(path) for path in tibo_roots())
+    raise FileNotFoundError(
+        "god-tibo-gpt-image2-skill을 찾을 수 없다. GOD_TIBO_SKILL_ROOT를 설정한다. "
+        f"검색 위치: {searched}"
+    )
 
 
 def run_one(record: dict, work: Path, script: Path, dry_run: bool, force: bool) -> dict:

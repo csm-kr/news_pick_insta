@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import time
 
 
@@ -16,6 +17,9 @@ def attach_without_focus(target_id):
 
 post_url = os.environ["IG_POST_URL"]
 caption_prefix = os.environ["IG_CAPTION_PREFIX"]
+account = os.environ.get("IG_ACCOUNT", "newspick_studio").strip().lstrip("@").lower()
+if not re.fullmatch(r"[a-z0-9._]+", account):
+    raise RuntimeError("IG_ACCOUNT 형식이 올바르지 않다")
 require_ai = os.environ.get("IG_REQUIRE_AI_LABEL", "1") != "0"
 shot = os.environ.get("IG_SCREENSHOT")
 previous = current_tab()["targetId"]
@@ -32,14 +36,14 @@ try:
       const text=document.body?.innerText||'';
       return {
         url:location.href,
-        account_visible:text.includes('newspick_studio'),
+        account_visible:text.includes(%s),
         caption_match:text.includes(%s),
         ai_label:text.includes('AI \uCF58\uD150\uCE20'),
         login_wall:location.href.includes('/accounts/login') || !!document.querySelector('input[type=password]'),
         challenge:/(challenge|checkpoint)/.test(location.href)
       };
     })()
-    """ % json.dumps(caption_prefix, ensure_ascii=False))
+    """ % (json.dumps(account), json.dumps(caption_prefix, ensure_ascii=False)))
     state["verified"] = bool(
         state.get("account_visible")
         and state.get("caption_match")

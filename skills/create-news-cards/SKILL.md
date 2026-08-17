@@ -7,6 +7,8 @@ description: 검증된 뉴스 스토리보드와 실제 기사 사진·공식 �
 
 생성 모델이 완성 카드 전체를 만든다. 실제 기사 대표 사진과 공식 발표·공시 화면을 reference로 제공하고, 모델이 사진 재구성·한글 카피·핵심 수치·차트를 한 이미지 안에서 완성하게 한다. 코드는 렌더링이나 오버레이에 쓰지 않고 크기·해시·장수·매니페스트 QA에만 쓴다.
 
+모든 `--work-dir`은 `<NEWS_PICK_OUTPUT_ROOT>/runs/<run_id>/03-create`처럼 skill 폴더 밖에 둔다. Tibo는 `GOD_TIBO_SKILL_ROOT`, 형제 skill, `$CODEX_HOME/skills`, `~/.agents/skills` 순서로 찾고 없으면 생성 전에 중단한다.
+
 ## 1. 입력을 잠근다
 
 `storyboard.json`은 정확히 4장이고 다음을 포함해야 한다.

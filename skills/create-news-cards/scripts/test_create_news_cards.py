@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -27,9 +28,19 @@ def load_module(name):
 CONTACT = load_module("make_contact_sheets")
 SELECT = load_module("select_direction")
 RENDER = load_module("render_cards")
+GENERATE = load_module("generate_candidates")
 
 
 class CreateCardsTests(unittest.TestCase):
+    def test_tibo_root_can_be_configured_outside_codex_home(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            script = root / "scripts" / "tibo-batch.mjs"
+            script.parent.mkdir()
+            script.write_text("", encoding="utf-8")
+            with patch.dict("os.environ", {"GOD_TIBO_SKILL_ROOT": str(root)}):
+                self.assertEqual(GENERATE.tibo_root(), root.resolve())
+
     def board(self, count):
         roles = ["hook", "facts_and_context", "impact_unknowns_sources"] if count == 3 else ["hook", "verified_facts", "context_and_positions", "impact_unknowns_sources"]
         return {"story_id": "s", "card_count": count, "cards": [{"index": i + 1, "role": role, "copy": f"copy {i}"} for i, role in enumerate(roles)]}

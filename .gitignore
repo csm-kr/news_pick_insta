@@ -3,6 +3,8 @@
 **/.local/
 runs/
 assets/
+output/*
+!output/.gitkeep
 *.log
 
 # Python / Node environments
@@ -29,4 +31,3 @@ chrome-profile*/
 Thumbs.db
 .vscode/
 .idea/
-

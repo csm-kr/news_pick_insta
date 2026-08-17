@@ -1,18 +1,14 @@
 # 인기 카드뉴스 비주얼 패턴
 
-성과와 원본 경로는 `../plan-news-pick/references`가 아니라 [인기 카드뉴스 벤치마크](../../plan-news-pick/references/popular-cardnews-benchmark.md)에서 확인한다. 생성 전 아래 로컬 이미지를 직접 본다.
+성과와 원본 링크는 [인기 카드뉴스 벤치마크](../../plan-news-pick/references/popular-cardnews-benchmark.md)에서 확인한다. 새 run에서 스타일 이미지를 확보했다면 아래 portable 위치에서 직접 본다.
 
 ```text
-runs/20260817-183830-6bc425a6-v3/references/style/
-  newneek-comfort-women-slide-01.jpg ... 04.jpg
-  bbc-north-korea-electricity-slide-01.jpg ... 04.jpg
-  bbc-satellite-evidence-slide-01.jpg ... 04.jpg
-  sisain-labor-tragedy-slide-01.jpg ... 02.jpg
-  sisain-capsule-hotel-slide-01.jpg ... 02.jpg
-  platformtree-high-engagement-slide-01.jpg ... 04.jpg
+<NEWS_PICK_OUTPUT_ROOT>/runs/<run_id>/references/style/
+  <publisher>-<post-id>-slide-01.jpg ...
+  popular-cardnews-manifest.json
 ```
 
-이 자산은 레이아웃·위계·전개 참고용이다. 로고, 색 조합, 문구, 서체, 고유 그래픽을 복제하지 않는다.
+이 자산은 해당 run의 레이아웃·위계·전개 참고용이다. 다른 machine에 과거 run이 없으면 아래 공개 링크와 구조 설명으로 다시 확보한다. 로고, 색 조합, 문구, 서체, 고유 그래픽을 복제하지 않는다.
 
 ## 방향 A — 인간 영향 포토뉴스
 

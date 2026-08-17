@@ -1,10 +1,14 @@
 """Run with: browser-harness < scripts/browser_web_preflight.py"""
 
 import json
+import os
+import re
 import time
 
 
-ACCOUNT = "newspick_studio"
+ACCOUNT = os.environ.get("IG_ACCOUNT", "newspick_studio").strip().lstrip("@").lower()
+if not re.fullmatch(r"[a-z0-9._]+", ACCOUNT):
+    raise RuntimeError("IG_ACCOUNT 형식이 올바르지 않다")
 PROFILE_URL = f"https://www.instagram.com/{ACCOUNT}/"
 
 
@@ -44,7 +48,7 @@ try:
   const url = location.href;
   return {
     url,
-    account_visible:text.includes('newspick_studio'),
+    account_visible:text.includes(%s),
     has_edit_profile:text.includes('\uD504\uB85C\uD544 \uD3B8\uC9D1') || controls.some(x=>x.href.includes('/accounts/edit')),
     has_create:controls.some(x=>x.text==='\uC0C8\uB85C\uC6B4 \uAC8C\uC2DC\uBB3C' || x.aria==='\uC0C8\uB85C\uC6B4 \uAC8C\uC2DC\uBB3C'),
     login_wall:url.includes('/accounts/login') || !!document.querySelector('input[type=password]'),
@@ -52,7 +56,7 @@ try:
     post_count:(text.match(/\uAC8C\uC2DC\uBB3C\\s+([0-9,]+)/)||[])[1]||null
   };
 })()
-""")
+""" % json.dumps(ACCOUNT))
     ax_nodes = cdp("Accessibility.getFullAXTree").get("nodes", [])
     ax_names = {str((node.get("name") or {}).get("value") or "") for node in ax_nodes}
     state["has_create"] = "\uC0C8\uB85C\uC6B4 \uAC8C\uC2DC\uBB3C" in ax_names
@@ -65,7 +69,7 @@ try:
     )
     print("INSTAGRAM_WEB_PREFLIGHT=" + json.dumps(state, ensure_ascii=True))
     if not state["ready"]:
-        raise RuntimeError("Profile 3 Instagram login is not ready for @newspick_studio")
+        raise RuntimeError(f"configured Chrome profile is not ready for @{ACCOUNT}")
 finally:
     cdp("Target.closeTarget", targetId=target_id)
     attach_without_focus(previous)

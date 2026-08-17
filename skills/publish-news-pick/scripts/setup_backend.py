@@ -4,13 +4,22 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-VENV = ROOT / ".local" / "private-venv"
+OUTPUT_ROOT = Path(os.environ.get("NEWS_PICK_OUTPUT_ROOT") or (Path.cwd() / "output")).expanduser().resolve()
+try:
+    OUTPUT_ROOT.relative_to(Path(__file__).resolve().parents[2])
+except ValueError:
+    pass
+else:
+    raise ValueError("NEWS_PICK_OUTPUT_ROOT는 설치된 skills 폴더 밖에 있어야 한다.")
+RUNTIME_ROOT = Path(os.environ.get("NEWS_PICK_PUBLISH_ROOT") or (OUTPUT_ROOT / "publish-news-pick")).expanduser().resolve()
+VENV = RUNTIME_ROOT / "private-venv"
 REQUIREMENTS = ROOT / "requirements.txt"
 
 

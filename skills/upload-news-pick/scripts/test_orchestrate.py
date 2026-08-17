@@ -4,6 +4,7 @@ import importlib.util
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 PATH = Path(__file__).with_name("orchestrate.py")
@@ -14,6 +15,22 @@ SPEC.loader.exec_module(MOD)
 
 
 class OrchestrateTests(unittest.TestCase):
+    def test_default_output_root_uses_environment(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {"NEWS_PICK_OUTPUT_ROOT": tmp}):
+            self.assertEqual(MOD.default_output_root(), Path(tmp).resolve())
+
+    def test_initialize_output_root_creates_runtime_only_layout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = MOD.initialize_output_root(Path(tmp) / "output")
+            self.assertTrue((root / "runs").is_dir())
+            self.assertTrue((root / "publish-news-pick").is_dir())
+            self.assertFalse((root / "skills").exists())
+
+    def test_output_root_inside_installed_skills_is_rejected(self):
+        skills_root = Path(MOD.__file__).resolve().parents[2]
+        with self.assertRaisesRegex(ValueError, "skills"):
+            MOD.initialize_output_root(skills_root / "runtime-output")
+
     def test_init_and_search_transition(self):
         with tempfile.TemporaryDirectory() as tmp:
             result = MOD.init_run(Path(tmp), "2026-08-17T17:00:00+09:00", "@newspick_studio")

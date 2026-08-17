@@ -22,6 +22,25 @@ DIRS = {
 }
 
 
+def default_output_root() -> Path:
+    configured = os.environ.get("NEWS_PICK_OUTPUT_ROOT")
+    return Path(configured).expanduser().resolve() if configured else (Path.cwd() / "output").resolve()
+
+
+def initialize_output_root(output_root: Path) -> Path:
+    output_root = output_root.expanduser().resolve()
+    skills_root = Path(__file__).resolve().parents[2]
+    try:
+        output_root.relative_to(skills_root)
+    except ValueError:
+        pass
+    else:
+        raise ValueError("output root는 설치된 skills 폴더 밖에 있어야 한다.")
+    for dirname in ("runs", "publish-news-pick", "profile-candidates", "cache", "logs"):
+        (output_root / dirname).mkdir(parents=True, exist_ok=True)
+    return output_root
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -71,6 +90,7 @@ def validate_stage(run: Path, stage: str) -> None:
     elif stage == "create-news-cards":
         selection = load_json(folder / "selection.json")
         qa = load_json(folder / "qa-report.json")
+        duplicate_qa = load_json(folder / "duplicate-qa.json")
         candidates = [p for p in (folder / "candidates").rglob("*.png")]
         slides = [p for p in (folder / "slides").glob("*.png")]
         if len(candidates) != 12:
@@ -79,6 +99,8 @@ def validate_stage(run: Path, stage: str) -> None:
             raise ValueError("선택된 최종 slides 장수가 올바르지 않다.")
         if qa.get("passed") is not True:
             raise ValueError("이미지 QA가 통과되지 않았다.")
+        if duplicate_qa.get("passed") is not True or qa.get("checks", {}).get("no_exact_or_near_duplicate") is not True:
+            raise ValueError("이미지 중복 QA가 통과되지 않았다.")
     else:
         result = load_json(folder / "result.json")
         if result.get("status") != "published" or result.get("public_verified") is not True:
@@ -134,7 +156,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     init = commands.add_parser("init")
-    init.add_argument("--runs-root", type=Path, required=True)
+    root_group = init.add_mutually_exclusive_group()
+    root_group.add_argument("--output-root", type=Path, help="Runtime output root. Runs are created below <output-root>/runs.")
+    root_group.add_argument("--runs-root", type=Path, help=argparse.SUPPRESS)
     init.add_argument("--edition-at", required=True)
     init.add_argument("--account", default="newspick_studio")
     status = commands.add_parser("status")
@@ -148,7 +172,11 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.command == "init":
-            result = init_run(args.runs_root, args.edition_at, args.account)
+            if args.runs_root:
+                runs_root = args.runs_root
+            else:
+                runs_root = initialize_output_root(args.output_root or default_output_root()) / "runs"
+            result = init_run(runs_root.resolve(), args.edition_at, args.account)
         elif args.command == "status":
             result = load_json(args.run / "run.json")
         elif args.command == "complete-stage":
@@ -165,4 +193,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
