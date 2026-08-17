@@ -1,0 +1,4 @@
+interface:
+  display_name: "뉴스 카드 이미지 제작"
+  short_description: "Tibo 후보 12장 생성·세트 선택·한글 합성·QA"
+  default_prompt: "Use $create-news-cards to generate and QA twelve reference-aware square news-card candidates."

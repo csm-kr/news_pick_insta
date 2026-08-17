@@ -1,0 +1,32 @@
+# Runtime outputs and generated media
+.local/
+**/.local/
+runs/
+assets/
+*.log
+
+# Python / Node environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+node_modules/
+
+# Browser and authentication material
+.env
+.env.*
+!.env.example
+*cookie*.json
+*cookies*.json
+*session*.json
+*credentials*.json
+*client-settings*.json
+chrome-profile*/
+
+# Local research helpers and OS/editor files
+.bh_*.py
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+

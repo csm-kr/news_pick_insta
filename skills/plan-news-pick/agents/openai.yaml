@@ -1,0 +1,4 @@
+interface:
+  display_name: "뉴스픽 후킹·기획"
+  short_description: "검증된 뉴스를 중립적 3~4장 스토리보드로 기획"
+  default_prompt: "Use $plan-news-pick to turn the verified story into a sourced 3–4 card storyboard."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Instagram 뉴스픽 게시"
+  short_description: "Profile 3에서 승인된 캐러셀을 안전하게 게시·검증"
+  default_prompt: "Use $publish-news-pick to preflight Profile 3 and publish the approved news carousel exactly once."

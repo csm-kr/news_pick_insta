@@ -1,0 +1,4 @@
+interface:
+  display_name: "뉴스픽 전체 자동화"
+  short_description: "뉴스 탐색부터 Instagram 캐러셀 게시까지 연결"
+  default_prompt: "Use $upload-news-pick to run the four-stage news-card workflow through public Instagram verification."
