@@ -14,11 +14,11 @@
 ## 작성 화면
 
 1. `새로운 게시물`을 누른다.
-2. `컴퓨터에서 선택` 단계의 `input[type=file][multiple]`에 승인된 PNG를 번호 순서로 한 번에 전달한다.
-3. `미디어 갤러리 열기`에서 3~4개 thumbnail의 장수·순서·첫 카드를 screenshot으로 확인한다.
+2. `컴퓨터에서 선택` 단계의 `input[type=file][multiple]`에 승인된 PNG를 번호 순서로 한 번에 전달한다. `input[type=file]`처럼 단일 input도 잡는 넓은 selector는 금지한다.
+3. 업로드 뒤 React가 file input을 DOM에서 제거할 수 있다. `files.length`는 input이 남아 있을 때만 선택 이벤트의 진단값이며 게시 장수의 증거가 아니다. `미디어 갤러리 열기`에서 3~4개 thumbnail의 장수·순서·첫 카드를 screenshot으로 확인한다. 썸네일이 1개면 다음으로 진행하지 않는다.
 4. `자르기` 화면에서 1:1 정방형을 확인한다. 첫 카드의 상단·하단 문구가 잘리면 제출하지 않는다.
 5. 첫 번째 `다음` 뒤 편집 화면에서 `원본` 필터가 선택됐는지 확인한다.
-6. 두 번째 `다음` 뒤 승인된 caption을 그대로 입력하고 Instagram 표시 글자 수와 로컬 글자 수를 대조한다.
+6. 두 번째 `다음` 뒤 승인된 caption을 그대로 입력한다. 입력 요소는 `<textarea>` 또는 `[role=textbox][contenteditable=true]`일 수 있으므로 둘 다 지원하고 Instagram 표시 글자 수와 로컬 글자 수를 대조한다.
 7. 사실적 AI 재구성 카드이면 `AI 라벨 추가` switch의 `aria-checked=true`를 확인한다.
 
 게시 직전 screenshot에 첫 카드, caption 끝부분, 글자 수, AI switch를 함께 남긴다.
@@ -50,6 +50,8 @@ background target으로 permalink를 열어 다음을 확인한다.
 - carousel 장수가 일치
 - caption 첫 문장과 기준시각이 일치
 - 사실적 AI 재구성 카드에 `AI 콘텐츠` 표시가 보임
+
+화살표는 hover 상태에서만 DOM에 나타날 수 있다. permalink 뒤에 `?img_index=1`부터 `?img_index=<장수>`를 붙여 각 페이지의 pagination dot 수가 같고 active index가 0부터 마지막까지 순서대로 바뀌는지 확인한다.
 
 모두 맞을 때만 `verify-published`를 실행한다.
 

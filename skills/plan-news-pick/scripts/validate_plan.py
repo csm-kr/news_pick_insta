@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ from typing import Any
 ROLES_4 = ["hook", "verified_facts", "context_and_positions", "impact_unknowns_sources"]
 ROLES_3 = ["hook", "facts_and_context", "impact_unknowns_sources"]
 FORBIDDEN = ("전 국민 충격", "발칵", "난리", "역대급", "초비상", "끝났다", "대체 무슨 일이", "결국 터졌다", "알고 보니", "숨긴 진실")
+CARD_INDEX_CAPTION = re.compile(r"(?m)^\s*[1-4]\s*장\s*[|:]", re.UNICODE)
 
 
 def validate(story: dict[str, Any], board: dict[str, Any]) -> None:
@@ -84,6 +86,17 @@ def validate(story: dict[str, Any], board: dict[str, Any]) -> None:
         total = sum(int(score.get(k, 0)) for k in ("specificity", "life_impact", "immediacy", "exaggeration_risk"))
         if candidate.get("total") != total:
             raise ValueError("hook candidate total 계산이 맞지 않는다.")
+    caption = str(board.get("caption") or "").strip()
+    if not caption:
+        raise ValueError("caption이 비었다.")
+    if CARD_INDEX_CAPTION.search(caption):
+        raise ValueError("caption 본문은 장별 목차가 아니라 하나의 뉴스 문단이어야 한다.")
+    marker = "기준시각:"
+    if marker not in caption:
+        raise ValueError("caption에 기준시각이 필요하다.")
+    narrative = caption.split(marker, 1)[0].strip()
+    if not narrative or "\n\n" in narrative:
+        raise ValueError("caption의 뉴스 본문은 기준시각 앞에서 하나의 문단이어야 한다.")
     qa = board.get("qa", {})
     if qa.get("hard_fail_passed") is not True or int(qa.get("editorial_score", 0)) < 13:
         raise ValueError("기획 QA가 통과되지 않았다.")

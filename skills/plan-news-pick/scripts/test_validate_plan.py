@@ -27,7 +27,7 @@ class PlanTests(unittest.TestCase):
             {"index": 1, "role": "hook", "visual_role": "현장 사진 중심 훅", "copy": "정부가 공급계획을 발표했습니다.", "evidence_ids": ["c1"]},
             {"index": 2, "role": "facts_and_context", "visual_role": "수치 비교표", "copy": "확인된 내용입니다.", "evidence_ids": ["c1", "c2"]},
             {"index": 3, "role": "impact_unknowns_sources", "visual_role": "영향 체크리스트와 출처", "copy": "일부 일정은 미정입니다.", "evidence_ids": ["c2"], "source_block": source_block, "required_text": ["출처", "국토교통부 · 2026.8.18 · molit.go.kr", "연합뉴스 · 2026.8.18 · yna.co.kr"]},
-        ], "qa": {"hard_fail_passed": True, "editorial_score": 13}}
+        ], "caption": "정부가 수도권 주택 공급계획을 발표했지만 대상과 입주 시점은 일부 정해지지 않았습니다. 세부 조건은 원문에서 확인해야 합니다.\n\n기준시각: 2026.8.18 오전 9:00 KST\n\n원문\n- 국토교통부: https://www.molit.go.kr/a", "qa": {"hard_fail_passed": True, "editorial_score": 13}}
         return story, board
 
     def test_valid(self):
@@ -55,6 +55,18 @@ class PlanTests(unittest.TestCase):
         story, board = self.fixture()
         board["cards"][1]["visual_role"] = board["cards"][0]["visual_role"]
         with self.assertRaisesRegex(ValueError, "visual_role"):
+            MOD.validate(story, board)
+
+    def test_caption_rejects_card_index_outline(self):
+        story, board = self.fixture()
+        board["caption"] = "한 줄 요약입니다.\n\n1장 | 핵심 수치\n2장 | 영향\n\n기준시각: 2026.8.18 오전 9:00 KST"
+        with self.assertRaisesRegex(ValueError, "장별 목차"):
+            MOD.validate(story, board)
+
+    def test_caption_requires_one_news_paragraph(self):
+        story, board = self.fixture()
+        board["caption"] = "첫 번째 뉴스 문단입니다.\n\n두 번째 뉴스 문단입니다.\n\n기준시각: 2026.8.18 오전 9:00 KST"
+        with self.assertRaisesRegex(ValueError, "하나의 문단"):
             MOD.validate(story, board)
 
 

@@ -32,7 +32,7 @@ description: 승인된 3~4장 PNG를 설정된 Instagram 계정의 사진 캐러
 - PNG 3~4장 순서, caption, 계정, 시각, 파일 hash를 승인 payload로 잠근다.
 - 1~3장에는 반복 출처 footer가 없어야 하고, 마지막 카드에만 사용한 모든 출처의 출처명·날짜·도메인이 읽을 수 있게 들어 있어야 한다.
 - caption에 `AI로 재구성한 인포그래픽`과 그 변형 문구를 넣지 않는다. 공개 표시는 Instagram `AI 콘텐츠` 라벨로 처리한다.
-- 웹 UI에서 `여러 항목 선택`, 1:1 crop, `원본` 필터, 정확한 카드 순서와 caption을 확인하고 사실적 AI 재구성에는 `AI 라벨 추가`를 켠다.
+- 웹 UI에서는 반드시 `input[type=file][multiple]`에 모든 PNG를 한 번에 전달한다. 단일 파일 input에 여러 경로를 강제로 넣으면 DOM의 `files.length`가 4여도 Instagram이 첫 장만 소비할 수 있다. 이후 `여러 항목 선택` 갤러리에서 3~4개 썸네일, 1:1 crop, `원본` 필터, 정확한 카드 순서와 caption을 확인하고 사실적 AI 재구성에는 `AI 라벨 추가`를 켠다.
 - `공유하기`는 한 번만 누르고 `게시물이 공유되었습니다` 성공 표시가 확인되지 않으면 자동 재시도하지 않는다.
 - `album_upload()` 호출 뒤 오류·timeout은 자동 재시도하지 않는다.
 
@@ -93,10 +93,10 @@ python scripts/carousel_queue.py approve <job_id> --sha256 <payload_sha256>
 Browser Harness로 설정된 Chrome profile의 Instagram 작성 화면을 열고 다음 순서를 지킨다.
 
 1. `새로운 게시물` → `컴퓨터에서 선택`
-2. 승인된 PNG 3~4장을 번호 순서로 한 번에 선택
-3. 갤러리에 정확한 장수·순서가 보이는지 확인
+2. `scripts/browser_web_upload_prepare.py`로 `input[type=file][multiple]`에 승인된 PNG 3~4장을 번호 순서로 한 번에 전달
+3. 업로드 뒤 React가 file input을 제거할 수 있으므로 input이 사라진 것만으로 실패 처리하지 않는다. input의 `multiple=true`와 `files.length`만 믿지 말고 `미디어 갤러리 열기`에서 실제 썸네일 3~4개와 순서를 확인. 썸네일이 1개면 즉시 중단
 4. 1:1 crop과 `원본` 필터 확인
-5. 승인된 caption 입력. `AI로 재구성한 인포그래픽` 계열 문구가 없어야 함
+5. 승인된 caption을 `scripts/browser_web_fill_caption_ai.py`로 입력. Instagram이 `<textarea>` 또는 `[role=textbox][contenteditable=true]` 중 어느 형식으로 렌더링해도 로컬 원문과 글자 수를 대조하고, `AI로 재구성한 인포그래픽` 계열 문구가 없어야 함
 6. 사실적 AI 재구성 카드에는 `AI 라벨 추가` 활성화
 7. 게시 직전 장수·첫 카드·마지막 카드 출처 블록·caption 글자 수·AI 라벨을 재확인
 8. `scripts/browser_web_share_once.py`로 `공유하기`를 한 번만 클릭
@@ -133,7 +133,7 @@ browser-harness < scripts/browser_web_verify.py
 python scripts/carousel_queue.py verify-published <job_id> --shortcode <code> --card-count <3|4> --caption-match --first-card-match
 ```
 
-이 명령이 `result.json`과 `public_verified=true`를 기록한 뒤에만 성공을 보고한다.
+공개 캐러셀은 permalink의 `?img_index=1`부터 `?img_index=<장수>`까지 열어 pagination dot 수와 active index가 순서대로 바뀌는지 확인한다. 화살표 버튼은 hover 상태에서 DOM에 생겼다 사라질 수 있으므로 장수 검증에는 직접 index URL을 우선한다. 이 검증과 위 명령이 `result.json`과 `public_verified=true`를 기록한 뒤에만 성공을 보고한다.
 
 작성 화면에서 AI switch가 `true`였지만 공개 페이지에 `AI 콘텐츠`가 없으면 새로 게시하지 않는다. 기존 게시물의 `옵션 더 보기 → 수정`에서 switch를 `false → true`로 한 번 순환하고 저장한 뒤 다시 검증한다. 한 번의 복구 후에도 없으면 `needs_review`로 남긴다.
 
