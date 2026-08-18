@@ -53,6 +53,18 @@ python skills/upload-news-pick/scripts/orchestrate.py init `
   --account $env:IG_ACCOUNT
 ```
 
+## 예약 무인 게시
+
+Windows에서는 cron 대신 Task Scheduler로 `07:00`, `12:00`, `17:00` KST 회차를 등록합니다. 로그인된 사용자 세션, Codex CLI 로그인, Profile 3의 Instagram 로그인이 필요합니다.
+
+```powershell
+python skills/upload-news-pick/scripts/scheduled_runner.py --slot 17:00 --dry-run
+powershell -ExecutionPolicy Bypass -File skills/upload-news-pick/scripts/manage_windows_schedule.ps1 install
+powershell -ExecutionPolicy Bypass -File skills/upload-news-pick/scripts/manage_windows_schedule.ps1 status
+```
+
+동일 회차 중복 실행, 30분을 넘긴 missed run, QA 실패, 모호한 제출은 자동 게시하지 않습니다. 상태와 로그는 Git에서 제외된 `output/scheduler`와 `output/logs/scheduler`에 저장됩니다.
+
 ## 스킬 구성
 
 1. `search-news` — 언론 원문·공식 발표 기반 이슈 발견, 국내 영향도 평가, 교차검증

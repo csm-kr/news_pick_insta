@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["published", "skipped", "needs_review", "failed"]
+    },
+    "summary": {"type": "string"},
+    "story_headline": {"type": ["string", "null"]},
+    "run_directory": {"type": ["string", "null"]},
+    "instagram_url": {"type": ["string", "null"]},
+    "reason": {"type": ["string", "null"]}
+  },
+  "required": [
+    "status",
+    "summary",
+    "story_headline",
+    "run_directory",
+    "instagram_url",
+    "reason"
+  ],
+  "additionalProperties": false
+}

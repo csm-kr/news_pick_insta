@@ -1,6 +1,6 @@
 ---
 name: upload-news-pick
-description: 한국 종합 이슈 하나를 탐색·검증하고, 중립적 강후킹의 3~4장 Instagram 카드뉴스로 기획·제작한 뒤 설정된 계정에 캐러셀로 안전하게 게시하는 portable 전체 오케스트레이터. 오늘의 뉴스픽 제작, 카드뉴스 자동화, 네 단계 일괄 실행, 새 workspace 설치, 중단된 run 재개, 실게시 전 검증을 요청할 때 사용한다.
+description: 한국 종합 이슈 하나를 탐색·검증하고, 중립적 강후킹의 3~4장 Instagram 카드뉴스로 기획·제작한 뒤 설정된 계정에 캐러셀로 안전하게 게시하는 portable 전체 오케스트레이터. 오늘의 뉴스픽 제작, 카드뉴스 자동화, 네 단계 일괄 실행, 새 workspace 설치, 중단된 run 재개, 실게시 전 검증, 07·12·17시 KST 예약 무인 게시를 요청할 때 사용한다.
 ---
 
 # Upload News Pick
@@ -92,7 +92,7 @@ python scripts/orchestrate.py complete-stage --run <run-directory> --stage searc
 
 ## 4단계 — 업로드
 
-`publish-news-pick`에 최종 slides, caption, run의 설정 계정, 게시 시각을 전달한다. run의 `account`, `IG_ACCOUNT`, 실제 로그인 계정이 모두 같아야 한다. caption에 `AI로 재구성한 인포그래픽` 계열 문구가 없어야 하며, AI 공개 표시는 Instagram `AI 콘텐츠` 라벨로 처리한다. MVP에서는 payload hash를 사람에게 보여주고 명시적으로 승인받은 뒤에만 제출한다.
+`publish-news-pick`에 최종 slides, caption, run의 설정 계정, 게시 시각을 전달한다. run의 `account`, `IG_ACCOUNT`, 실제 로그인 계정이 모두 같아야 한다. caption에 `AI로 재구성한 인포그래픽` 계열 문구가 없어야 하며, AI 공개 표시는 Instagram `AI 콘텐츠` 라벨로 처리한다. 수동 모드는 payload hash를 사람에게 보여주고 건별 승인받는다. 예약 모드는 아래 standing approval 범위 안에서 모든 QA를 통과한 exact payload hash를 잠근 뒤 회차당 한 번 승인한다.
 
 제출 후 오류나 timeout은 자동 재시도하지 않는다. `needs_review`에서 프로필을 읽기 전용으로 확인한다. private API 응답만으로 완료하지 말고 공개 프로필에서 shortcode, 카드 장수, 첫 장, caption을 검증한다.
 
@@ -119,6 +119,25 @@ python scripts/orchestrate.py complete-stage --run <run-directory> --stage searc
 - 이미지 QA 실패 또는 payload 변경으로 승인 hash 불일치
 
 운영 정책은 [references/operating-policy.md](references/operating-policy.md)를 읽는다.
+
+## 예약 무인 실행
+
+사용자가 `07:00`, `12:00`, `17:00` KST 자동 게시를 승인한 계정에서는 [references/operating-policy.md](references/operating-policy.md)의 standing approval을 적용한다. 다음 명령은 prompt를 생성하고 Codex 비대화형 실행을 한 회차만 시작한다.
+
+```powershell
+python scripts/scheduled_runner.py --slot 07:00 --dry-run
+python scripts/scheduled_runner.py --slot 07:00
+```
+
+Windows 예약 작업은 다음으로 관리한다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/manage_windows_schedule.ps1 install
+powershell -ExecutionPolicy Bypass -File scripts/manage_windows_schedule.ps1 status
+powershell -ExecutionPolicy Bypass -File scripts/manage_windows_schedule.ps1 remove
+```
+
+예약 실행은 `output/scheduler/editions/<date>-<slot>.json`을 idempotency key로 사용한다. state가 한 번 생긴 회차, 시작 시각에서 30분 넘게 지난 회차, 다른 회차가 실행 중인 경우에는 새 게시를 시작하지 않는다. `needs_review`와 제출 뒤 오류를 자동 재시도하지 않는다. Windows 사용자가 로그인되어 있고 전용 Chrome profile의 세션을 사용할 수 있을 때만 동작하며, 컴퓨터가 꺼져 있던 회차는 나중에 몰아서 게시하지 않는다. 자세한 고정 prompt와 결과 schema는 `scripts/scheduled_runner.py`와 `references/scheduled-result.schema.json`을 사용한다.
 
 ## 완료 보고
 

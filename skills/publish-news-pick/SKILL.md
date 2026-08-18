@@ -16,7 +16,7 @@ description: 승인된 3~4장 PNG를 설정된 Instagram 계정의 사진 캐러
 - `IG_ACCOUNT`의 계정에 로그인된 `NEWS_PICK_CHROME_PROFILE` 표시형 Chrome
 - skill 폴더 밖의 절대 `NEWS_PICK_OUTPUT_ROOT`
 - Browser Harness 기본 연결
-- exact payload에 대한 사용자 게시 승인
+- exact payload에 대한 사용자 건별 승인 또는 `NEWS_PICK_SCHEDULED_MODE=1` 회차의 정책 standing approval
 
 기본값은 `IG_ACCOUNT=newspick_studio`, `NEWS_PICK_CHROME_PROFILE=Profile 3`이지만 다른 workspace에서는 명시적으로 바꿀 수 있다. 웹 UI 경로에는 password, cookie export, `sessionid`, 앱 비밀번호가 필요 없다. 선택한 Chrome profile의 기존 로그인 세션을 그대로 사용한다.
 
@@ -56,7 +56,7 @@ python scripts/carousel_queue.py configure --browser-harness-connection default 
 browser-harness < scripts/browser_web_preflight.py
 ```
 
-`ready=true`, target account, `프로필 편집`, `새로운 게시물`, login/challenge 부재를 모두 확인해야 한다. 실패하면 사용자가 설정된 profile 창에서 로그인·MFA·challenge를 직접 완료할 때까지 멈춘다.
+`ready=true`, target account, 소유자 전용 control, `새로운 게시물`, login/challenge 부재를 모두 확인해야 한다. 실패하면 사용자가 설정된 profile 창에서 로그인·MFA·challenge를 직접 완료할 때까지 멈춘다.
 
 비공식 backend 설치를 사용자가 승인한 뒤에만 project-local venv를 만든다.
 
@@ -80,7 +80,7 @@ python scripts/carousel_queue.py probe --account $env:IG_ACCOUNT
 python scripts/carousel_queue.py prepare --account $env:IG_ACCOUNT --scheduled-at <ISO-8601> --timezone Asia/Seoul --media <01.png> --media <02.png> --media <03.png> --caption-file <caption.txt>
 ```
 
-표시된 계정, 시각, caption 글자 수, 정확한 이미지 순서, 각 SHA-256, `payload_sha256`을 확인한다. 사용자가 이 exact payload의 실게시를 승인한 뒤에만:
+표시된 계정, 시각, caption 글자 수, 정확한 이미지 순서, 각 SHA-256, `payload_sha256`을 확인한다. 사용자가 이 exact payload의 실게시를 승인한 뒤에만 실행한다. 단, `NEWS_PICK_SCHEDULED_MODE=1`이고 오케스트레이터의 허용 회차·계정·시간·편집 정책·모든 QA를 통과했다면 standing approval로 이 exact hash를 한 번 승인할 수 있다.
 
 ```powershell
 python scripts/carousel_queue.py approve <job_id> --sha256 <payload_sha256>
@@ -146,4 +146,4 @@ draft → approved → submitting → submitted → published
              └──── Browser Harness web UI ─────┘
 ```
 
-cron·daemon은 MVP 범위가 아니다. 한 건 실게시와 공개 확인이 성공한 뒤 별도 승인으로 추가한다.
+예약 모드에서도 `needs_review`, 제출 뒤 오류, 공개 검증 실패를 자동 재시도하지 않는다. 날짜·회차 state가 있으면 같은 payload를 다시 제출하지 않는다.
