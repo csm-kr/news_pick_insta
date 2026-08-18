@@ -12,4 +12,6 @@ Browser Harness background target으로 `https://www.instagram.com/<IG_ACCOUNT>/
 - 사실적 AI 재구성 게시물은 공개 페이지에 `AI 콘텐츠` 표시가 보임
 - 기존 사용자 탭·포커스가 보존됨
 
+`scripts/browser_web_verify_carousel.py`가 장수·active index 순서·caption·AI 라벨을 통과해도 저장된 첫·마지막 screenshot에서 실제 첫 카드와 마지막 출처 카드가 렌더링됐는지 시각 확인해야 한다. 회색 placeholder는 통과로 간주하지 않는다.
+
 이미 게시된 가능성이 있는 `needs_review`에서는 profile 최신 항목을 먼저 읽는다. 같은 payload가 보이면 재제출하지 않고 사람이 상태를 확정한다.

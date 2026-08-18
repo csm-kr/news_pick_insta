@@ -96,6 +96,8 @@ python scripts/orchestrate.py complete-stage --run <run-directory> --stage searc
 
 제출 후 오류나 timeout은 자동 재시도하지 않는다. `needs_review`에서 프로필을 읽기 전용으로 확인한다. private API 응답만으로 완료하지 말고 공개 프로필에서 shortcode, 카드 장수, 첫 장, caption을 검증한다.
 
+공개 검증 뒤 `publish-news-pick`의 `verify-published`에 `--run-dir <run-directory>`를 전달한다. 이 명령이 queue 결과와 `04-publish/result.json`을 같은 내용으로 기록하므로 수동 복사본을 만들지 않는다.
+
 ```text
 04-publish/publish-job.json
 04-publish/attempts.jsonl

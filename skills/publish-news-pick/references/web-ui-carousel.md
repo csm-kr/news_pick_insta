@@ -18,7 +18,7 @@
 3. 업로드 뒤 React가 file input을 DOM에서 제거할 수 있다. `files.length`는 input이 남아 있을 때만 선택 이벤트의 진단값이며 게시 장수의 증거가 아니다. `미디어 갤러리 열기`에서 3~4개 thumbnail의 장수·순서·첫 카드를 screenshot으로 확인한다. 썸네일이 1개면 다음으로 진행하지 않는다.
 4. `자르기` 화면에서 1:1 정방형을 확인한다. 첫 카드의 상단·하단 문구가 잘리면 제출하지 않는다.
 5. 첫 번째 `다음` 뒤 편집 화면에서 `원본` 필터가 선택됐는지 확인한다.
-6. 두 번째 `다음` 뒤 승인된 caption을 그대로 입력한다. 입력 요소는 `<textarea>` 또는 `[role=textbox][contenteditable=true]`일 수 있으므로 둘 다 지원하고 Instagram 표시 글자 수와 로컬 글자 수를 대조한다.
+6. 두 번째 `다음` 뒤 승인된 caption을 그대로 입력한다. 입력 요소는 `<textarea>` 또는 `[role=textbox][contenteditable=true]`일 수 있으므로 둘 다 지원한다. `type_text` 뒤 본문이 줄바꿈만 남는 Lexical 편집기에서는 전체 선택·삭제 후 `ClipboardEvent('paste')`를 한 번 보내고, 끝의 추가 개행만 제거해 로컬 원문과 비교한다. 내부 줄바꿈과 문단은 정규화하지 않는다.
 7. 사실적 AI 재구성 카드이면 `AI 라벨 추가` switch의 `aria-checked=true`를 확인한다.
 
 게시 직전 screenshot에 첫 카드, caption 끝부분, 글자 수, AI switch를 함께 남긴다.
@@ -51,9 +51,9 @@ background target으로 permalink를 열어 다음을 확인한다.
 - caption 첫 문장과 기준시각이 일치
 - 사실적 AI 재구성 카드에 `AI 콘텐츠` 표시가 보임
 
-화살표는 hover 상태에서만 DOM에 나타날 수 있다. permalink 뒤에 `?img_index=1`부터 `?img_index=<장수>`를 붙여 각 페이지의 pagination dot 수가 같고 active index가 0부터 마지막까지 순서대로 바뀌는지 확인한다.
+화살표는 hover 상태에서만 DOM에 나타날 수 있다. `scripts/browser_web_verify_carousel.py`로 permalink의 `?img_index=1`부터 `?img_index=<장수>`까지 열어 pagination dot 수와 active index 순서를 확인하고 첫·마지막 screenshot을 남긴다. 직접 연 마지막 장은 `wait_for_load()` 뒤에도 회색 placeholder가 남을 수 있으므로 최대 15초 기다린다. screenshot에 실제 마지막 출처 카드가 보이지 않으면 검증 실패다.
 
-모두 맞을 때만 `verify-published`를 실행한다.
+모두 맞을 때만 `verify-published --run-dir <run-directory>`를 실행해 queue result와 run의 `04-publish/result.json`을 함께 쓴다.
 
 ## AI 라벨 저장 누락 복구
 
@@ -73,3 +73,4 @@ caption과 이미지에는 손대지 않는다. 한 번의 저장 뒤에도 표�
 - private API가 제출 경계 뒤 실패했으면 공개 프로필에 중복이 없는지 확인한 후에만 웹 UI로 전환한다.
 - Instagram 성공 문구와 공개 permalink를 둘 다 확인해야 한다.
 - 성공한 웹 게시를 queue job에 연결해야 `failed_pre_submit` 또는 `needs_review`가 다음 실행에서 재게시되지 않는다.
+- 공개 permalink 직후 마지막 장은 지연 로딩될 수 있다. 회색 placeholder와 pagination dot만으로 마지막 카드 일치를 판정하지 않는다.

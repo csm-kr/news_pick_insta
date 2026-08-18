@@ -243,10 +243,27 @@ def probe(account: str, config: Path = CONFIG_PATH) -> dict[str, Any]:
     return result
 
 
-def verify_published(identifier: str, shortcode: str, card_count: int, caption_match: bool, first_card_match: bool, jobs_root: Path = JOBS_ROOT) -> dict[str, Any]:
+def run_publish_result_path(run_dir: Path, account: str) -> Path:
+    run = run_dir.expanduser().resolve()
+    runs_root = (default_output_root() / "runs").resolve()
+    try:
+        run.relative_to(runs_root)
+    except ValueError as exc:
+        raise ValueError("run directory는 NEWS_PICK_OUTPUT_ROOT/runs 아래에 있어야 한다.") from exc
+    state_path = run / "run.json"
+    if not state_path.is_file():
+        raise ValueError("run directory에 run.json이 없다.")
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    if normalize_account(state.get("account")) != normalize_account(account):
+        raise ValueError("run account와 publish job account가 다르다.")
+    return run / "04-publish" / "result.json"
+
+
+def verify_published(identifier: str, shortcode: str, card_count: int, caption_match: bool, first_card_match: bool, jobs_root: Path = JOBS_ROOT, run_dir: Path | None = None) -> dict[str, Any]:
     path, job = load_job(identifier, jobs_root)
     if job["status"] not in {"submitted", "needs_review"}:
         raise ValueError(f"공개 확인할 수 없는 상태: {job['status']}")
+    run_result_path = run_publish_result_path(run_dir, job["account"]) if run_dir else None
     submitted_code = str(((job.get("submission_result") or job.get("private_result") or {}).get("shortcode")) or "")
     if submitted_code and shortcode != submitted_code:
         raise ValueError("공개 shortcode가 private 응답과 다르다.")
@@ -257,6 +274,8 @@ def verify_published(identifier: str, shortcode: str, card_count: int, caption_m
     job["public_result"] = result
     atomic_json(path, job)
     atomic_json(path.parent / "result.json", result)
+    if run_result_path:
+        atomic_json(run_result_path, result)
     return result
 
 
@@ -337,7 +356,7 @@ def main() -> int:
     app = commands.add_parser("approve"); app.add_argument("job_id"); app.add_argument("--sha256", required=True)
     stat = commands.add_parser("status"); stat.add_argument("job_id", nargs="?")
     commands.add_parser("run-due")
-    ver = commands.add_parser("verify-published"); ver.add_argument("job_id"); ver.add_argument("--shortcode", required=True); ver.add_argument("--card-count", type=int, required=True); ver.add_argument("--caption-match", action="store_true"); ver.add_argument("--first-card-match", action="store_true")
+    ver = commands.add_parser("verify-published"); ver.add_argument("job_id"); ver.add_argument("--shortcode", required=True); ver.add_argument("--card-count", type=int, required=True); ver.add_argument("--caption-match", action="store_true"); ver.add_argument("--first-card-match", action="store_true"); ver.add_argument("--run-dir", type=Path)
     web = commands.add_parser("record-web-submitted"); web.add_argument("job_id"); web.add_argument("--shortcode", required=True); web.add_argument("--card-count", type=int, required=True)
     args = parser.parse_args()
     try:
@@ -347,7 +366,7 @@ def main() -> int:
         elif args.command == "approve": result = summary(approve(args.job_id, args.sha256))
         elif args.command == "status": result = summary(load_job(args.job_id)[1]) if args.job_id else [summary(json.loads(x.read_text(encoding="utf-8"))) for x in sorted(JOBS_ROOT.glob("*/job.json"))]
         elif args.command == "record-web-submitted": result = summary(record_web_submitted(args.job_id, args.shortcode, args.card_count))
-        elif args.command == "verify-published": result = verify_published(args.job_id, args.shortcode, args.card_count, args.caption_match, args.first_card_match)
+        elif args.command == "verify-published": result = verify_published(args.job_id, args.shortcode, args.card_count, args.caption_match, args.first_card_match, run_dir=args.run_dir)
         else:
             with lock(): result = [summary(execute(path)) for path in due()]
     except Exception as exc:
