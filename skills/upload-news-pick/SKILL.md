@@ -39,12 +39,14 @@ python scripts/orchestrate.py status --run <run-directory>
 
 `search-news`에 `edition_at`, `timezone=Asia/Seoul`, 직전 성공 체크포인트를 전달한다. 출력은 반드시 다음 위치에 둔다.
 
+07:00·12:00은 `popular_interest`, 17:00은 `public_impact`를 기본 editorial lane으로 전달한다. `output/runs`의 최근 공개 검증 게시물 6건을 함께 확인해 같은 사건과 연속 주제를 피한다. 생활경제·소비자·건강·과학기술·사회·문화·스포츠·환경 후보를 정치·부동산과 같은 후보군에서 비교하고, 정치·부동산은 두 분야 합계 하루 1건을 기본 상한으로 한다. 전국적 긴급성 또는 즉시 권리·비용 변화가 명확한 확정 사안만 예외다.
+
 ```text
 01-search/news-candidates.json
 01-search/selected-story.json
 ```
 
-`selected-story.json`이 `verified`가 아니거나 독립 언론 두 곳 및 필요한 공식 근거를 갖추지 못하면 run을 멈춘다. 통과 후:
+`selected-story.json`이 `verified`가 아니거나 독립 언론 두 곳 및 필요한 공식 근거를 갖추지 못하면 run을 멈춘다. `popular_interest`는 `audience_fit` 네 항목 합계 8/12 이상이어야 한다. target lane에 맞는 적격 사건이 없으면 낮은 대중 적합도의 정치·부동산으로 채우지 않는다. 통과 후:
 
 ```powershell
 python scripts/orchestrate.py complete-stage --run <run-directory> --stage search-news
@@ -139,7 +141,9 @@ powershell -ExecutionPolicy Bypass -File scripts/manage_windows_schedule.ps1 sta
 powershell -ExecutionPolicy Bypass -File scripts/manage_windows_schedule.ps1 remove
 ```
 
-예약 실행은 `output/scheduler/editions/<date>-<slot>.json`을 idempotency key로 사용한다. state가 한 번 생긴 회차, 시작 시각에서 30분 넘게 지난 회차, 다른 회차가 실행 중인 경우에는 새 게시를 시작하지 않는다. `needs_review`와 제출 뒤 오류를 자동 재시도하지 않는다. Windows 사용자가 로그인되어 있고 전용 Chrome profile의 세션을 사용할 수 있을 때만 동작하며, 컴퓨터가 꺼져 있던 회차는 나중에 몰아서 게시하지 않는다. 자세한 고정 prompt와 결과 schema는 `scripts/scheduled_runner.py`와 `references/scheduled-result.schema.json`을 사용한다.
+Windows 작업은 각 회차 30분 전인 `06:30`, `11:30`, `16:30` KST에 준비를 시작한다. 검색·기획·이미지 생성·QA와 게시 직전 검증을 미리 끝내고, `scripts/wait_for_publish_time.py`가 목표 회차 시각까지 대기한 뒤에만 Instagram `공유하기`를 누른다. 웹 UI 공유 스크립트도 목표 시각 전 클릭과 목표 시각 30분 뒤의 보충 게시를 코드로 차단한다.
+
+예약 실행은 `output/scheduler/editions/<date>-<slot>.json`을 idempotency key로 사용한다. state가 한 번 생긴 회차, 목표 시각 30분 전보다 이른 실행, 목표 시각에서 30분 넘게 지난 실행, 다른 회차가 실행 중인 경우에는 새 게시를 시작하지 않는다. `needs_review`와 제출 뒤 오류를 자동 재시도하지 않는다. Windows 사용자가 로그인되어 있고 전용 Chrome profile의 세션을 사용할 수 있을 때만 동작하며, 컴퓨터가 꺼져 있던 회차는 나중에 몰아서 게시하지 않는다. 자세한 고정 prompt와 결과 schema는 `scripts/scheduled_runner.py`와 `references/scheduled-result.schema.json`을 사용한다.
 
 ## 완료 보고
 

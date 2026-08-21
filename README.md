@@ -1,6 +1,6 @@
 # news_pick_insta
 
-국내 종합 이슈를 검증해 3~4장 정방형 Instagram 카드뉴스로 만들고 설정된 계정에 게시하는 portable Codex skill pack입니다.
+국내 종합 이슈를 검증해 3~4장 정방형 Instagram 카드뉴스로 만들고, 설정된 계정의 피드와 일일 요약 Story에 게시하는 portable Codex skill pack입니다.
 
 ## 폴더 경계
 
@@ -11,6 +11,7 @@ news_pick_insta/
 │   ├── plan-news-pick/
 │   ├── create-news-cards/
 │   ├── publish-news-pick/
+│   ├── publish-daily-news-story/
 │   └── upload-news-pick/
 ├── scripts/                # pack 설치·workspace 초기화·검증
 ├── docs/                   # 설계와 조사 기록
@@ -42,7 +43,7 @@ $env:IG_ACCOUNT = 'newspick_studio'
 $env:NEWS_PICK_CHROME_PROFILE = 'Profile 3'
 ```
 
-`install`은 다섯 스킬을 `$CODEX_HOME/skills` 또는 `~/.codex/skills`에 함께 설치하며 기존 폴더를 덮어쓰지 않습니다. 다른 설치 위치는 `--skills-dir`로 지정합니다.
+`install`은 여섯 스킬을 `$CODEX_HOME/skills` 또는 `~/.codex/skills`에 함께 설치하며 기존 폴더를 덮어쓰지 않습니다. 다른 설치 위치는 `--skills-dir`로 지정합니다.
 
 전체 실행의 시작점은 `skills/upload-news-pick/SKILL.md`입니다.
 
@@ -65,18 +66,28 @@ powershell -ExecutionPolicy Bypass -File skills/upload-news-pick/scripts/manage_
 
 동일 회차 중복 실행, 30분을 넘긴 missed run, QA 실패, 모호한 제출은 자동 게시하지 않습니다. 상태와 로그는 Git에서 제외된 `output/scheduler`와 `output/logs/scheduler`에 저장됩니다.
 
+매일 `21:00`에는 그날 공개 검증된 뉴스 캐러셀 전부의 첫 카드만 모아 6초 Story로 게시합니다. 게시물이 3개면 대문 3장, 4개면 대문 4장처럼 당일 게시 완료 목록 전체를 사용합니다.
+
+```powershell
+python skills/publish-daily-news-story/scripts/scheduled_story_runner.py --dry-run
+powershell -ExecutionPolicy Bypass -File skills/publish-daily-news-story/scripts/manage_windows_story_schedule.ps1 install
+powershell -ExecutionPolicy Bypass -File skills/publish-daily-news-story/scripts/manage_windows_story_schedule.ps1 status
+```
+
 ## 스킬 구성
 
 1. `search-news` — 언론 원문·공식 발표 기반 이슈 발견, 국내 영향도 평가, 교차검증
 2. `plan-news-pick` — 중립적 강후킹, 사실·카피·차트·고유 시각 역할 기획
 3. `create-news-cards` — 기사·공식 이미지 reference 기반 1024×1024 카드 생성과 중복 QA
 4. `publish-news-pick` — 설정된 Chrome profile의 Instagram 웹 UI 게시·공개 검증
-5. `upload-news-pick` — 네 단계를 hash·승인 게이트로 연결하는 오케스트레이터
+5. `publish-daily-news-story` — 오늘 검증된 모든 표지를 FFmpeg 6초 영상으로 만들어 Story 게시·검증
+6. `upload-news-pick` — 네 단계를 hash·승인 게이트로 연결하는 오케스트레이터
 
 ## 외부 의존성
 
 - Python 3.10 이상과 Pillow
 - Node.js
+- FFmpeg와 ffprobe
 - Browser Harness CLI
 - `god-tibo-gpt-image2-skill`; 자동 검색되지 않으면 `GOD_TIBO_SKILL_ROOT` 지정
 - 사용자가 직접 로그인한 표시형 Chrome profile
@@ -88,7 +99,7 @@ powershell -ExecutionPolicy Bypass -File skills/upload-news-pick/scripts/manage_
 ```powershell
 python -m unittest discover -s scripts -p 'test_*.py'
 
-$skillDirs = @('search-news','plan-news-pick','create-news-cards','publish-news-pick','upload-news-pick')
+$skillDirs = @('search-news','plan-news-pick','create-news-cards','publish-news-pick','publish-daily-news-story','upload-news-pick')
 foreach ($name in $skillDirs) {
   python -m unittest discover -s "skills/$name/scripts" -p 'test_*.py'
 }

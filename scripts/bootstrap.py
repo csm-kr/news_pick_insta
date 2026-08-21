@@ -16,8 +16,15 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCE_SKILLS = REPO_ROOT / "skills"
-SKILL_NAMES = ("search-news", "plan-news-pick", "create-news-cards", "publish-news-pick", "upload-news-pick")
-OUTPUT_DIRS = ("runs", "publish-news-pick", "profile-candidates", "cache", "logs")
+SKILL_NAMES = (
+    "search-news",
+    "plan-news-pick",
+    "create-news-cards",
+    "publish-news-pick",
+    "publish-daily-news-story",
+    "upload-news-pick",
+)
+OUTPUT_DIRS = ("runs", "publish-news-pick", "daily-story", "profile-candidates", "cache", "logs")
 
 
 def default_skills_dir() -> Path:
@@ -104,6 +111,8 @@ def dependency_status() -> dict:
         "python": {"ok": sys.version_info >= (3, 10), "version": ".".join(map(str, sys.version_info[:3]))},
         "pillow": {"ok": importlib.util.find_spec("PIL") is not None},
         "node": {"ok": shutil.which("node") is not None, "path": shutil.which("node")},
+        "ffmpeg": {"ok": shutil.which("ffmpeg") is not None, "path": shutil.which("ffmpeg")},
+        "ffprobe": {"ok": shutil.which("ffprobe") is not None, "path": shutil.which("ffprobe")},
         "browser_harness": {"ok": shutil.which("browser-harness") is not None, "path": shutil.which("browser-harness")},
         "god_tibo": {"ok": tibo is not None, "path": str(tibo.resolve()) if tibo else None},
     }

@@ -2,8 +2,8 @@
   "schema_version": "1.0",
   "sources": [
     {"id": "yna-all", "publisher": "연합뉴스", "type": "rss", "url": "https://www.yna.co.kr/rss/news.xml", "enabled": true},
-    {"id": "yna-politics", "publisher": "연합뉴스", "type": "rss", "url": "https://www.yna.co.kr/rss/politics.xml", "enabled": true},
-    {"id": "yna-economy", "publisher": "연합뉴스", "type": "rss", "url": "https://www.yna.co.kr/rss/economy.xml", "enabled": true},
+    {"id": "yna-politics", "publisher": "연합뉴스", "type": "rss", "url": "https://www.yna.co.kr/rss/politics.xml", "enabled": false, "disabled_reason": "분야별 feed 중복 가중 방지"},
+    {"id": "yna-economy", "publisher": "연합뉴스", "type": "rss", "url": "https://www.yna.co.kr/rss/economy.xml", "enabled": false, "disabled_reason": "분야별 feed 중복 가중 방지"},
     {"id": "sbs-general", "publisher": "SBS", "type": "rss", "url": "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=01&plink=RSSREADER", "enabled": true},
     {"id": "khan-all", "publisher": "경향신문", "type": "rss", "url": "https://www.khan.co.kr/rss/rssdata/total_news.xml", "enabled": true},
     {"id": "yonhapnewstv", "publisher": "연합뉴스TV", "type": "rss", "url": "https://www.yonhapnewstv.co.kr/browse/feed/", "enabled": true}
@@ -13,4 +13,3 @@
     {"id": "molit", "publisher": "국토교통부", "url": "https://www.molit.go.kr/USR/NEWS/m_71/lst.jsp"}
   ]
 }
-

@@ -22,6 +22,7 @@ class BootstrapTests(unittest.TestCase):
             self.assertEqual(Path(result["output_root"]), output.resolve())
             self.assertTrue((output / "runs").is_dir())
             self.assertTrue((output / "publish-news-pick").is_dir())
+            self.assertTrue((output / "daily-story").is_dir())
             self.assertTrue((output / "workspace.json").is_file())
             self.assertFalse((workspace / "skills").exists())
 
@@ -29,7 +30,7 @@ class BootstrapTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp) / "skills"
             result = MOD.install(target)
-            self.assertEqual(len(result["installed"]), 5)
+            self.assertEqual(len(result["installed"]), 6)
             for name in MOD.SKILL_NAMES:
                 self.assertTrue((target / name / "SKILL.md").is_file())
                 self.assertFalse((target / name / ".local").exists())

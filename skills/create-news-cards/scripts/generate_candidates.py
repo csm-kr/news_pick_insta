@@ -54,6 +54,42 @@ def tibo_root() -> Path:
     )
 
 
+def validate_public_reference_egress(jobs: list[dict], work: Path) -> list[Path]:
+    allowed_roots = [
+        (work.parent / "references" / "content").resolve(),
+        (work.parent / "references" / "style").resolve(),
+    ]
+    approved: list[Path] = []
+    for record in jobs:
+        job_path = Path(record["job"]).resolve()
+        payload = json.loads(job_path.read_text(encoding="utf-8"))
+        references = payload.get("references") or []
+        if not references:
+            raise ValueError(f"reference가 없는 생성 job이다: {job_path}")
+        for value in references:
+            reference = Path(value)
+            if not reference.is_absolute():
+                reference = (job_path.parent / reference).resolve()
+            else:
+                reference = reference.resolve()
+            try:
+                in_scope = any(
+                    reference.is_relative_to(root) for root in allowed_roots
+                )
+            except AttributeError:
+                in_scope = any(
+                    root == reference or root in reference.parents for root in allowed_roots
+                )
+            if not in_scope:
+                raise ValueError(
+                    "승인 범위 밖 reference 전송을 차단했다: " + str(reference)
+                )
+            if not reference.is_file():
+                raise FileNotFoundError(f"reference 파일이 없다: {reference}")
+            approved.append(reference)
+    return approved
+
+
 def run_one(record: dict, work: Path, script: Path, dry_run: bool, force: bool) -> dict:
     job_path = Path(record["job"])
     target = work / "candidates" / record["direction_id"] / f"card-{record['card_index']:02d}.png"
@@ -103,6 +139,14 @@ def main() -> int:
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--workers", type=int, default=12)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--approve-public-reference-egress",
+        action="store_true",
+        help=(
+            "Approve sending only this run's references/content and references/style "
+            "public images to the Tibo/GPT Image backend"
+        ),
+    )
     parser.add_argument("--force", action="store_true", help="Regenerate candidates even when a valid output file exists.")
     args = parser.parse_args()
     try:
@@ -112,6 +156,12 @@ def main() -> int:
         jobs = plan.get("jobs", [])
         if len(jobs) != 12:
             raise ValueError("generation plan은 정확히 12개 job이어야 한다.")
+        approved_references = validate_public_reference_egress(jobs, args.work_dir)
+        if not args.dry_run and not args.approve_public_reference_egress:
+            raise ValueError(
+                "실제 생성에는 --approve-public-reference-egress가 필요하다. "
+                "공개 기사·공식·스타일 reference의 외부 전송 승인을 먼저 받는다."
+            )
         script = (tibo_root() / "scripts" / "tibo-batch.mjs").resolve()
         if not script.is_file():
             raise ValueError(f"Tibo 실행기를 찾을 수 없다: {script}")
@@ -119,7 +169,18 @@ def main() -> int:
             futures = [pool.submit(run_one, record, args.work_dir, script, args.dry_run, args.force) for record in jobs]
             results = [future.result() for future in futures]
         failures = [item for item in results if not item.get("ok") and not item.get("dry_run")]
-        manifest = {"schema_version": "1.0", "candidate_count": len(results), "concurrency": args.workers, "dry_run": args.dry_run, "status": "complete" if not failures else "incomplete", "results": results}
+        manifest = {
+            "schema_version": "1.0",
+            "candidate_count": len(results),
+            "concurrency": args.workers,
+            "dry_run": args.dry_run,
+            "public_reference_egress_approved": bool(
+                args.approve_public_reference_egress and not args.dry_run
+            ),
+            "approved_reference_count": len({path.resolve() for path in approved_references}),
+            "status": "complete" if not failures else "incomplete",
+            "results": results,
+        }
         (args.work_dir / "visual-manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         if failures:
             raise RuntimeError(f"12장 중 {len(failures)}장이 실패했다.")

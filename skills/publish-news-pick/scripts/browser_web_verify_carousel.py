@@ -10,7 +10,9 @@ def attach_without_focus(target_id):
     wrapped = switch_tab
     inner = wrapped.__closure__[0].cell_contents if wrapped.__closure__ else wrapped
     private = inner.__globals__
-    session_id = cdp("Target.attachToTarget", targetId=target_id, flatten=True)["sessionId"]
+    session_id = cdp(
+        "Target.attachToTarget", targetId=target_id, flatten=True
+    )["sessionId"]
     private["_send"](
         {"meta": "set_session", "session_id": session_id, "target_id": target_id}
     )
@@ -32,7 +34,9 @@ targets = [
 if len(targets) != 1:
     raise RuntimeError("Instagram page target count is " + str(len(targets)))
 previous_id = targets[0]["targetId"]
-background_id = cdp("Target.createTarget", url="about:blank", background=True)["targetId"]
+background_id = cdp("Target.createTarget", url="about:blank", background=True)[
+    "targetId"
+]
 states = []
 try:
     attach_without_focus(background_id)
@@ -52,9 +56,16 @@ try:
     rect:rect(el),active:el.classList.contains('_acnf')
   })).filter(x=>x.rect.w===6&&x.rect.h===6);
   const text=document.body?.innerText||'';
-  return {dot_count:dots.length,active_index:dots.findIndex(x=>x.active),caption_match:text.includes(captionPrefix),ai_label:text.includes('AI 콘텐츠'),url:location.href};
+  return {
+    dot_count:dots.length,
+    active_index:dots.findIndex(x=>x.active),
+    caption_match:text.includes(captionPrefix),
+    ai_label:text.includes('AI 콘텐츠'),
+    url:location.href
+  };
 })(%s)
-""" % json.dumps(caption_prefix, ensure_ascii=False)
+"""
+            % json.dumps(caption_prefix, ensure_ascii=False)
         )
         if index in {1, expected}:
             screenshot = shot_dir / f"public-card-{index:02d}.png"
@@ -75,5 +86,10 @@ result = {
     "visual_confirmation_required": True,
 }
 print("INSTAGRAM_CAROUSEL_VERIFY=" + json.dumps(result, ensure_ascii=True))
-if result["slide_count"] != expected or result["active_sequence"] != list(range(expected)) or not result["caption_match"] or not result["ai_label"]:
+if (
+    result["slide_count"] != expected
+    or result["active_sequence"] != list(range(expected))
+    or not result["caption_match"]
+    or not result["ai_label"]
+):
     raise RuntimeError("public carousel verification failed")

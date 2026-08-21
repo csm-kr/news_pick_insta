@@ -8,6 +8,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $taskPrefix = 'NewsPickInstagram'
 $slots = @('07:00', '12:00', '17:00')
+$preparationLead = New-TimeSpan -Minutes 30
 $runner = (Resolve-Path (Join-Path $PSScriptRoot 'scheduled_runner.py')).Path
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $python = (Get-Command python.exe -ErrorAction Stop).Source
@@ -20,12 +21,13 @@ function Get-NewsPickTaskRecords {
         $name = "$taskPrefix-$($slot.Replace(':', ''))"
         $task = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
         if ($null -eq $task) {
-            $records += [pscustomobject]@{ task_name = $name; installed = $false; state = $null; next_run = $null; last_run = $null; last_result = $null }
+            $records += [pscustomobject]@{ task_name = $name; target_slot = $slot; installed = $false; state = $null; next_run = $null; last_run = $null; last_result = $null }
             continue
         }
         $info = Get-ScheduledTaskInfo -TaskName $name
         $records += [pscustomobject]@{
             task_name = $name
+            target_slot = $slot
             installed = $true
             state = [string]$task.State
             next_run = $info.NextRunTime.ToString('o')
@@ -53,7 +55,7 @@ if ($Command -eq 'install') {
         $name = "$taskPrefix-$($slot.Replace(':', ''))"
         $arguments = "`"$runner`" --slot $slot"
         $action = New-ScheduledTaskAction -Execute $python -Argument $arguments -WorkingDirectory $projectRoot
-        $at = [datetime]::Today.Add([timespan]::Parse("$slot`:00"))
+        $at = [datetime]::Today.Add([timespan]::Parse("$slot`:00")).Subtract($preparationLead)
         $trigger = New-ScheduledTaskTrigger -Daily -At $at
         $principal = New-ScheduledTaskPrincipal -UserId $currentUser -LogonType Interactive -RunLevel Limited
         $settings = New-ScheduledTaskSettingsSet `
@@ -68,7 +70,7 @@ if ($Command -eq 'install') {
             -Trigger $trigger `
             -Principal $principal `
             -Settings $settings `
-            -Description "뉴스픽 $slot KST 자동 생성·Instagram 게시. 로그인된 사용자 세션에서만 실행."
+            -Description "뉴스픽 $slot KST 게시를 위해 30분 전 생성·검증 시작. 로그인된 사용자 세션에서만 실행."
         Register-ScheduledTask -TaskName $name -InputObject $task -Force | Out-Null
     }
 } elseif ($Command -eq 'remove') {

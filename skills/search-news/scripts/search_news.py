@@ -17,6 +17,26 @@ from urllib.parse import urlsplit, urlunsplit
 
 REGISTRY = Path(__file__).resolve().parent.parent / "references" / "source-registry.json"
 BLOCKED_HOSTS = {"news.google.com", "search.naver.com", "news.naver.com"}
+SUPPORTED_TOPICS = {
+    "politics",
+    "real_estate",
+    "economy",
+    "society",
+    "consumer_life",
+    "health",
+    "science_technology",
+    "culture",
+    "sports",
+    "environment",
+    "world",
+}
+EDITORIAL_LANES = {"popular_interest", "public_impact"}
+AUDIENCE_FIT_DIMENSIONS = (
+    "everyday_relevance",
+    "conversation_value",
+    "visual_explainability",
+    "novelty",
+)
 
 
 def parse_time(value: str) -> datetime:
@@ -110,14 +130,40 @@ def discover(since: datetime, until: datetime, registry_path: Path = REGISTRY) -
 
 
 def validate_story(story: dict[str, Any]) -> None:
-    required = {"schema_version", "story_id", "edition_at", "topic", "verified_headline", "why_it_matters", "claims", "sources", "verification_status"}
+    required = {
+        "schema_version",
+        "story_id",
+        "edition_at",
+        "topic",
+        "editorial_lane",
+        "audience_fit",
+        "verified_headline",
+        "why_it_matters",
+        "claims",
+        "sources",
+        "verification_status",
+    }
     missing = sorted(required - set(story))
     if missing:
         raise ValueError(f"필수 필드 누락: {missing}")
     if story["verification_status"] != "verified":
         raise ValueError("verification_status는 verified여야 한다.")
-    if story["topic"] not in {"politics", "real_estate", "economy", "society"}:
+    if story["topic"] not in SUPPORTED_TOPICS:
         raise ValueError("지원하지 않는 topic이다.")
+    lane = story["editorial_lane"]
+    if lane not in EDITORIAL_LANES:
+        raise ValueError("지원하지 않는 editorial_lane이다.")
+    audience_fit = story["audience_fit"]
+    if not isinstance(audience_fit, dict):
+        raise ValueError("audience_fit은 점수 객체여야 한다.")
+    scores = []
+    for dimension in AUDIENCE_FIT_DIMENSIONS:
+        score = audience_fit.get(dimension)
+        if isinstance(score, bool) or not isinstance(score, int) or not 0 <= score <= 3:
+            raise ValueError(f"audience_fit.{dimension}은 0~3 정수여야 한다.")
+        scores.append(score)
+    if lane == "popular_interest" and sum(scores) < 8:
+        raise ValueError("popular_interest 사건은 audience_fit 합계가 8점 이상이어야 한다.")
     source_ids = set()
     press_publishers = set()
     official = 0

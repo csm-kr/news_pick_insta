@@ -56,8 +56,10 @@ python scripts/prepare_reference_candidates.py `
 
 ```powershell
 python scripts/generate_candidates.py --work-dir <run>/03-create --workers 12 --dry-run
-python scripts/generate_candidates.py --work-dir <run>/03-create --workers 12
+python scripts/generate_candidates.py --work-dir <run>/03-create --workers 12 --approve-public-reference-egress
 ```
+
+실제 생성 플래그는 사용자가 이번 run의 `references/content`와 `references/style` 아래 공개 기사·공식·스타일 이미지를 Tibo/GPT Image 백엔드로 보내는 것을 승인했을 때만 사용한다. 스크립트는 이 두 폴더 밖의 reference를 코드로 차단한다.
 
 한 장의 실패가 다른 장의 성공물을 지우지 않는다. `visual-manifest.json.status=complete`이고 12장 모두 1024×1024일 때만 비교 단계로 간다.
 

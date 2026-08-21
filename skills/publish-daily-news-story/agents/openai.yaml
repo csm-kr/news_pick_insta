@@ -1,0 +1,4 @@
+interface:
+  display_name: "오늘의 뉴스픽 스토리"
+  short_description: "오늘 표지 전부를 6초 Story 영상으로 제작·게시"
+  default_prompt: "Use $publish-daily-news-story to turn today’s three verified News Pick covers into a six-second Story video and publish it after approval."

@@ -41,6 +41,44 @@ class CreateCardsTests(unittest.TestCase):
             with patch.dict("os.environ", {"GOD_TIBO_SKILL_ROOT": str(root)}):
                 self.assertEqual(GENERATE.tibo_root(), root.resolve())
 
+    def test_reference_egress_is_limited_to_public_run_reference_folders(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp) / "runs" / "run-1"
+            work = run / "03-create"
+            job_dir = work / "jobs" / "direction-01" / "card-01"
+            content = run / "references" / "content" / "article.jpg"
+            style = run / "references" / "style" / "layout.jpg"
+            for path in (content, style):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"public-reference")
+            job_dir.mkdir(parents=True)
+            job = job_dir / "job.json"
+            job.write_text(
+                json.dumps({"references": [str(content), str(style)]}),
+                encoding="utf-8",
+            )
+            approved = GENERATE.validate_public_reference_egress(
+                [{"job": str(job)}], work
+            )
+            self.assertEqual({path.resolve() for path in approved}, {content, style})
+
+    def test_reference_egress_rejects_files_outside_public_run_folders(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp) / "runs" / "run-1"
+            work = run / "03-create"
+            job_dir = work / "jobs" / "direction-01" / "card-01"
+            secret = Path(tmp) / "private.txt"
+            secret.write_text("secret", encoding="utf-8")
+            job_dir.mkdir(parents=True)
+            job = job_dir / "job.json"
+            job.write_text(
+                json.dumps({"references": [str(secret)]}), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ValueError, "승인 범위 밖"):
+                GENERATE.validate_public_reference_egress(
+                    [{"job": str(job)}], work
+                )
+
     def board(self, count):
         roles = ["hook", "facts_and_context", "impact_unknowns_sources"] if count == 3 else ["hook", "verified_facts", "context_and_positions", "impact_unknowns_sources"]
         return {"story_id": "s", "card_count": count, "cards": [{"index": i + 1, "role": role, "copy": f"copy {i}"} for i, role in enumerate(roles)]}

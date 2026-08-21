@@ -99,7 +99,7 @@ Browser Harness로 설정된 Chrome profile의 Instagram 작성 화면을 열고
 5. 승인된 caption을 `scripts/browser_web_fill_caption_ai.py`로 입력. Instagram이 `<textarea>` 또는 `[role=textbox][contenteditable=true]` 중 어느 형식으로 렌더링해도 로컬 원문과 글자 수를 대조한다. 일반 입력이 줄바꿈만 남기면 스크립트가 paste event로 한 번 대체한다. 편집기가 끝에 추가하는 개행만 정규화하고 내부 줄바꿈은 그대로 비교하며, `AI로 재구성한 인포그래픽` 계열 문구가 없어야 함
 6. 사실적 AI 재구성 카드에는 `AI 라벨 추가` 활성화
 7. 게시 직전 장수·첫 카드·마지막 카드 출처 블록·caption 글자 수·AI 라벨을 재확인
-8. `scripts/browser_web_share_once.py`로 `공유하기`를 한 번만 클릭
+8. 예약 모드는 `NEWS_PICK_EDITION_AT`까지 대기한 뒤 `scripts/browser_web_share_once.py`로 `공유하기`를 한 번만 클릭. 이 스크립트는 회차 시각 전 클릭과 회차 시각 30분 뒤의 보충 게시를 차단한다.
 9. Instagram의 성공 표시를 확인하고 공개 프로필에서 shortcode를 수집
 
 성공 표시와 shortcode가 확인되면 재업로드하지 않고 제출 기록을 연결한다.
@@ -151,3 +151,23 @@ draft → approved → submitting → submitted → published
 ```
 
 예약 모드에서도 `needs_review`, 제출 뒤 오류, 공개 검증 실패를 자동 재시도하지 않는다. 날짜·회차 state가 있으면 같은 payload를 다시 제출하지 않는다.
+
+## 선택적 Story 게시
+
+Instagram 웹 UI에는 Story 작성 DOM이 없으므로, Story 게시에는 사용자의 별도 승인을 받은 경우에만 비공식 private API를 사용한다. 승인된 단일 JPEG와 SHA-256을 고정하고 먼저 제출 없는 계정 probe를 통과시킨다. session cookie는 Browser Harness 프로세스 메모리에서만 사용하며 로그·환경변수·파일에 기록하지 않는다.
+
+```powershell
+python scripts/run_story.py --probe-account newspick_studio
+python scripts/run_story.py --account newspick_studio --media <story.jpg> --sha256 <sha256> --resize-mode fit --result <result.json>
+```
+
+`fit`은 정사각형 카드를 검은 9:16 캔버스 중앙에 잘림 없이 배치한다. worker가 반환한 Story ID가 계정의 현재 Story 목록에 존재해야 성공이다. 그다음 공개 Story URL을 background target에서 열어 실제 미디어 로드와 계정명을 확인하고 screenshot을 육안 검수한다.
+
+```powershell
+$env:IG_ACCOUNT='newspick_studio'
+$env:IG_STORY_URL='https://www.instagram.com/stories/newspick_studio/<story-id>/'
+$env:IG_STORY_VERIFY_SCREENSHOT='<verified.png>'
+cmd /c "browser-harness < scripts\browser_web_verify_story.py"
+```
+
+제출이 시작된 뒤 오류나 timeout이 발생하면 자동 재시도하지 않는다.

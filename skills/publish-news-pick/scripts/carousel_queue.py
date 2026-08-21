@@ -61,6 +61,11 @@ def atomic_json(path: Path, value: dict[str, Any]) -> None:
     os.replace(tmp, path)
 
 
+def read_json(path: Path) -> Any:
+    """Read JSON written by either Python or Windows PowerShell."""
+    return json.loads(path.read_text(encoding="utf-8-sig"))
+
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -123,7 +128,7 @@ def configure(endpoint: str | None, connection: str | None, expected_profile: st
 
 
 def read_config(path: Path = CONFIG_PATH) -> dict[str, Any]:
-    value = json.loads(path.read_text(encoding="utf-8"))
+    value = read_json(path)
     if value.get("dedicated_profile_confirmed") is not True:
         raise ValueError("전용 Chrome 확인이 없다.")
     if value.get("connection_mode") == "cdp_endpoint":
@@ -189,7 +194,7 @@ def load_job(identifier: str, jobs_root: Path = JOBS_ROOT) -> tuple[Path, dict[s
     if not identifier or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789-" for c in identifier):
         raise ValueError("job_id 형식이 올바르지 않다.")
     path = jobs_root / identifier / "job.json"
-    return path, json.loads(path.read_text(encoding="utf-8"))
+    return path, read_json(path)
 
 
 def approve(identifier: str, supplied: str, jobs_root: Path = JOBS_ROOT) -> dict[str, Any]:
@@ -213,7 +218,7 @@ def parse_result(stdout: str) -> dict[str, Any] | None:
 
 
 def execute(path: Path, config: Path = CONFIG_PATH) -> dict[str, Any]:
-    job = json.loads(path.read_text(encoding="utf-8"))
+    job = read_json(path)
     validate_job(job, path)
     if job["status"] != "approved":
         raise ValueError("approved job만 실행한다.")
@@ -253,7 +258,7 @@ def run_publish_result_path(run_dir: Path, account: str) -> Path:
     state_path = run / "run.json"
     if not state_path.is_file():
         raise ValueError("run directory에 run.json이 없다.")
-    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state = read_json(state_path)
     if normalize_account(state.get("account")) != normalize_account(account):
         raise ValueError("run account와 publish job account가 다르다.")
     return run / "04-publish" / "result.json"
@@ -321,7 +326,7 @@ def due(jobs_root: Path = JOBS_ROOT) -> list[Path]:
     paths = []
     for path in jobs_root.glob("*/job.json") if jobs_root.is_dir() else []:
         try:
-            job = json.loads(path.read_text(encoding="utf-8"))
+            job = read_json(path)
             when = datetime.fromisoformat(job["scheduled_at_utc"].replace("Z", "+00:00"))
             if job.get("status") == "approved" and when <= current: paths.append(path)
         except Exception: pass
@@ -364,7 +369,7 @@ def main() -> int:
         elif args.command == "probe": result = probe(args.account)
         elif args.command == "prepare": result = summary(prepare(args.account, args.scheduled_at, args.timezone, args.media, args.caption if args.caption is not None else args.caption_file.read_text(encoding="utf-8")))
         elif args.command == "approve": result = summary(approve(args.job_id, args.sha256))
-        elif args.command == "status": result = summary(load_job(args.job_id)[1]) if args.job_id else [summary(json.loads(x.read_text(encoding="utf-8"))) for x in sorted(JOBS_ROOT.glob("*/job.json"))]
+        elif args.command == "status": result = summary(load_job(args.job_id)[1]) if args.job_id else [summary(read_json(x)) for x in sorted(JOBS_ROOT.glob("*/job.json"))]
         elif args.command == "record-web-submitted": result = summary(record_web_submitted(args.job_id, args.shortcode, args.card_count))
         elif args.command == "verify-published": result = verify_published(args.job_id, args.shortcode, args.card_count, args.caption_match, args.first_card_match, run_dir=args.run_dir)
         else:
