@@ -77,15 +77,27 @@ class ScheduledStoryRunnerTests(unittest.TestCase):
                     "publish": {
                         "status": "published",
                         "public_verified": True,
-                        "story_url": "https://www.instagram.com/stories/newspick_studio/1/",
+                        "story_count": 3,
+                        "stories": [
+                            {"story_url": "https://www.instagram.com/stories/newspick_studio/1/"},
+                            {"story_url": "https://www.instagram.com/stories/newspick_studio/2/"},
+                            {"story_url": "https://www.instagram.com/stories/newspick_studio/3/"},
+                        ],
                     }
                 },
             }
             completed = subprocess.CompletedProcess(
                 args=[], returncode=0, stdout=json.dumps(response), stderr=""
             )
-            with patch.object(MOD, "dependency_paths", return_value={"ok": "yes"}), patch.object(
-                MOD.subprocess, "run", return_value=completed
+            launched = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout='{"ok": true}', stderr=""
+            )
+            with patch.object(
+                MOD,
+                "dependency_paths",
+                return_value={"edge_launcher": "launch_edge_profile.py"},
+            ), patch.object(
+                MOD.subprocess, "run", side_effect=[launched, completed]
             ):
                 code, result = MOD.run_job(root, target, settings, target)
             self.assertEqual(code, 0)

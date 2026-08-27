@@ -152,6 +152,30 @@ def complete_stage(run: Path, stage: str) -> dict[str, Any]:
     return state
 
 
+def cancel_run(run: Path, reason: str) -> dict[str, Any]:
+    state = load_json(run / "run.json")
+    if state.get("status") != "in_progress":
+        raise ValueError(f"in_progress run만 취소할 수 있다: {state.get('status')}")
+    reason = reason.strip()
+    if not reason:
+        raise ValueError("취소 사유가 필요하다.")
+    current = state.get("current_stage")
+    if current in STAGES:
+        record = state["stages"][current]
+        if record.get("status") == "pending":
+            record.update({"status": "cancelled", "cancelled_at": now_iso()})
+    state.update(
+        {
+            "status": "cancelled",
+            "current_stage": None,
+            "cancelled_at": now_iso(),
+            "cancellation_reason": reason,
+        }
+    )
+    atomic_json(run / "run.json", state)
+    return state
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -166,6 +190,9 @@ def main() -> int:
     complete = commands.add_parser("complete-stage")
     complete.add_argument("--run", type=Path, required=True)
     complete.add_argument("--stage", choices=STAGES, required=True)
+    cancel = commands.add_parser("cancel-run")
+    cancel.add_argument("--run", type=Path, required=True)
+    cancel.add_argument("--reason", required=True)
     validate = commands.add_parser("validate-stage")
     validate.add_argument("--run", type=Path, required=True)
     validate.add_argument("--stage", choices=STAGES, required=True)
@@ -181,6 +208,8 @@ def main() -> int:
             result = load_json(args.run / "run.json")
         elif args.command == "complete-stage":
             result = complete_stage(args.run, args.stage)
+        elif args.command == "cancel-run":
+            result = cancel_run(args.run, args.reason)
         else:
             validate_stage(args.run, args.stage)
             result = {"valid": True, "stage": args.stage}

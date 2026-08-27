@@ -56,6 +56,21 @@ class OrchestrateTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 MOD.complete_stage(run, "search-news")
 
+    def test_cancel_run_preserves_outputs_and_clears_current_stage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = MOD.init_run(Path(tmp), "2026-08-17T17:00:00+09:00", "newspick_studio")
+            run = Path(result["run"])
+            artifact = run / "01-search" / "candidate.txt"
+            artifact.write_text("keep", encoding="utf-8")
+            state = MOD.cancel_run(run, "superseded by manual publication")
+            self.assertEqual(state["status"], "cancelled")
+            self.assertIsNone(state["current_stage"])
+            self.assertEqual(state["stages"]["search-news"]["status"], "cancelled")
+            self.assertEqual(state["cancellation_reason"], "superseded by manual publication")
+            self.assertEqual(artifact.read_text(encoding="utf-8"), "keep")
+            with self.assertRaises(ValueError):
+                MOD.cancel_run(run, "again")
+
 
 if __name__ == "__main__":
     unittest.main()

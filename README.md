@@ -59,7 +59,9 @@ python skills/upload-news-pick/scripts/orchestrate.py init `
 
 ## 예약 무인 게시
 
-Windows에서는 cron 대신 Task Scheduler로 `07:00`, `12:00`, `17:00` KST 회차를 등록합니다. 로그인된 사용자 세션, Codex CLI 로그인, `%LOCALAPPDATA%\NewsPick\EdgeProfile`의 Instagram 로그인이 필요합니다.
+Windows에서는 Task Scheduler로 `05:00 연예`, `12:00 주요 이슈`, `17:00 정치` KST 회차를 등록합니다. 로그인된 사용자 세션, Codex CLI 로그인, `%LOCALAPPDATA%\NewsPick\EdgeProfile`의 Instagram 로그인이 필요합니다.
+
+매일 `21:00`에는 위 세 회차의 공개 검증 표지를 각각 6초 Story로 만들어 정확히 3개를 Edge `edge9333` 세션에서 게시·검증합니다.
 
 ```powershell
 python skills/upload-news-pick/scripts/scheduled_runner.py --slot 17:00 --dry-run

@@ -43,7 +43,7 @@ class ScheduledRunnerTests(unittest.TestCase):
             MOD.validate_edge_browser({**browser, "connection_name": "default"})
 
     def test_start_window_rejects_catch_up_posts(self):
-        scheduled = MOD.edition_at("07:00", date(2026, 8, 18))
+        scheduled = MOD.edition_at("05:00", date(2026, 8, 18))
         self.assertTrue(MOD.within_start_window(scheduled, scheduled - timedelta(minutes=30)))
         self.assertFalse(MOD.within_start_window(scheduled, scheduled - timedelta(minutes=31)))
         self.assertTrue(MOD.within_start_window(scheduled, scheduled + timedelta(minutes=30)))
@@ -65,8 +65,9 @@ class ScheduledRunnerTests(unittest.TestCase):
         self.assertIn("references/style", prompt)
         self.assertIn("--approve-public-reference-egress", prompt)
         self.assertIn("이 플래그가 빠진 생성 명령은 한 번도 시도하지 말고", prompt)
-        self.assertIn("target editorial lane: popular_interest", prompt)
-        self.assertIn("생활 관련성·대화 가치·4장 설명력·새로움", prompt)
+        self.assertIn("target editorial lane: general_issue", prompt)
+        self.assertIn("12:00 `general_issue`", prompt)
+        self.assertIn("대중 관심과 국내 영향", prompt)
         self.assertIn("정치·부동산", prompt)
         self.assertIn("하루 1건", prompt)
         self.assertIn("연속 편성하지 않는다", prompt)
@@ -79,10 +80,10 @@ class ScheduledRunnerTests(unittest.TestCase):
         self.assertIn("기존 draft를 폐기하지 말고", prompt)
         self.assertIn("IG_DUPLICATE_TOKENS", prompt)
 
-    def test_editorial_lane_uses_two_popular_slots_and_one_public_slot(self):
-        self.assertEqual(MOD.editorial_lane_for(MOD.edition_at("07:00", date(2026, 8, 18))), "popular_interest")
-        self.assertEqual(MOD.editorial_lane_for(MOD.edition_at("12:00", date(2026, 8, 18))), "popular_interest")
-        self.assertEqual(MOD.editorial_lane_for(MOD.edition_at("17:00", date(2026, 8, 18))), "public_impact")
+    def test_editorial_lane_uses_requested_topic_by_slot(self):
+        self.assertEqual(MOD.editorial_lane_for(MOD.edition_at("05:00", date(2026, 8, 18))), "entertainment")
+        self.assertEqual(MOD.editorial_lane_for(MOD.edition_at("12:00", date(2026, 8, 18))), "general_issue")
+        self.assertEqual(MOD.editorial_lane_for(MOD.edition_at("17:00", date(2026, 8, 18))), "politics")
 
     def test_recent_history_contains_only_public_verified_posts(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -141,13 +142,13 @@ class ScheduledRunnerTests(unittest.TestCase):
             root = Path(tmp)
             (root / "skills" / "upload-news-pick" / "references").mkdir(parents=True)
             settings = self.settings(root / "output")
-            scheduled = MOD.edition_at("07:00", date(2026, 8, 18))
+            scheduled = MOD.edition_at("05:00", date(2026, 8, 18))
             with patch.object(MOD, "find_codex", return_value=Path(__file__)), patch.object(MOD.subprocess, "run") as run:
                 code, result = MOD.run_job(root, scheduled, settings, scheduled + timedelta(hours=2))
             self.assertEqual(code, 0)
             self.assertEqual(result["reason"], "outside_start_window")
             run.assert_not_called()
-            state = settings["output_root"] / "scheduler" / "editions" / "2026-08-18-0700.json"
+            state = settings["output_root"] / "scheduler" / "editions" / "2026-08-18-0500.json"
             self.assertEqual(json.loads(state.read_text(encoding="utf-8"))["status"], "skipped")
 
 

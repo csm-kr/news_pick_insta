@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the verified three-cover daily Instagram Story at 21:00 KST."""
+"""Run three separate verified-cover Instagram Stories at 21:00 KST."""
 
 from __future__ import annotations
 
@@ -95,8 +95,18 @@ def dependency_paths(root: Path, output_root: Path) -> dict[str, str]:
         / "Lib"
         / "site-packages"
     )
+    edge_launcher = (
+        root
+        / "skills"
+        / "publish-news-pick"
+        / "scripts"
+        / "launch_edge_profile.py"
+    )
     dependencies = {
         "story_runner": str(runner.resolve()) if runner.is_file() else "",
+        "edge_launcher": (
+            str(edge_launcher.resolve()) if edge_launcher.is_file() else ""
+        ),
         "ffmpeg": shutil.which("ffmpeg") or "",
         "ffprobe": shutil.which("ffprobe") or "",
         "browser_harness": shutil.which("browser-harness") or "",
@@ -169,6 +179,7 @@ def published_result(payload: dict[str, Any]) -> bool:
         payload.get("ok") is True
         and publish.get("status") == "published"
         and publish.get("public_verified") is True
+        and publish.get("story_count") == 3
     )
 
 
@@ -245,6 +256,32 @@ def run_job(
     )
     with exclusive_lock(scheduler_root / "daily-story.lock", now):
         atomic_json(state_path, started)
+        launched = subprocess.run(
+            [
+                sys.executable,
+                dependencies["edge_launcher"],
+                "--account",
+                settings["account"],
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=environment,
+            check=False,
+        )
+        if launched.returncode != 0:
+            stdout_path.write_text(launched.stdout or "", encoding="utf-8")
+            stderr_path.write_text(launched.stderr or "", encoding="utf-8")
+            ended = {
+                **started,
+                "completed_at": datetime.now(KST).isoformat(),
+                "status": "failed_pre_submit",
+                "exit_code": launched.returncode,
+                "reason": "edge_launch_failed",
+            }
+            atomic_json(state_path, ended)
+            return 2, ended
         completed = subprocess.run(
             command,
             capture_output=True,

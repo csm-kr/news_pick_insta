@@ -62,7 +62,7 @@ if ($Command -eq 'install') {
         -Trigger $trigger `
         -Principal $principal `
         -Settings $settings `
-        -Description '매일 21:00 KST에 당일 공개 검증된 뉴스픽 전부의 첫 카드로 6초 Story를 만들고 게시·검증.'
+        -Description 'News Pick Edge edge9333 only. Publish and verify three separate 05/12/17 edition Stories at 21:00 KST.'
     Register-ScheduledTask -TaskName $taskName -InputObject $task -Force | Out-Null
 } elseif ($Command -eq 'remove') {
     if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {

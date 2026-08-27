@@ -1,11 +1,11 @@
 ---
 name: publish-daily-news-story
-description: 지정일에 올린 공개 검증 뉴스픽 게시물 전부의 1024×1024 표지를 FFmpeg로 6초 세로 MP4에 이어 Instagram Story로 게시한다. "오늘 올린 거 전부 스토리로", "4개면 4개 모두 올려" 같은 일일 요약 스토리 요청에 사용한다.
+description: 지정일의 05·12·17시 공개 검증 뉴스픽 표지 3장을 각각 6초 세로 MP4로 만들어 21시에 Instagram Story 3개로 연속 게시·검증한다. "오늘 뉴스 3개 스토리로", "21시 스토리 예약" 같은 요청에 사용한다.
 ---
 
 # Publish Daily News Story
 
-지정일의 검증된 뉴스픽 게시물 전부를 한 장씩 보여주는 무음 Story 영상으로 만든다. 각 1024×1024 표지는 1080×1920 화면 중앙에 원형 그대로 놓고, 같은 표지를 확대한 어두운 블러 배경 위에서 0.4초 크로스페이드한다. 장수와 관계없이 완성 영상은 정확히 6초, H.264, 30fps, `yuv420p`, fast-start MP4여야 한다.
+지정일의 05·12·17시 검증 뉴스픽 표지 3장을 각각 독립된 무음 Story 영상으로 만든다. 각 1024×1024 표지는 1080×1920 화면 중앙에 원형 그대로 놓고, 같은 표지를 확대한 어두운 블러 배경 위에 배치한다. Story마다 정확히 6초, H.264, 30fps, `yuv420p`, fast-start MP4여야 한다.
 
 게시 또는 공개 확인 전 [../publish-news-pick/references/edge-browser-contract.md](../publish-news-pick/references/edge-browser-contract.md)를 읽고 Microsoft Edge `edge9333` 외의 Browser Harness 연결은 사용하지 않는다.
 
@@ -15,7 +15,7 @@ description: 지정일에 올린 공개 검증 뉴스픽 게시물 전부의 102
 - 기준일은 Asia/Seoul의 오늘이며 `--date YYYY-MM-DD`로 바꿀 수 있다.
 - `04-publish/result.json`이 `status=published`, `public_verified=true`, `first_card_match=true`인 run만 허용한다.
 - `04-publish/result.json`의 `verified_at`을 Asia/Seoul로 해석해 기준일에 공개 검증 완료된 run을 전부 포함한다. 이것을 그날 게시 완료 목록의 기준으로 사용한다.
-- 해당 날짜 후보가 하나도 없으면 게시하지 않는다. 3개면 3개, 4개면 4개처럼 발견된 전부를 `verified_at` 순서로 사용하며 임의로 일부를 빼거나 덜 검증된 run을 보충하지 않는다.
+- 해당 날짜의 공개 검증 후보가 정확히 3개여야 한다. 하나라도 누락되거나 추가 수동 게시물 때문에 4개 이상이면 임의 선택하지 않고 게시 없이 중단한다.
 - 각 run의 실제 표지는 `03-create/slides/01.png`이며 1024×1024인지 확인한다.
 
 ## 한 번에 실행
@@ -28,7 +28,7 @@ $env:IG_ACCOUNT = 'newspick_studio'
 python scripts/run_daily_story.py --date <YYYY-MM-DD> --account $env:IG_ACCOUNT --publish
 ```
 
-이 명령은 후보 선택, FFmpeg 렌더, `ffprobe` 검증, 게시물별 proof frame 생성, 계정 probe, Story 업로드, 공개 Story 확인을 순서대로 한 번만 수행한다. 출력은 `<NEWS_PICK_OUTPUT_ROOT>/daily-story/<YYYY-MM-DD>/` 아래의 `story.mp4`, `manifest.json`, 게시물 수만큼의 `proof-NN.jpg`, `result.json`, `verified.png`다.
+이 명령은 후보 선택, Story MP4 3개 렌더, `ffprobe` 검증, proof 3개 생성, 한 번의 Edge 세션 확인, Story 3개 배치 업로드, Edge background 공개 확인을 수행한다. 출력은 `<NEWS_PICK_OUTPUT_ROOT>/daily-story/<YYYY-MM-DD>/` 아래의 `story-01.mp4`~`story-03.mp4`, `manifest.json`, `proof-01.jpg`~`proof-03.jpg`, `result.json`, `verified-stories/verified-01.jpg`~`verified-03.jpg`다.
 
 사용자가 게시를 요청하지 않았다면 미리보기까지만 만든다.
 
@@ -40,7 +40,7 @@ python scripts/run_daily_story.py --date <YYYY-MM-DD>
 
 ## 매일 21시 예약 게시
 
-사용자가 매일 `21:00` KST Story 게시를 명시적으로 승인한 계정에서는 그 승인을 예약 실행의 standing approval로 적용한다. 예약 실행은 당일 `verified_at`에 해당하는 공개 검증 뉴스 캐러셀 전부의 `01.png` 대문을 사용하며, 후보가 없을 때만 만들거나 게시하지 않는다.
+사용자가 매일 `21:00` KST Story 3개 게시를 명시적으로 승인한 계정에서는 그 승인을 예약 실행의 standing approval로 적용한다. 예약 실행은 당일 05·12·17시 공개 검증 뉴스 캐러셀의 `01.png` 대문 3개를 시간순으로 사용하며, 정확히 3개가 아니면 만들거나 게시하지 않는다.
 
 ```powershell
 python scripts/scheduled_story_runner.py --dry-run
@@ -49,17 +49,17 @@ powershell -ExecutionPolicy Bypass -File scripts/manage_windows_story_schedule.p
 powershell -ExecutionPolicy Bypass -File scripts/manage_windows_story_schedule.ps1 remove
 ```
 
-Windows 작업은 매일 `21:00` KST에 시작한다. 같은 날짜의 상태 파일이 이미 있으면 중복 실행하지 않고, `21:30`을 넘긴 missed run은 보충 게시하지 않는다. 상태는 `<NEWS_PICK_OUTPUT_ROOT>/scheduler/daily-story/editions/`, 로그는 `<NEWS_PICK_OUTPUT_ROOT>/logs/scheduler/daily-story/`에 기록한다. 업로드 시작 뒤 오류나 공개 검증 실패는 `needs_review`로 끝내며 자동 재시도하지 않는다.
+Windows 작업은 매일 `21:00` KST에 시작한다. 같은 날짜의 상태 파일이 이미 있으면 중복 실행하지 않고, `21:30`을 넘긴 missed run은 보충 게시하지 않는다. 예약 executor는 게시 전에 고정 `%LOCALAPPDATA%\NewsPick\EdgeProfile`을 `edge9333`으로 재사용하고, Edge가 닫혀 있을 때만 같은 프로필로 실행한다. 상태는 `<NEWS_PICK_OUTPUT_ROOT>/scheduler/daily-story/editions/`, 로그는 `<NEWS_PICK_OUTPUT_ROOT>/logs/scheduler/daily-story/`에 기록한다. 업로드 시작 뒤 오류나 공개 검증 실패는 `needs_review`로 끝내며 자동 재시도하지 않는다.
 
 ## 게시 불변 조건
 
 - 게시라는 외부 변경에는 현재 대화의 명시적 승인이 필요하다. 단순 제작·미리보기 요청은 게시 권한이 아니다.
 - 지정된 `IG_ACCOUNT`와 현재 표시형 Instagram profile 계정이 일치해야 한다.
 - Browser Harness로 현재 로그인 세션을 메모리 안에서만 전달한다. cookie, `sessionid`, password, MFA 정보를 출력하거나 저장하지 않는다.
-- private API 계정 probe가 성공한 뒤 `video_upload_to_story()`를 한 번만 호출한다.
+- 한 Edge Browser Harness 프로세스에서 계정·private client를 한 번 확인한 뒤 승인된 영상마다 `video_upload_to_story()`를 정확히 한 번씩, 총 3번 호출한다. 호출 사이에는 1.8~3.2초 random jitter를 둔다.
 - 업로드 시작 뒤 timeout·오류·공개 확인 실패가 나면 `needs_review`로 끝내고 자동 재시도하지 않는다.
 - 기존 `result.json`이 `needs_review`이고 `submission_started=true`면 공개 Story를 사람이 확인하기 전에는 다시 올리지 않는다.
-- 공개 확인은 Microsoft Edge `edge9333`의 background target에서 수행하고 기존 Edge tab과 focus를 보존한다. Chrome/default/다른 CDP 연결은 사용하지 않는다.
+- 세 Story URL과 영상 metadata를 모두 확인해야 성공이다. 공개 확인은 Microsoft Edge `edge9333`의 background target 하나에서 순서대로 수행하고 기존 Edge tab과 focus를 보존한다. Chrome/default/다른 CDP 연결은 사용하지 않는다.
 
 ## 개발과 검증
 
@@ -67,7 +67,7 @@ FFmpeg·ffprobe·Pillow·Browser Harness, Microsoft Edge `edge9333`, `publish-ne
 
 ```powershell
 python -m unittest discover -s scripts -p 'test_*.py'
-python scripts/render_story_video.py --date <YYYY-MM-DD>
+python scripts/render_story_batch.py --date <YYYY-MM-DD>
 ```
 
-렌더 결과는 `ffprobe`에서 1080×1920, H.264, 30fps, 6.0초, `yuv420p`를 모두 만족해야 한다.
+세 렌더 결과 각각이 `ffprobe`에서 1080×1920, H.264, 30fps, 6.0초, `yuv420p`를 모두 만족해야 한다.

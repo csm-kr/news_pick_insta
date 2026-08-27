@@ -15,7 +15,9 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import private_video_story_task
+import publish_story_batch
 import publish_story_video
+import render_story_batch
 import render_story_video
 
 
@@ -81,6 +83,16 @@ class DiscoveryTests(unittest.TestCase):
                 ],
             )
 
+    def test_batch_requires_one_source_from_each_fixed_edition(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_run(root, "run-a", 5, (210, 40, 40))
+            self.make_run(root, "run-b", 12, (40, 160, 70))
+            self.make_run(root, "run-c", 13, (40, 80, 210))
+            sources = render_story_video.discover_sources(root, date(2026, 8, 19))
+            with self.assertRaisesRegex(ValueError, "05:00, 12:00, or 17:00"):
+                render_story_batch.ordered_slot_sources(sources, date(2026, 8, 19))
+
     @unittest.skipUnless(
         shutil.which("ffmpeg") and shutil.which("ffprobe"),
         "ffmpeg and ffprobe are required",
@@ -105,6 +117,38 @@ class DiscoveryTests(unittest.TestCase):
             self.assertEqual(len(rendered["proof_frames"]), 4)
             self.assertEqual(rendered["source_count"], 4)
             reused = render_story_video.render(root, date(2026, 8, 19))
+            self.assertTrue(reused["reused"])
+
+    @unittest.skipUnless(
+        shutil.which("ffmpeg") and shutil.which("ffprobe"),
+        "ffmpeg and ffprobe are required",
+    )
+    def test_renders_exactly_three_separate_story_videos(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_run(root, "run-a", 5, (210, 40, 40))
+            self.make_run(root, "run-b", 12, (40, 160, 70))
+            self.make_run(root, "run-c", 17, (40, 80, 210))
+            rendered = render_story_batch.render(root, date(2026, 8, 19))
+            self.assertEqual(rendered["mode"], "three_separate_stories")
+            self.assertEqual(rendered["story_count"], 3)
+            self.assertEqual(
+                [item["source"]["run_id"] for item in rendered["stories"]],
+                ["run-a", "run-b", "run-c"],
+            )
+            self.assertEqual(len({item["path"] for item in rendered["stories"]}), 3)
+            self.assertTrue(
+                all(
+                    item["technical"]["width"] == 1080
+                    and item["technical"]["height"] == 1920
+                    and abs(item["technical"]["duration_seconds"] - 6.0) <= 0.04
+                    for item in rendered["stories"]
+                )
+            )
+            manifest = root / "daily-story" / "2026-08-19" / "manifest.json"
+            _, entries, _ = publish_story_batch.load_manifest(manifest)
+            self.assertEqual(len(entries), 3)
+            reused = render_story_batch.render(root, date(2026, 8, 19))
             self.assertTrue(reused["reused"])
 
 

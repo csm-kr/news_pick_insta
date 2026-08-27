@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create today's six-second News Pick Story video and optionally publish it."""
+"""Create and optionally publish today's three separate News Pick Stories."""
 
 from __future__ import annotations
 
@@ -10,7 +10,8 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-import publish_story_video
+import publish_story_batch
+import render_story_batch
 import render_story_video
 
 
@@ -34,7 +35,7 @@ def main() -> int:
             if args.target_date
             else datetime.now(render_story_video.KST).date()
         )
-        rendered = render_story_video.render(
+        rendered = render_story_batch.render(
             output_root,
             target_date,
             explicit_runs=args.runs,
@@ -45,10 +46,10 @@ def main() -> int:
             if not args.account:
                 raise ValueError("--account or IG_ACCOUNT is required with --publish")
             manifest = output_root / "daily-story" / target_date.isoformat() / "manifest.json"
-            published = publish_story_video.publish(
+            published = publish_story_batch.publish(
                 manifest,
                 args.account,
-                rendered["video"]["sha256"],
+                rendered["input_set_sha256"],
             )
             response["publish"] = published
             ok = published.get("status") == "published" and published.get("public_verified") is True

@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 
 
 KST = ZoneInfo("Asia/Seoul")
-VALID_SLOTS = ("07:00", "12:00", "17:00")
+VALID_SLOTS = ("05:00", "12:00", "17:00")
 PREPARATION_LEAD = timedelta(minutes=30)
 MAX_START_LATENESS = timedelta(minutes=30)
 STALE_LOCK_AGE = timedelta(hours=4)
@@ -96,7 +96,11 @@ def workspace_settings(
 
 
 def editorial_lane_for(scheduled_at: datetime) -> str:
-    return "popular_interest" if scheduled_at.strftime("%H:%M") in {"07:00", "12:00"} else "public_impact"
+    return {
+        "05:00": "entertainment",
+        "12:00": "general_issue",
+        "17:00": "politics",
+    }[scheduled_at.strftime("%H:%M")]
 
 
 def recent_published_stories(output_root: Path, limit: int = 6) -> list[dict[str, str]]:
@@ -173,8 +177,9 @@ python "{publish_gate_path}"
 
 고정 편집 정책:
 - 증거 조건을 먼저 통과한 후보 중 이번 회차의 target editorial lane에 가장 잘 맞는 새 종합 이슈 1건을 고른다. 직전 예약 게시물과 같은 사건·핵심 주장은 제외한다.
-- 07:00·12:00 `popular_interest`는 생활경제·소비자·건강·교통·과학기술·사회·문화·스포츠·환경처럼 여러 연령대의 일상과 대화에 가까운 주제를 우선한다. 생활 관련성·대화 가치·4장 설명력·새로움 합계가 8/12 미만이면 선택하지 않는다.
-- 17:00 `public_impact`는 제도·안전·경제·국제 현안 중 당일 영향이 큰 확정 사안을 우선하되 최근 주제 반복을 피한다.
+- 05:00 `entertainment`는 한국 연예·방송·영화·음악 산업의 당일 확정 뉴스를 우선한다. 공식 발표나 독립 언론 두 곳으로 검증된 계약·흥행·컴백·수상·법원·산업 이슈만 선택하고 사생활·루머·악성 논란은 제외한다.
+- 12:00 `general_issue`는 생활경제·소비자·건강·교통·과학기술·사회·문화·스포츠·환경·국제 중 당일 대중 관심과 국내 영향이 큰 확정 이슈를 선택한다. 17시 정치 회차와 겹치지 않도록 정당·선거·정치인 중심 사건은 제외한다.
+- 17:00 `politics`는 한국 정치·국회·정부의 당일 확정 사안을 우선한다. 공식 원문과 독립 언론 두 곳을 요구하고 선거 예측·정파적 단정·확인되지 않은 공방은 제외한다.
 - 정치·부동산은 계속 탐색하지만 두 분야 합계 하루 1건을 기본 상한으로 하고 직전 게시물과 연속 편성하지 않는다. 전국적 긴급성 또는 즉시 권리·비용 변화가 명확한 확정 사안만 예외로 하며 근거를 selected-story.json의 limitations에 기록한다.
 - 연예인 사생활·확인되지 않은 논란·단순 경기 결과·자극적 범죄 소비는 대중 관심형으로 취급하지 않는다. target lane에 맞는 검증된 사건이 없으면 낮은 대중 적합도의 정치·부동산으로 채우지 않는다.
 - 언론 기사와 공식 발표만 사실 근거로 사용하고, 독립 언론 2곳 이상으로 교차검증한다.

@@ -7,7 +7,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $taskPrefix = 'NewsPickInstagram'
-$slots = @('07:00', '12:00', '17:00')
+$slots = @('05:00', '12:00', '17:00')
+$legacyTaskNames = @('NewsPickInstagram-0700')
 $preparationLead = New-TimeSpan -Minutes 30
 $runner = (Resolve-Path (Join-Path $PSScriptRoot 'scheduled_runner.py')).Path
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
@@ -47,6 +48,11 @@ if ($Command -eq 'install') {
     if ($LASTEXITCODE -ne 0) {
         throw 'Codex CLI 로그인이 필요하다.'
     }
+    foreach ($legacyName in $legacyTaskNames) {
+        if (Get-ScheduledTask -TaskName $legacyName -ErrorAction SilentlyContinue) {
+            Unregister-ScheduledTask -TaskName $legacyName -Confirm:$false
+        }
+    }
     foreach ($slot in $slots) {
         & $python $runner --slot $slot --dry-run | Out-Null
         if ($LASTEXITCODE -ne 0) {
@@ -70,10 +76,15 @@ if ($Command -eq 'install') {
             -Trigger $trigger `
             -Principal $principal `
             -Settings $settings `
-            -Description "뉴스픽 $slot KST 게시를 위해 30분 전 생성·검증 시작. 로그인된 사용자 세션에서만 실행."
+            -Description "News Pick Edge edge9333 only. Start 30 minutes early for $slot KST. 05 entertainment, 12 issues, 17 politics."
         Register-ScheduledTask -TaskName $name -InputObject $task -Force | Out-Null
     }
 } elseif ($Command -eq 'remove') {
+    foreach ($legacyName in $legacyTaskNames) {
+        if (Get-ScheduledTask -TaskName $legacyName -ErrorAction SilentlyContinue) {
+            Unregister-ScheduledTask -TaskName $legacyName -Confirm:$false
+        }
+    }
     foreach ($slot in $slots) {
         $name = "$taskPrefix-$($slot.Replace(':', ''))"
         if (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue) {
