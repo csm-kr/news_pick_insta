@@ -17,9 +17,30 @@ SPEC.loader.exec_module(MOD)
 
 
 class ScheduledRunnerTests(unittest.TestCase):
+    def settings(self, output_root):
+        return {
+            "output_root": Path(output_root),
+            "account": "newspick_studio",
+            "browser": {
+                "engine": "edge",
+                "connection_name": "edge9333",
+                "cdp_url": "http://127.0.0.1:9333",
+                "user_data_dir": "C:/Users/test/AppData/Local/NewsPick/EdgeProfile",
+                "profile_directory": "Default",
+            },
+        }
+
     def test_edition_uses_korean_time(self):
         value = MOD.edition_at("17:00", date(2026, 8, 18))
         self.assertEqual(value.isoformat(), "2026-08-18T17:00:00+09:00")
+
+    def test_browser_contract_rejects_non_edge_workspace(self):
+        browser = self.settings("C:/work/output")["browser"]
+        self.assertEqual(MOD.validate_edge_browser(browser)["connection_name"], "edge9333")
+        with self.assertRaisesRegex(ValueError, "edge"):
+            MOD.validate_edge_browser({**browser, "engine": "chrome"})
+        with self.assertRaisesRegex(ValueError, "edge9333"):
+            MOD.validate_edge_browser({**browser, "connection_name": "default"})
 
     def test_start_window_rejects_catch_up_posts(self):
         scheduled = MOD.edition_at("07:00", date(2026, 8, 18))
@@ -29,7 +50,7 @@ class ScheduledRunnerTests(unittest.TestCase):
         self.assertFalse(MOD.within_start_window(scheduled, scheduled + timedelta(minutes=31)))
 
     def test_prompt_contains_standing_approval_and_fail_closed_rules(self):
-        settings = {"output_root": Path("C:/work/output"), "account": "newspick_studio", "chrome_profile": "Profile 3"}
+        settings = self.settings("C:/work/output")
         prompt = MOD.build_prompt(Path("C:/work"), MOD.edition_at("12:00", date(2026, 8, 18)), settings)
         self.assertIn("예약 정책 범위의 실게시를 사전 승인", prompt)
         self.assertIn("자동 재시도하지 않고", prompt)
@@ -49,9 +70,14 @@ class ScheduledRunnerTests(unittest.TestCase):
         self.assertIn("정치·부동산", prompt)
         self.assertIn("하루 1건", prompt)
         self.assertIn("연속 편성하지 않는다", prompt)
-        self.assertIn("browser_web_resolve_targets.py", prompt)
-        self.assertIn("중복 Instagram target만 닫는다", prompt)
-        self.assertIn("Instagram이 아닌 다른 사이트 탭은 절대 닫거나 탐색하지 않는다", prompt)
+        self.assertIn("Microsoft Edge only", prompt)
+        self.assertIn("edge9333", prompt)
+        self.assertIn("invoke_edge_browser_harness.py", prompt)
+        self.assertIn("기존 사용자 탭은 닫거나 탐색하지 않는다", prompt)
+        self.assertIn("Browser Harness default 연결, 다른 CDP URL은 사용하지 않는다", prompt)
+        self.assertIn("composer_busy", prompt)
+        self.assertIn("기존 draft를 폐기하지 말고", prompt)
+        self.assertIn("IG_DUPLICATE_TOKENS", prompt)
 
     def test_editorial_lane_uses_two_popular_slots_and_one_public_slot(self):
         self.assertEqual(MOD.editorial_lane_for(MOD.edition_at("07:00", date(2026, 8, 18))), "popular_interest")
@@ -89,7 +115,7 @@ class ScheduledRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "skills" / "upload-news-pick" / "references").mkdir(parents=True)
-            settings = {"output_root": root / "output", "account": "newspick_studio", "chrome_profile": "Profile 3"}
+            settings = self.settings(root / "output")
             scheduled = MOD.edition_at("12:00", date(2026, 8, 18))
             state = settings["output_root"] / "scheduler" / "editions" / "2026-08-18-1200.json"
             MOD.atomic_json(state, {"status": "published"})
@@ -102,7 +128,7 @@ class ScheduledRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "skills" / "upload-news-pick" / "references").mkdir(parents=True)
-            settings = {"output_root": root / "output", "account": "newspick_studio", "chrome_profile": "Profile 3"}
+            settings = self.settings(root / "output")
             scheduled = MOD.edition_at("17:00", date(2026, 8, 18))
             with patch.object(MOD, "find_codex", return_value=Path(__file__)):
                 code, result = MOD.run_job(root, scheduled, settings, scheduled - timedelta(minutes=30), dry_run=True)
@@ -114,7 +140,7 @@ class ScheduledRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "skills" / "upload-news-pick" / "references").mkdir(parents=True)
-            settings = {"output_root": root / "output", "account": "newspick_studio", "chrome_profile": "Profile 3"}
+            settings = self.settings(root / "output")
             scheduled = MOD.edition_at("07:00", date(2026, 8, 18))
             with patch.object(MOD, "find_codex", return_value=Path(__file__)), patch.object(MOD.subprocess, "run") as run:
                 code, result = MOD.run_job(root, scheduled, settings, scheduled + timedelta(hours=2))

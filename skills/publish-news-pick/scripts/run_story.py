@@ -6,12 +6,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 import carousel_queue
+import edge_browser
 import private_story_task
 
 
@@ -61,51 +61,38 @@ def main() -> int:
             media = private_story_task.validate_story_media(args.media, args.sha256)
             private_mode = "publish"
         packages = site_packages()
-        harness = shutil.which("browser-harness")
-        if not harness:
-            raise FileNotFoundError("browser-harness CLI was not found")
     except Exception as exc:
         print(PREFIX + json.dumps({"ok": False, "confirmed": False, "submission_started": False, "error": str(exc)[:2000]}, ensure_ascii=True))
         return 2
 
-    env = dict(os.environ)
-    env.update(
-        {
-            "BH_DOMAIN_SKILLS": "0",
-            "BH_RECORD": "0",
-            "STORY_ACCOUNT": account,
-            "STORY_PRIVATE_MODE": private_mode,
-            "STORY_PRIVATE_SITE_PACKAGES": str(packages),
-            "STORY_RESIZE_MODE": args.resize_mode,
-            "PYTHONUNBUFFERED": "1",
-            "PYTHONUTF8": "1",
-            "PYTHONIOENCODING": "utf-8",
-        }
-    )
+    task_env = {
+        "STORY_ACCOUNT": account,
+        "STORY_PRIVATE_MODE": private_mode,
+        "STORY_PRIVATE_SITE_PACKAGES": str(packages),
+        "STORY_RESIZE_MODE": args.resize_mode,
+    }
     if media is not None:
-        env["STORY_MEDIA"] = str(media)
-        env["STORY_MEDIA_SHA256"] = args.sha256.lower()
+        task_env["STORY_MEDIA"] = str(media)
+        task_env["STORY_MEDIA_SHA256"] = args.sha256.lower()
 
     try:
-        process = subprocess.run(
-            [harness],
-            input=TASK.read_text(encoding="utf-8"),
+        process = edge_browser.run_script(
+            TASK,
             capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=env,
             timeout=180,
+            extra_env=task_env,
         )
     except subprocess.TimeoutExpired as exc:
         print(PREFIX + json.dumps({"ok": False, "confirmed": False, "submission_started": None, "error": f"Story worker timeout after {exc.timeout}s"}, ensure_ascii=True))
         return 124
 
-    if process.stdout:
-        print(process.stdout, end="" if process.stdout.endswith("\n") else "\n")
-    if process.stderr:
-        print(process.stderr, file=sys.stderr)
-    result = parse_result(process.stdout)
+    stdout = edge_browser.decode_output(process.stdout)
+    stderr = edge_browser.decode_output(process.stderr)
+    if stdout:
+        print(stdout, end="" if stdout.endswith("\n") else "\n")
+    if stderr:
+        print(stderr, file=sys.stderr)
+    result = parse_result(stdout)
     if result is None:
         print(PREFIX + json.dumps({"ok": False, "confirmed": False, "submission_started": None, "error": "Browser Harness Story result was missing"}, ensure_ascii=True))
         return process.returncode or 1

@@ -1,6 +1,6 @@
-"""Keep one configured-account Instagram page target and close only redundant Instagram targets.
+"""Select one configured-account Instagram target without closing any existing tab.
 
-Run with: browser-harness < scripts/browser_web_resolve_targets.py
+Run with: python scripts/invoke_edge_browser_harness.py scripts/browser_web_resolve_targets.py
 """
 
 import json
@@ -12,7 +12,6 @@ account = os.environ.get("IG_ACCOUNT", "newspick_studio").strip().lstrip("@").lo
 if not re.fullmatch(r"[a-z0-9._]+", account):
     raise RuntimeError("IG_ACCOUNT 형식이 올바르지 않습니다")
 profile_url = f"https://www.instagram.com/{account}/"
-current_id = current_tab()["targetId"]
 
 
 def instagram_targets():
@@ -34,35 +33,11 @@ exact_profiles = [
     if str(item.get("url") or "").split("?", 1)[0].rstrip("/")
     == profile_url.rstrip("/")
 ]
-current_exact = [item for item in exact_profiles if item.get("targetId") == current_id]
-current_instagram = [item for item in targets if item.get("targetId") == current_id]
-if current_exact:
-    keep = current_exact[0]
-elif exact_profiles:
-    keep = exact_profiles[0]
-elif current_instagram:
-    keep = current_instagram[0]
-else:
-    keep = targets[0]
-
-closed = []
-for item in targets:
-    if item.get("targetId") == keep.get("targetId"):
-        continue
-    cdp("Target.closeTarget", targetId=item["targetId"])
-    closed.append(
-        {
-            "targetId": item.get("targetId"),
-            "url": item.get("url"),
-            "title": item.get("title"),
-        }
-    )
-
-remaining = instagram_targets()
-if len(remaining) != 1 or remaining[0].get("targetId") != keep.get("targetId"):
+if len(exact_profiles) != 1:
     raise RuntimeError(
-        f"Instagram target 정리 후 개수가 정확히 하나가 아닙니다: {len(remaining)}"
+        f"@{account}의 정확한 프로필 target이 하나여야 합니다: {len(exact_profiles)}"
     )
+keep = exact_profiles[0]
 
 print(
     "INSTAGRAM_TARGET_RESOLUTION="
@@ -74,8 +49,9 @@ print(
                 "url": keep.get("url"),
                 "title": keep.get("title"),
             },
-            "closed": closed,
-            "after_count": len(remaining),
+            "closed": [],
+            "after_count": len(targets),
+            "existing_tabs_preserved": True,
         },
         ensure_ascii=True,
     )

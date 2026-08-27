@@ -13,7 +13,6 @@ import shutil
 import subprocess
 import sys
 import time
-import urllib.request
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -21,6 +20,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
+
+import edge_browser
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -98,31 +99,33 @@ def normalize_endpoint(value: str) -> str:
     if port is None or not 1024 <= port <= 65535:
         raise ValueError("CDP port는 1024~65535다.")
     host = "127.0.0.1" if parsed.hostname in {"127.0.0.1", "localhost"} else "[::1]"
-    return urlunsplit(("http", f"{host}:{port}", "", "", ""))
+    normalized = urlunsplit(("http", f"{host}:{port}", "", "", ""))
+    if normalized != edge_browser.EDGE_CDP_URL:
+        raise ValueError(f"뉴스픽은 Microsoft Edge CDP {edge_browser.EDGE_CDP_URL}만 허용한다.")
+    return normalized
 
 
 def probe_endpoint(endpoint: str) -> dict[str, Any]:
-    with urllib.request.urlopen(endpoint.rstrip("/") + "/json/version", timeout=2) as response:
-        value = json.loads(response.read().decode("utf-8"))
-    if not value.get("webSocketDebuggerUrl") or not any(x in str(value.get("Browser")) for x in ("Chrome", "Chromium")):
-        raise ValueError("endpoint가 Chrome CDP가 아니다.")
-    return {"browser": value.get("Browser"), "protocol_version": value.get("Protocol-Version")}
+    value = edge_browser.probe_edge_endpoint(normalize_endpoint(endpoint))
+    return {"browser": value["browser"], "protocol_version": value["protocol_version"]}
 
 
 def configure(endpoint: str | None, connection: str | None, expected_profile: str | None, dedicated: bool, path: Path = CONFIG_PATH) -> dict[str, Any]:
     if not dedicated:
-        raise ValueError("--dedicated-profile 확인이 필요하다.")
-    if bool(endpoint) == bool(connection):
-        raise ValueError("--endpoint 또는 --browser-harness-connection 중 하나만 필요하다.")
-    if endpoint:
-        endpoint = normalize_endpoint(endpoint)
-        value = {"schema_version": "1.0", "connection_mode": "cdp_endpoint", "endpoint": endpoint, "dedicated_profile_confirmed": True, "configured_at": now(), **probe_endpoint(endpoint)}
-    else:
-        if connection != "default":
-            raise ValueError("현재는 Browser Harness default 연결만 지원한다.")
-        if not expected_profile or any(x in expected_profile for x in ("/", "\\")):
-            raise ValueError("--expected-profile에는 Profile 3 같은 profile 폴더명만 넣는다.")
-        value = {"schema_version": "1.0", "connection_mode": "browser_harness", "browser_harness_connection": connection, "expected_profile_suffix": expected_profile, "dedicated_profile_confirmed": True, "configured_at": now()}
+        raise ValueError("뉴스픽 전용 Edge profile 확인이 필요하다.")
+    if connection or expected_profile:
+        raise ValueError("Chrome/default Browser Harness 연결은 지원하지 않는다. 고정 Edge --endpoint만 사용한다.")
+    endpoint = normalize_endpoint(endpoint or "")
+    value = {
+        "schema_version": "2.0",
+        "connection_mode": "edge_cdp",
+        "browser_engine": "edge",
+        "browser_harness_connection": edge_browser.EDGE_CONNECTION_NAME,
+        "endpoint": endpoint,
+        "dedicated_profile_confirmed": True,
+        "configured_at": now(),
+        **probe_endpoint(endpoint),
+    }
     atomic_json(path, value)
     return value
 
@@ -130,14 +133,12 @@ def configure(endpoint: str | None, connection: str | None, expected_profile: st
 def read_config(path: Path = CONFIG_PATH) -> dict[str, Any]:
     value = read_json(path)
     if value.get("dedicated_profile_confirmed") is not True:
-        raise ValueError("전용 Chrome 확인이 없다.")
-    if value.get("connection_mode") == "cdp_endpoint":
-        value["endpoint"] = normalize_endpoint(value["endpoint"])
-    elif value.get("connection_mode") == "browser_harness":
-        if value.get("browser_harness_connection") != "default" or not value.get("expected_profile_suffix"):
-            raise ValueError("Browser Harness 연결 설정이 올바르지 않다.")
-    else:
-        raise ValueError("알 수 없는 connection_mode다.")
+        raise ValueError("뉴스픽 전용 Edge profile 확인이 없다.")
+    if value.get("connection_mode") != "edge_cdp" or value.get("browser_engine") != "edge":
+        raise ValueError("뉴스픽 게시 설정은 Microsoft Edge 전용이어야 한다.")
+    value["endpoint"] = normalize_endpoint(value["endpoint"])
+    if value.get("browser_harness_connection") != edge_browser.EDGE_CONNECTION_NAME:
+        raise ValueError("뉴스픽 Browser Harness 연결 이름이 edge9333이 아니다.")
     return value
 
 
@@ -355,7 +356,7 @@ def summary(job: dict[str, Any]) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    conf = commands.add_parser("configure"); connection = conf.add_mutually_exclusive_group(required=True); connection.add_argument("--endpoint"); connection.add_argument("--browser-harness-connection"); conf.add_argument("--expected-profile"); conf.add_argument("--dedicated-profile", action="store_true")
+    conf = commands.add_parser("configure"); conf.add_argument("--endpoint", required=True); conf.add_argument("--dedicated-profile", action="store_true")
     pro = commands.add_parser("probe"); pro.add_argument("--account", required=True)
     prep = commands.add_parser("prepare"); prep.add_argument("--account", required=True); prep.add_argument("--scheduled-at", required=True); prep.add_argument("--timezone"); prep.add_argument("--media", type=Path, action="append", required=True); group = prep.add_mutually_exclusive_group(required=True); group.add_argument("--caption"); group.add_argument("--caption-file", type=Path)
     app = commands.add_parser("approve"); app.add_argument("job_id"); app.add_argument("--sha256", required=True)
@@ -365,7 +366,7 @@ def main() -> int:
     web = commands.add_parser("record-web-submitted"); web.add_argument("job_id"); web.add_argument("--shortcode", required=True); web.add_argument("--card-count", type=int, required=True)
     args = parser.parse_args()
     try:
-        if args.command == "configure": result = configure(args.endpoint, args.browser_harness_connection, args.expected_profile, args.dedicated_profile)
+        if args.command == "configure": result = configure(args.endpoint, None, None, args.dedicated_profile)
         elif args.command == "probe": result = probe(args.account)
         elif args.command == "prepare": result = summary(prepare(args.account, args.scheduled_at, args.timezone, args.media, args.caption if args.caption is not None else args.caption_file.read_text(encoding="utf-8")))
         elif args.command == "approve": result = summary(approve(args.job_id, args.sha256))

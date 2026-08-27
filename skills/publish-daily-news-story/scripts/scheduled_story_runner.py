@@ -235,6 +235,11 @@ def run_job(
             "PYTHONIOENCODING": "utf-8",
             "NEWS_PICK_OUTPUT_ROOT": str(output_root),
             "IG_ACCOUNT": settings["account"],
+            "NEWS_PICK_BROWSER": "edge",
+            "NEWS_PICK_BROWSER_HARNESS_NAME": "edge9333",
+            "NEWS_PICK_EDGE_CDP_URL": "http://127.0.0.1:9333",
+            "BU_NAME": "edge9333",
+            "BU_CDP_URL": "http://127.0.0.1:9333",
             "NEWS_PICK_DAILY_STORY_SCHEDULED_MODE": "1",
         }
     )

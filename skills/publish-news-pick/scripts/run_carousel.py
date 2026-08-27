@@ -6,12 +6,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 import carousel_queue
+import edge_browser
 
 TASK = Path(__file__).with_name("private_carousel_task.py")
 PREFIX = "INSTAGRAM_PRIVATE_CAROUSEL_RESULT="
@@ -53,8 +53,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         config = carousel_queue.read_config(args.config)
-        if config["connection_mode"] == "cdp_endpoint":
-            carousel_queue.probe_endpoint(config["endpoint"])
+        carousel_queue.probe_endpoint(config["endpoint"])
         packages = site_packages()
         if args.job:
             job_path = args.job.resolve()
@@ -66,30 +65,31 @@ def main() -> int:
         else:
             job_path = None
             account = carousel_queue.normalize_account(args.probe_account)
-        harness = shutil.which("browser-harness")
-        if not harness:
-            raise FileNotFoundError("browser-harness CLI가 없다.")
     except Exception as exc:
         print(PREFIX + json.dumps(fallback(exc), ensure_ascii=False))
         return 2
-    env = dict(os.environ)
-    env.update({"BH_AGENT_WORKSPACE": str((carousel_queue.LOCAL_ROOT / "browser-harness").resolve()), "BH_DOMAIN_SKILLS": "0", "BH_RECORD": "0", "CAROUSEL_ACCOUNT": account, "CAROUSEL_PRIVATE_MODE": "publish" if job_path else "probe", "CAROUSEL_PRIVATE_SITE_PACKAGES": str(packages), "PYTHONUNBUFFERED": "1", "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"})
-    if config["connection_mode"] == "cdp_endpoint":
-        env["BU_NAME"] = "instagram-private-carousel-publisher"
-        env["BU_CDP_URL"] = config["endpoint"]
-    else:
-        env.pop("BU_NAME", None)
-        env.pop("BU_CDP_URL", None)
-        env["CAROUSEL_EXPECTED_PROFILE_SUFFIX"] = config["expected_profile_suffix"]
+    task_env = {
+        "BH_AGENT_WORKSPACE": str((carousel_queue.LOCAL_ROOT / "browser-harness").resolve()),
+        "CAROUSEL_ACCOUNT": account,
+        "CAROUSEL_PRIVATE_MODE": "publish" if job_path else "probe",
+        "CAROUSEL_PRIVATE_SITE_PACKAGES": str(packages),
+    }
     if job_path:
-        env["CAROUSEL_JOB"] = str(job_path)
+        task_env["CAROUSEL_JOB"] = str(job_path)
     try:
-        if config["connection_mode"] == "cdp_endpoint":
-            subprocess.run([harness, "--reload"], capture_output=True, text=True, env=env, timeout=20, check=True)
-        result = subprocess.run([harness], input=TASK.read_text(encoding="utf-8"), capture_output=True, text=True, encoding="utf-8", errors="replace", env=env, timeout=540)
-        if result.stdout: print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
-        if result.stderr: print(result.stderr, file=sys.stderr)
-        if not any(line.startswith(PREFIX) for line in result.stdout.splitlines()):
+        result = edge_browser.run_script(
+            TASK,
+            capture_output=True,
+            timeout=540,
+            extra_env=task_env,
+        )
+        stdout = edge_browser.decode_output(result.stdout)
+        stderr = edge_browser.decode_output(result.stderr)
+        if stdout:
+            print(stdout, end="" if stdout.endswith("\n") else "\n")
+        if stderr:
+            print(stderr, file=sys.stderr)
+        if not any(line.startswith(PREFIX) for line in stdout.splitlines()):
             print(PREFIX + json.dumps(fallback("Browser Harness 결과가 없다.", None), ensure_ascii=False))
             return result.returncode or 1
         return result.returncode

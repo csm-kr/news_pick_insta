@@ -15,6 +15,28 @@ SPEC.loader.exec_module(MOD)
 
 
 class QueueTests(unittest.TestCase):
+    def test_configure_accepts_only_fixed_edge_endpoint(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            MOD.edge_browser,
+            "probe_edge_endpoint",
+            return_value={"browser": "Edg/151.0", "protocol_version": "1.3"},
+        ):
+            path = Path(tmp) / "config.json"
+            value = MOD.configure("http://127.0.0.1:9333", None, None, True, path)
+            self.assertEqual(value["connection_mode"], "edge_cdp")
+            self.assertEqual(value["browser_engine"], "edge")
+            self.assertEqual(value["browser_harness_connection"], "edge9333")
+            self.assertEqual(MOD.read_config(path)["endpoint"], "http://127.0.0.1:9333")
+
+    def test_configure_rejects_browser_harness_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, "Chrome/default"):
+                MOD.configure(None, "default", "Profile 3", True, Path(tmp) / "config.json")
+
+    def test_normalize_endpoint_rejects_other_loopback_port(self):
+        with self.assertRaisesRegex(ValueError, "Edge CDP"):
+            MOD.normalize_endpoint("http://127.0.0.1:9222")
+
     def test_output_root_uses_environment(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {"NEWS_PICK_OUTPUT_ROOT": tmp}):
             self.assertEqual(MOD.default_output_root(), Path(tmp).resolve())

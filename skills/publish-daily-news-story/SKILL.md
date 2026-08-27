@@ -7,6 +7,8 @@ description: 지정일에 올린 공개 검증 뉴스픽 게시물 전부의 102
 
 지정일의 검증된 뉴스픽 게시물 전부를 한 장씩 보여주는 무음 Story 영상으로 만든다. 각 1024×1024 표지는 1080×1920 화면 중앙에 원형 그대로 놓고, 같은 표지를 확대한 어두운 블러 배경 위에서 0.4초 크로스페이드한다. 장수와 관계없이 완성 영상은 정확히 6초, H.264, 30fps, `yuv420p`, fast-start MP4여야 한다.
 
+게시 또는 공개 확인 전 [../publish-news-pick/references/edge-browser-contract.md](../publish-news-pick/references/edge-browser-contract.md)를 읽고 Microsoft Edge `edge9333` 외의 Browser Harness 연결은 사용하지 않는다.
+
 ## 입력 선택
 
 - `NEWS_PICK_OUTPUT_ROOT` 또는 `--output-root`의 `runs/`를 읽는다.
@@ -57,11 +59,11 @@ Windows 작업은 매일 `21:00` KST에 시작한다. 같은 날짜의 상태 �
 - private API 계정 probe가 성공한 뒤 `video_upload_to_story()`를 한 번만 호출한다.
 - 업로드 시작 뒤 timeout·오류·공개 확인 실패가 나면 `needs_review`로 끝내고 자동 재시도하지 않는다.
 - 기존 `result.json`이 `needs_review`이고 `submission_started=true`면 공개 Story를 사람이 확인하기 전에는 다시 올리지 않는다.
-- 공개 확인은 background target에서 수행하고 기존 Chrome tab과 focus를 보존한다.
+- 공개 확인은 Microsoft Edge `edge9333`의 background target에서 수행하고 기존 Edge tab과 focus를 보존한다. Chrome/default/다른 CDP 연결은 사용하지 않는다.
 
 ## 개발과 검증
 
-FFmpeg·ffprobe·Pillow·Browser Harness와 `publish-news-pick`이 준비한 project-local `instagrapi` venv가 필요하다.
+FFmpeg·ffprobe·Pillow·Browser Harness, Microsoft Edge `edge9333`, `publish-news-pick`이 준비한 project-local `instagrapi` venv가 필요하다.
 
 ```powershell
 python -m unittest discover -s scripts -p 'test_*.py'

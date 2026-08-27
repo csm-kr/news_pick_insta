@@ -7,7 +7,7 @@ description: 한국 종합 이슈 하나를 탐색·검증하고, 근거를 훼�
 
 하나의 `run_id` 아래 네 전문 스킬을 순서대로 연결한다. 이 스킬은 각 단계의 일을 직접 대신하지 않고 입력·출력 계약, hash, 중단·재개와 게시 승인 경계만 관리한다.
 
-실행 전 [references/portable-layout.md](references/portable-layout.md)를 읽고 다섯 스킬이 같은 부모 폴더에 설치됐는지 확인한다. skill 폴더는 읽기 전용으로 유지하고 모든 실행물은 별도 `NEWS_PICK_OUTPUT_ROOT` 아래에 쓴다.
+실행 전 [references/portable-layout.md](references/portable-layout.md)와 [../publish-news-pick/references/edge-browser-contract.md](../publish-news-pick/references/edge-browser-contract.md)를 읽고 다섯 스킬이 같은 부모 폴더에 설치됐는지 확인한다. skill 폴더는 읽기 전용으로 유지하고 모든 실행물은 별도 `NEWS_PICK_OUTPUT_ROOT` 아래에 쓴다. 뉴스픽의 모든 웹 상호작용은 Microsoft Edge의 Browser Harness named 연결 `edge9333`만 사용하며 Chrome/default/다른 CDP로 대체하지 않는다.
 
 ## 고정 구성
 
@@ -26,6 +26,8 @@ description: 한국 종합 이슈 하나를 탐색·검증하고, 근거를 훼�
 $env:NEWS_PICK_OUTPUT_ROOT = '<workspace>/output'
 python scripts/orchestrate.py init --output-root $env:NEWS_PICK_OUTPUT_ROOT --edition-at <ISO-8601> --account <instagram-account>
 ```
+
+수동 요청은 항상 새 `run_id`로 만든다. 같은 회차의 예약 실행이 이미 있어도 그 run 디렉터리나 산출물을 재사용하지 않는다. Instagram 변경 동작 직전 모든 `run.json`을 다시 확인하고, 다른 run이 `status=in_progress`, `current_stage=publish-news-pick`이면 작성기를 건드리거나 열린 draft를 폐기하지 않는다. 사용자가 수동 즉시 게시를 명시해 예약 실행을 중단해야 하는 경우에도 정확한 예약 executor만 확인해 중단하고 그 run의 파일은 보존한다.
 
 이 명령은 `<output-root>/runs`, `publish-news-pick`, `profile-candidates`, `cache`, `logs`를 만들고 run은 `<output-root>/runs/<run_id>`에 둔다. 기존 실행은 먼저 상태를 읽는다.
 
@@ -69,7 +71,7 @@ python scripts/orchestrate.py complete-stage --run <run-directory> --stage searc
 
 `create-news-cards`에는 승인된 storyboard와 명시적으로 확인한 `1024x1024` 크기를 전달한다. 첫 실행에서만 사용자에게 이 크기를 확인하고 이후 같은 계정 preset에서는 재사용한다.
 
-- 원문 기사 대표 사진과 공식 발표·공시 화면을 Browser Harness로 확보하고 URL·로컬 경로·SHA-256을 기록
+- 원문 기사 대표 사진과 공식 발표·공시 화면을 고정 Edge Browser Harness 연결로 확보하고 URL·로컬 경로·SHA-256을 기록
 - 기본 4장: 비주얼 방향 3개 × 4장 = 완성 후보 12장
 - 프로젝트 어댑터 한 명령에서 단일 이미지 job 12개를 동시에 실행
 - 모델이 한글 카피·숫자·차트까지 포함한 최종 카드를 생성하고 코드는 QA에만 사용
@@ -95,6 +97,8 @@ python scripts/orchestrate.py complete-stage --run <run-directory> --stage searc
 ## 4단계 — 업로드
 
 `publish-news-pick`에 최종 slides, caption, run의 설정 계정, 게시 시각을 전달한다. run의 `account`, `IG_ACCOUNT`, 실제 로그인 계정이 모두 같아야 한다. caption에 `AI로 재구성한 인포그래픽` 계열 문구가 없어야 하며, AI 공개 표시는 Instagram `AI 콘텐츠` 라벨로 처리한다. 수동 모드는 payload hash를 사람에게 보여주고 건별 승인받는다. 예약 모드는 아래 standing approval 범위 안에서 모든 QA를 통과한 exact payload hash를 잠근 뒤 회차당 한 번 승인한다.
+
+공개 프로필 preflight에는 첫 카드의 안정적인 고유 토큰 2~3개를 `IG_DUPLICATE_TOKENS`에 `|`로 연결해 전달한다. `browser_web_preflight.py` 한 번에서 Edge 계정·소유자 control·로그인/challenge·최신 게시물 중복을 함께 확인한다. 별도 중복 확인용 Harness 프로세스를 다시 만들지 않는다.
 
 제출 후 오류나 timeout은 자동 재시도하지 않는다. `needs_review`에서 프로필을 읽기 전용으로 확인한다. private API 응답만으로 완료하지 말고 공개 프로필에서 shortcode, 카드 장수, 첫 장, caption을 검증한다.
 
@@ -143,7 +147,7 @@ powershell -ExecutionPolicy Bypass -File scripts/manage_windows_schedule.ps1 rem
 
 Windows 작업은 각 회차 30분 전인 `06:30`, `11:30`, `16:30` KST에 준비를 시작한다. 검색·기획·이미지 생성·QA와 게시 직전 검증을 미리 끝내고, `scripts/wait_for_publish_time.py`가 목표 회차 시각까지 대기한 뒤에만 Instagram `공유하기`를 누른다. 웹 UI 공유 스크립트도 목표 시각 전 클릭과 목표 시각 30분 뒤의 보충 게시를 코드로 차단한다.
 
-예약 실행은 `output/scheduler/editions/<date>-<slot>.json`을 idempotency key로 사용한다. state가 한 번 생긴 회차, 목표 시각 30분 전보다 이른 실행, 목표 시각에서 30분 넘게 지난 실행, 다른 회차가 실행 중인 경우에는 새 게시를 시작하지 않는다. `needs_review`와 제출 뒤 오류를 자동 재시도하지 않는다. Windows 사용자가 로그인되어 있고 전용 Chrome profile의 세션을 사용할 수 있을 때만 동작하며, 컴퓨터가 꺼져 있던 회차는 나중에 몰아서 게시하지 않는다. 자세한 고정 prompt와 결과 schema는 `scripts/scheduled_runner.py`와 `references/scheduled-result.schema.json`을 사용한다.
+예약 실행은 `output/scheduler/editions/<date>-<slot>.json`을 idempotency key로 사용한다. state가 한 번 생긴 회차, 목표 시각 30분 전보다 이른 실행, 목표 시각에서 30분 넘게 지난 실행, 다른 회차가 실행 중인 경우에는 새 게시를 시작하지 않는다. `needs_review`와 제출 뒤 오류를 자동 재시도하지 않는다. Windows 사용자가 로그인되어 있고 `%LOCALAPPDATA%\NewsPick\EdgeProfile`의 세션과 `edge9333` 연결을 사용할 수 있을 때만 동작하며, 컴퓨터가 꺼져 있던 회차는 나중에 몰아서 게시하지 않는다. 자세한 고정 prompt와 결과 schema는 `scripts/scheduled_runner.py`와 `references/scheduled-result.schema.json`을 사용한다.
 
 ## 완료 보고
 

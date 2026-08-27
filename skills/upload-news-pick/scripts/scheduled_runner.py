@@ -23,6 +23,8 @@ VALID_SLOTS = ("07:00", "12:00", "17:00")
 PREPARATION_LEAD = timedelta(minutes=30)
 MAX_START_LATENESS = timedelta(minutes=30)
 STALE_LOCK_AGE = timedelta(hours=4)
+EDGE_CONNECTION_NAME = "edge9333"
+EDGE_CDP_URL = "http://127.0.0.1:9333"
 
 
 def project_root() -> Path:
@@ -47,11 +49,21 @@ def validate_account(value: str) -> str:
     return account
 
 
-def validate_profile(value: str) -> str:
-    profile = value.strip()
-    if not profile or any(marker in profile for marker in ("/", "\\")):
-        raise ValueError("Chrome profile에는 폴더명만 사용한다.")
-    return profile
+def validate_edge_browser(value: dict[str, Any] | None) -> dict[str, str]:
+    browser = value or {}
+    expected = {
+        "engine": "edge",
+        "connection_name": EDGE_CONNECTION_NAME,
+        "cdp_url": EDGE_CDP_URL,
+        "profile_directory": "Default",
+    }
+    for key, expected_value in expected.items():
+        if browser.get(key) != expected_value:
+            raise ValueError(f"workspace browser.{key}는 {expected_value!r}이어야 한다.")
+    user_data_dir = Path(str(browser.get("user_data_dir") or "")).expanduser()
+    if not user_data_dir.is_absolute():
+        raise ValueError("workspace browser.user_data_dir은 절대경로여야 한다.")
+    return {**expected, "user_data_dir": str(user_data_dir.resolve())}
 
 
 def edition_at(slot: str, edition_date: date) -> datetime:
@@ -65,7 +77,6 @@ def workspace_settings(
     root: Path,
     output_override: Path | None = None,
     account_override: str | None = None,
-    profile_override: str | None = None,
 ) -> dict[str, Any]:
     config_path = root / "output" / "workspace.json"
     config = load_json(config_path) if config_path.is_file() else {}
@@ -80,7 +91,7 @@ def workspace_settings(
     return {
         "output_root": output_root,
         "account": validate_account(account_override or config.get("account", "newspick_studio")),
-        "chrome_profile": validate_profile(profile_override or config.get("chrome_profile", "Profile 3")),
+        "browser": validate_edge_browser(config.get("browser")),
     }
 
 
@@ -120,7 +131,10 @@ def recent_published_stories(output_root: Path, limit: int = 6) -> list[dict[str
 def build_prompt(root: Path, scheduled_at: datetime, settings: dict[str, Any]) -> str:
     skill_path = root / "skills" / "upload-news-pick" / "SKILL.md"
     publish_gate_path = root / "skills" / "upload-news-pick" / "scripts" / "wait_for_publish_time.py"
-    instagram_target_resolver_path = root / "skills" / "publish-news-pick" / "scripts" / "browser_web_resolve_targets.py"
+    publish_scripts = root / "skills" / "publish-news-pick" / "scripts"
+    edge_launcher_path = publish_scripts / "launch_edge_profile.py"
+    edge_invoker_path = publish_scripts / "invoke_edge_browser_harness.py"
+    instagram_preflight_path = publish_scripts / "browser_web_preflight.py"
     editorial_lane = editorial_lane_for(scheduled_at)
     recent_history = recent_published_stories(settings["output_root"])
     recent_history_json = json.dumps(recent_history, ensure_ascii=False, indent=2)
@@ -134,7 +148,10 @@ Windows PowerShell에서 한글 UTF-8 텍스트 파일을 읽을 때는 반드�
 - edition_at: {scheduled_at.isoformat()}
 - timezone: Asia/Seoul
 - account: {settings['account']}
-- Chrome profile: {settings['chrome_profile']}
+- browser: Microsoft Edge only
+- Browser Harness connection: {settings['browser']['connection_name']}
+- Edge CDP: {settings['browser']['cdp_url']}
+- Edge user data: {settings['browser']['user_data_dir']}
 - output root: {settings['output_root']}
 - target editorial lane: {editorial_lane}
 
@@ -168,13 +185,18 @@ python "{publish_gate_path}"
 - 사실적 AI 재구성 게시물은 Instagram의 `AI 콘텐츠` 라벨을 켠다.
 
 실행 안전 규칙:
-- 로그인된 Instagram 탭이 없을 때만 Profile 3 창을 한 번 연다.
-- Instagram page target이 여러 개면 아래 resolver를 Browser Harness로 먼저 실행한다. 설정 계정의 정확한 프로필 탭을 우선해 하나만 남기고 중복 Instagram target만 닫는다. Instagram이 아닌 다른 사이트 탭은 절대 닫거나 탐색하지 않는다. resolver 뒤 target이 정확히 하나인지와 계정·로그인 상태를 preflight로 다시 검증하며, 불일치·login wall·challenge가 있으면 게시하지 않는다.
+- 모든 웹 상호작용은 Microsoft Edge의 `edge9333` named CDP 연결에서만 Browser Harness로 실행한다. Chrome, Chromium, Browser Harness default 연결, 다른 CDP URL은 사용하지 않는다.
+- Instagram 변경 동작 직전에 `output/runs/*/run.json`을 다시 읽는다. 자신과 다른 run이 `status=in_progress`이면서 `current_stage=publish-news-pick`이면 작성기를 열거나 기존 draft를 폐기하지 말고 `skipped`(`composer_busy`)로 끝낸다. 수동 run과 예약 run의 산출물·run_id를 절대 공유하거나 덮어쓰지 않는다.
+- Edge가 열려 있지 않을 때만 아래 launcher를 한 번 실행한다. 기존 사용자 탭은 닫거나 탐색하지 않는다. 그다음 Excel Collector fast-path와 같은 exact-byte invoker로 targeted preflight를 Browser Harness 프로세스 하나에서 실행한다. 전체 AX/DOM dump를 사용하지 않는다.
 
 ```powershell
 $env:IG_ACCOUNT = "{settings['account']}"
-browser-harness < "{instagram_target_resolver_path}"
+$env:IG_DUPLICATE_TOKENS = '<첫 카드의 안정적인 고유 토큰 2~3개를 | 로 연결>'
+python "{edge_launcher_path}" --account $env:IG_ACCOUNT
+python "{edge_invoker_path}" "{instagram_preflight_path}"
 ```
+- preflight 한 번에서 설정 계정·소유자 control·로그인/challenge·공개 프로필 최신 게시물 중복을 함께 확인한다. 중복 점검을 별도 Harness 호출로 반복하지 않는다.
+- 같은 bounded phase 안의 target 탐색·DOM 판독·대기·검증은 한 Browser Harness 프로세스 안에서 묶는다. 조회는 event-driven targeted probe로 빠르게 처리하고, 게시 UI 변경 사이에만 짧은 random jitter를 둔다.
 - 적합한 새 이슈가 없거나 검색·기획·이미지·중복·계정·캐러셀·AI 라벨 QA가 하나라도 실패하면 filler를 만들지 말고 skipped 또는 needs_review로 끝낸다.
 - 공유하기는 한 번만 누른다. 제출 시작 뒤 오류·timeout이면 자동 재시도하지 않고 공개 프로필을 읽기 전용으로 확인한다.
 - 기존 게시물을 삭제하거나 수정하지 않는다. 단, 이번 게시물의 AI 라벨 공개 검증 복구는 publish-news-pick 계약이 허용한 한 번만 수행한다.
@@ -342,7 +364,12 @@ def run_job(
             "PYTHONIOENCODING": "utf-8",
             "NEWS_PICK_OUTPUT_ROOT": str(output_root),
             "IG_ACCOUNT": settings["account"],
-            "NEWS_PICK_CHROME_PROFILE": settings["chrome_profile"],
+            "NEWS_PICK_BROWSER": "edge",
+            "NEWS_PICK_BROWSER_HARNESS_NAME": EDGE_CONNECTION_NAME,
+            "NEWS_PICK_EDGE_CDP_URL": EDGE_CDP_URL,
+            "NEWS_PICK_EDGE_USER_DATA_DIR": settings["browser"]["user_data_dir"],
+            "BU_NAME": EDGE_CONNECTION_NAME,
+            "BU_CDP_URL": EDGE_CDP_URL,
             "NEWS_PICK_SCHEDULED_MODE": "1",
             "NEWS_PICK_EDITION_AT": scheduled_at.isoformat(),
         }
@@ -391,14 +418,13 @@ def main() -> int:
     parser.add_argument("--edition-date", type=date.fromisoformat)
     parser.add_argument("--output-root", type=Path)
     parser.add_argument("--account")
-    parser.add_argument("--chrome-profile")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     try:
         root = project_root()
         now = datetime.now(KST)
         scheduled_at = edition_at(args.slot, args.edition_date or now.date())
-        settings = workspace_settings(root, args.output_root, args.account, args.chrome_profile)
+        settings = workspace_settings(root, args.output_root, args.account)
         exit_code, result = run_job(root, scheduled_at, settings, now, args.dry_run)
     except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False), file=sys.stderr)

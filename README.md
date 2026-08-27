@@ -35,15 +35,18 @@ python scripts/bootstrap.py check
 python scripts/bootstrap.py install
 python scripts/bootstrap.py init `
   --workspace . `
-  --account newspick_studio `
-  --chrome-profile "Profile 3"
+  --account newspick_studio
 
 $env:NEWS_PICK_OUTPUT_ROOT = (Resolve-Path ./output)
 $env:IG_ACCOUNT = 'newspick_studio'
-$env:NEWS_PICK_CHROME_PROFILE = 'Profile 3'
+$env:NEWS_PICK_BROWSER = 'edge'
+$env:NEWS_PICK_BROWSER_HARNESS_NAME = 'edge9333'
+$env:NEWS_PICK_EDGE_CDP_URL = 'http://127.0.0.1:9333'
+python skills/publish-news-pick/scripts/launch_edge_profile.py --account $env:IG_ACCOUNT
+python skills/publish-news-pick/scripts/carousel_queue.py configure --endpoint http://127.0.0.1:9333 --dedicated-profile
 ```
 
-`install`은 여섯 스킬을 `$CODEX_HOME/skills` 또는 `~/.codex/skills`에 함께 설치하며 기존 폴더를 덮어쓰지 않습니다. 다른 설치 위치는 `--skills-dir`로 지정합니다.
+`install`은 여섯 스킬을 `$CODEX_HOME/skills` 또는 `~/.codex/skills`에 함께 설치하며 기본적으로 기존 폴더를 덮어쓰지 않습니다. 기존 뉴스픽 pack을 갱신할 때는 `python scripts/bootstrap.py install --update-existing`를 사용하며, 이전 설치본은 `$CODEX_HOME/skill-backups/news-pick/`에 보관됩니다. 다른 설치 위치는 `--skills-dir`로 지정합니다.
 
 전체 실행의 시작점은 `skills/upload-news-pick/SKILL.md`입니다.
 
@@ -56,7 +59,7 @@ python skills/upload-news-pick/scripts/orchestrate.py init `
 
 ## 예약 무인 게시
 
-Windows에서는 cron 대신 Task Scheduler로 `07:00`, `12:00`, `17:00` KST 회차를 등록합니다. 로그인된 사용자 세션, Codex CLI 로그인, Profile 3의 Instagram 로그인이 필요합니다.
+Windows에서는 cron 대신 Task Scheduler로 `07:00`, `12:00`, `17:00` KST 회차를 등록합니다. 로그인된 사용자 세션, Codex CLI 로그인, `%LOCALAPPDATA%\NewsPick\EdgeProfile`의 Instagram 로그인이 필요합니다.
 
 ```powershell
 python skills/upload-news-pick/scripts/scheduled_runner.py --slot 17:00 --dry-run
@@ -79,7 +82,7 @@ powershell -ExecutionPolicy Bypass -File skills/publish-daily-news-story/scripts
 1. `search-news` — 언론 원문·공식 발표 기반 이슈 발견, 국내 영향도 평가, 교차검증
 2. `plan-news-pick` — 중립적 강후킹, 사실·카피·차트·고유 시각 역할 기획
 3. `create-news-cards` — 기사·공식 이미지 reference 기반 1024×1024 카드 생성과 중복 QA
-4. `publish-news-pick` — 설정된 Chrome profile의 Instagram 웹 UI 게시·공개 검증
+4. `publish-news-pick` — 고정 Microsoft Edge `edge9333` 연결의 Instagram 웹 UI 게시·공개 검증
 5. `publish-daily-news-story` — 오늘 검증된 모든 표지를 FFmpeg 6초 영상으로 만들어 Story 게시·검증
 6. `upload-news-pick` — 네 단계를 hash·승인 게이트로 연결하는 오케스트레이터
 
@@ -90,7 +93,7 @@ powershell -ExecutionPolicy Bypass -File skills/publish-daily-news-story/scripts
 - FFmpeg와 ffprobe
 - Browser Harness CLI
 - `god-tibo-gpt-image2-skill`; 자동 검색되지 않으면 `GOD_TIBO_SKILL_ROOT` 지정
-- 사용자가 직접 로그인한 표시형 Chrome profile
+- 사용자가 직접 로그인한 표시형 Microsoft Edge의 뉴스픽 전용 profile
 
 비밀번호·MFA·cookie·`sessionid`는 저장소나 workspace 설정에 기록하지 않습니다. 선택적 Instagram private API 의존성은 `skills/publish-news-pick/requirements.txt`에 있으며, 기본 게시 경로는 Browser Harness 웹 UI입니다.
 
@@ -105,4 +108,4 @@ foreach ($name in $skillDirs) {
 }
 ```
 
-`output/`, 과거 호환용 `runs/`·`assets/`, 모든 `.local/`, Chrome profile과 인증 관련 파일은 Git에서 제외합니다.
+`output/`, 과거 호환용 `runs/`·`assets/`, 모든 `.local/`, Edge user data와 인증 관련 파일은 Git에서 제외합니다.

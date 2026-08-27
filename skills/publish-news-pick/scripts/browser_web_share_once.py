@@ -1,7 +1,9 @@
 """Click Instagram Share exactly once and require the web success marker."""
 
+import base64
 import json
 import os
+import random
 import re
 import time
 from datetime import datetime, timedelta
@@ -41,7 +43,7 @@ if len(targets) != 1:
     raise RuntimeError(
         f"writable Instagram page target must be exactly one; found {len(targets)}"
     )
-switch_tab(targets[0]["targetId"])
+switch_tab(targets[0]["targetId"], activate=True)
 
 nodes = cdp("Accessibility.getFullAXTree").get("nodes", [])
 candidates = [
@@ -78,7 +80,7 @@ markers = (
 deadline = time.time() + 120
 state = None
 while time.time() < deadline:
-    time.sleep(1)
+    time.sleep(random.uniform(0.65, 1.15))
     state = js(
         """
         (() => {
@@ -92,7 +94,9 @@ while time.time() < deadline:
     if any(marker in state["text"] for marker in markers):
         break
 
-capture_screenshot(shot, full=False, max_dim=1800)
+image = cdp("Page.captureScreenshot", format="jpeg", quality=72, captureBeyondViewport=False)
+with open(shot, "wb") as handle:
+    handle.write(base64.b64decode(image["data"]))
 success = bool(state and any(marker in state["text"] for marker in markers))
 print(
     "INSTAGRAM_WEB_SHARE_ONCE="
@@ -102,6 +106,7 @@ print(
             "success_marker": success,
             "url": (state or {}).get("url"),
             "screenshot": shot,
+            "harness_processes": 1,
         },
         ensure_ascii=True,
     )

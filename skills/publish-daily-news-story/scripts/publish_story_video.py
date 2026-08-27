@@ -8,12 +8,17 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
+
+
+PUBLISH_SCRIPTS = Path(__file__).resolve().parents[2] / "publish-news-pick" / "scripts"
+if str(PUBLISH_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(PUBLISH_SCRIPTS))
+import edge_browser
 
 
 KST = ZoneInfo("Asia/Seoul")
@@ -75,30 +80,12 @@ def harness_call(
     prefix: str,
     timeout: int,
 ) -> tuple[int, dict, str]:
-    harness = shutil.which("browser-harness")
-    if not harness:
-        raise FileNotFoundError("browser-harness CLI was not found")
-    env = dict(os.environ)
-    env.update(
-        {
-            "BH_DOMAIN_SKILLS": "0",
-            "BH_RECORD": "0",
-            "PYTHONUNBUFFERED": "1",
-            "PYTHONUTF8": "1",
-            "PYTHONIOENCODING": "utf-8",
-            **environment,
-        }
-    )
     try:
-        process = subprocess.run(
-            [harness],
-            input=script.read_text(encoding="utf-8"),
+        process = edge_browser.run_script(
+            script,
             capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=env,
             timeout=timeout,
+            extra_env=environment,
         )
     except subprocess.TimeoutExpired as exc:
         return 124, {
@@ -107,7 +94,9 @@ def harness_call(
             "submission_started": None,
             "error": f"Browser Harness timeout after {exc.timeout}s",
         }, ""
-    result = parse_prefixed(process.stdout, prefix)
+    stdout = edge_browser.decode_output(process.stdout)
+    stderr = edge_browser.decode_output(process.stderr)
+    result = parse_prefixed(stdout, prefix)
     if result is None:
         result = {
             "ok": False,
@@ -116,7 +105,7 @@ def harness_call(
             "error": "Browser Harness contract result was missing",
         }
     diagnostic = "\n".join(
-        value for value in (process.stdout, process.stderr) if value
+        value for value in (stdout, stderr) if value
     )[-6000:]
     return process.returncode, result, diagnostic
 

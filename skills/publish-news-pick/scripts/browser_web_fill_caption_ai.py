@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import time
 
 
@@ -21,6 +22,7 @@ targets = [
 ]
 if len(targets) != 1:
     raise RuntimeError("Instagram page target count is " + str(len(targets)))
+cdp("Target.activateTarget", targetId=targets[0]["targetId"])
 attach_target(targets[0]["targetId"])
 
 caption = open(os.environ["IG_CAPTION_FILE"], "r", encoding="utf-8").read()
@@ -60,7 +62,7 @@ click_at_xy(field["x"] + 18, field["y"] + 18)
 press_key("a", modifiers=2)
 press_key("Backspace")
 type_text(caption)
-time.sleep(2)
+time.sleep(random.uniform(0.45, 0.85))
 input_method = "type_text"
 
 # Instagram의 Lexical 편집기는 CDP text insertion에서 줄바꿈만 남기는 경우가 있다.
@@ -90,7 +92,7 @@ if normalize_editor_text(read_caption()) != normalize_editor_text(caption):
     if not paste or not paste.get("ok"):
         raise RuntimeError("caption paste fallback failed: " + str((paste or {}).get("error")))
     input_method = "clipboard_event"
-    time.sleep(3)
+    time.sleep(random.uniform(0.65, 1.15))
 
 switch = js(
     """
@@ -106,7 +108,7 @@ if not switch:
     raise RuntimeError("AI label switch was not found")
 if not switch["checked"]:
     click_at_xy(switch["x"] + switch["w"] / 2, switch["y"] + switch["h"] / 2)
-    time.sleep(2)
+    time.sleep(random.uniform(0.45, 0.95))
 
 state = js(
     """
@@ -126,6 +128,7 @@ state = js(
 state["caption_matches"] = normalize_editor_text(state.get("caption")) == normalize_editor_text(caption)
 state["expected_chars"] = len(caption)
 state["input_method"] = input_method
+state["harness_processes"] = 1
 print("INSTAGRAM_CAPTION_AI=" + json.dumps(state, ensure_ascii=True))
 if not state["caption_matches"] or not state["ai_checked"] or not state["has_share"]:
     raise RuntimeError("caption or AI label pre-submit verification failed")

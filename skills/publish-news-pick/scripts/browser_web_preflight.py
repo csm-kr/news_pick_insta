@@ -1,16 +1,19 @@
-"""Run with: browser-harness < scripts/browser_web_preflight.py"""
+"""Fast read-only Instagram preflight for the fixed Edge Browser Harness connection."""
 
 import json
 import os
 import re
-import time
 
 
 ACCOUNT = os.environ.get("IG_ACCOUNT", "newspick_studio").strip().lstrip("@").lower()
 if not re.fullmatch(r"[a-z0-9._]+", ACCOUNT):
     raise RuntimeError("IG_ACCOUNT 형식이 올바르지 않다")
 PROFILE_URL = f"https://www.instagram.com/{ACCOUNT}/"
-MAX_RENDER_ATTEMPTS = 15
+DUPLICATE_TOKENS = [
+    value.strip()
+    for value in os.environ.get("IG_DUPLICATE_TOKENS", "").split("|")
+    if value.strip()
+]
 
 
 def attach_without_focus(target_id):
@@ -22,56 +25,6 @@ def attach_without_focus(target_id):
     private["_mark_tab"]()
 
 
-def read_state():
-    state = js("""
-(() => {
-  const text = document.body?.innerText || '';
-  const controls = [...document.querySelectorAll('a,button,[role=button]')].map(e => ({
-    text:(e.innerText||'').trim(),
-    aria:e.getAttribute('aria-label')||'',
-    href:e.href||''
-  }));
-  const url = location.href;
-  return {
-    url,
-    account_visible:text.includes(%s),
-    has_edit_profile:text.includes('\uD504\uB85C\uD544 \uD3B8\uC9D1') || controls.some(x=>x.href.includes('/accounts/edit')),
-    has_archive:text.includes('\uBCF4\uAD00\uD568 \uBCF4\uAE30'),
-    has_professional_dashboard:text.includes('\uD504\uB85C\uD398\uC154\uB110 \uB300\uC2DC\uBCF4\uB4DC') || !!document.querySelector('[aria-label="\uD504\uB85C\uD398\uC154\uB110 \uB300\uC2DC\uBCF4\uB4DC"]'),
-    has_create:controls.some(x=>x.text==='\uC0C8\uB85C\uC6B4 \uAC8C\uC2DC\uBB3C' || x.aria==='\uC0C8\uB85C\uC6B4 \uAC8C\uC2DC\uBB3C'),
-    login_wall:url.includes('/accounts/login') || !!document.querySelector('input[type=password]'),
-    challenge:/(challenge|checkpoint)/.test(url),
-    post_count:(text.match(/\uAC8C\uC2DC\uBB3C\\s+([0-9,]+)/)||[])[1]||null
-  };
-})()
-""" % json.dumps(ACCOUNT))
-    ax_nodes = cdp("Accessibility.getFullAXTree").get("nodes", [])
-    ax_names = {str((node.get("name") or {}).get("value") or "") for node in ax_nodes}
-    state["has_create"] = state["has_create"] or "\uC0C8\uB85C\uC6B4 \uAC8C\uC2DC\uBB3C" in ax_names
-    state["has_professional_dashboard"] = (
-        state["has_professional_dashboard"]
-        or "\uD504\uB85C\uD398\uC154\uB110 \uB300\uC2DC\uBCF4\uB4DC" in ax_names
-    )
-    state["owner_controls"] = bool(
-        state["has_edit_profile"] or state["has_archive"] or state["has_professional_dashboard"]
-    )
-    state["ready"] = bool(
-        state["account_visible"]
-        and state["owner_controls"]
-        and state["has_create"]
-        and not state["login_wall"]
-        and not state["challenge"]
-    )
-    return state
-
-targets = [
-    item
-    for item in cdp("Target.getTargets").get("targetInfos", [])
-    if item.get("type") == "page" and "instagram.com" in str(item.get("url") or "")
-]
-if len(targets) != 1:
-    raise RuntimeError(f"writable Instagram page target must be exactly one; found {len(targets)}")
-
 previous = current_tab()["targetId"]
 target_id = cdp("Target.createTarget", url="about:blank", background=True)["targetId"]
 try:
@@ -80,16 +33,72 @@ try:
     wait_for_load()
     if js("document.hasFocus()") is not False:
         raise RuntimeError("preflight target unexpectedly has focus")
-    state = None
-    for attempt in range(1, MAX_RENDER_ATTEMPTS + 1):
-        time.sleep(1)
-        state = read_state()
-        state["render_attempts"] = attempt
-        if state["ready"] or state["login_wall"] or state["challenge"]:
-            break
+    state = js(
+        """
+(async (account, duplicateTokens) => {
+  const read = () => {
+    const text = document.body?.innerText || '';
+    const controls = [...document.querySelectorAll('a[href],button,[role=button]')];
+    const normalized = value => String(value || '').trim().toLocaleLowerCase();
+    const createNames = new Set(['새로운 게시물','만들기','create','new post']);
+    const hasCreate = controls.some(e =>
+      String(e.getAttribute('href') || '').includes('/create/') ||
+      createNames.has(normalized(e.innerText)) ||
+      createNames.has(normalized(e.getAttribute('aria-label')))
+    ) || !!document.querySelector('svg[aria-label="새로운 게시물"],svg[aria-label="만들기"],svg[aria-label="New post"]');
+    const url = location.href;
+    const pathAccount = decodeURIComponent(location.pathname).split('/').filter(Boolean)[0] || '';
+    const ownerControls =
+      text.includes('프로필 편집') || text.includes('보관함 보기') ||
+      text.includes('프로페셔널 대시보드') ||
+      controls.some(e => String(e.getAttribute('href') || '').includes('/accounts/edit'));
+    const loginWall = url.includes('/accounts/login') || !!document.querySelector('input[type=password]');
+    const challenge = /(challenge|checkpoint)/.test(url);
+    const accountVisible = pathAccount.toLocaleLowerCase() === account || text.toLocaleLowerCase().includes(account);
+    const posts = [...document.querySelectorAll('a[href*="/p/"]')]
+      .map(a=>({
+        href:a.href,
+        alts:[...a.querySelectorAll('img')].map(img=>String(img.alt||'').slice(0,500)).filter(Boolean)
+      }))
+      .filter((value,index,all)=>all.findIndex(other=>other.href===value.href)===index)
+      .slice(0,12);
+    const duplicate = posts.find(post=>{
+      const haystack=post.alts.join(' ').toLocaleLowerCase();
+      return duplicateTokens.length>0 && duplicateTokens.every(token=>haystack.includes(token.toLocaleLowerCase()));
+    }) || null;
+    return {
+      url,
+      account_visible: accountVisible,
+      owner_controls: ownerControls,
+      has_create: hasCreate,
+      login_wall: loginWall,
+      challenge,
+      posts_ready: posts.length>0,
+      duplicate_match: !!duplicate,
+      duplicate_href: duplicate?.href||null,
+      recent_posts: posts.slice(0,6),
+      ready: accountVisible && ownerControls && hasCreate && !loginWall && !challenge
+    };
+  };
+  const deadline = performance.now() + 8000;
+  let attempts = 0;
+  let state = read();
+  while ((!state.ready || (duplicateTokens.length>0 && !state.posts_ready)) &&
+         !state.login_wall && !state.challenge && performance.now() < deadline) {
+    attempts += 1;
+    await new Promise(resolve => setTimeout(resolve, 220 + Math.floor(Math.random() * 181)));
+    state = read();
+  }
+  return {...state, render_attempts: attempts + 1, round_trips: 1};
+})(%s,%s)
+"""
+        % (json.dumps(ACCOUNT), json.dumps(DUPLICATE_TOKENS, ensure_ascii=False))
+    )
     print("INSTAGRAM_WEB_PREFLIGHT=" + json.dumps(state, ensure_ascii=True))
     if not state["ready"]:
-        raise RuntimeError(f"configured Chrome profile is not ready for @{ACCOUNT}")
+        raise RuntimeError(f"configured Microsoft Edge profile is not ready for @{ACCOUNT}")
+    if DUPLICATE_TOKENS and state["duplicate_match"]:
+        raise RuntimeError("duplicate post matched every IG_DUPLICATE_TOKENS value")
 finally:
     cdp("Target.closeTarget", targetId=target_id)
     attach_without_focus(previous)

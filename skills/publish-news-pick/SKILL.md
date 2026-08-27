@@ -1,31 +1,34 @@
 ---
 name: publish-news-pick
-description: 승인된 3~4장 PNG를 설정된 Instagram 계정의 사진 캐러셀로 게시한다. 사용자가 고른 전용 Chrome profile의 Instagram 웹 UI를 Browser Harness로 제어하고 private API는 선택적 보조 경로로만 사용한다. 불변 payload 승인, AI 라벨, 중복 방지, 모호한 제출의 needs_review, 공개 프로필 검증이 필요한 뉴스픽 업로드에 사용한다.
+description: 승인된 3~4장 PNG를 설정된 Instagram 계정의 사진 캐러셀로 게시한다. 고정 Microsoft Edge profile의 Instagram 웹 UI를 named Browser Harness 연결로 제어하고 private API는 선택적 보조 경로로만 사용한다. 불변 payload 승인, AI 라벨, 중복 방지, 모호한 제출의 needs_review, 공개 프로필 검증이 필요한 뉴스픽 업로드에 사용한다.
 ---
 
 # Publish News Pick
 
 이미 완성·검증된 PNG와 caption만 게시한다. 뉴스 검색, 카피 수정, 이미지 생성을 하지 않는다. 기본 게시 경로는 사용자가 로그인한 Instagram 웹 UI다. 비공식 private API는 사용자가 그 위험을 별도로 승인했을 때만 보조 경로로 사용한다.
 
-실행 전 [references/login-and-session.md](references/login-and-session.md), [references/web-ui-carousel.md](references/web-ui-carousel.md), [references/publish-state-machine.md](references/publish-state-machine.md)를 읽는다. 사용자가 private API를 별도 승인한 경우에만 [references/private-carousel.md](references/private-carousel.md)를 추가로 읽는다.
+실행 전 [references/edge-browser-contract.md](references/edge-browser-contract.md), [references/login-and-session.md](references/login-and-session.md), [references/web-ui-carousel.md](references/web-ui-carousel.md), [references/publish-state-machine.md](references/publish-state-machine.md)를 읽는다. 사용자가 private API를 별도 승인한 경우에만 [references/private-carousel.md](references/private-carousel.md)를 추가로 읽는다.
 
 ## 필요한 입력과 환경
 
 - 승인된 1024×1024 PNG 3~4장과 고정된 순서
 - 2200자 이하 caption과 게시 시각
-- `IG_ACCOUNT`의 계정에 로그인된 `NEWS_PICK_CHROME_PROFILE` 표시형 Chrome
+- `IG_ACCOUNT`의 계정에 로그인된 `%LOCALAPPDATA%\NewsPick\EdgeProfile` 표시형 Microsoft Edge
 - skill 폴더 밖의 절대 `NEWS_PICK_OUTPUT_ROOT`
-- Browser Harness 기본 연결
+- Browser Harness named 연결 `edge9333`과 `http://127.0.0.1:9333`
+- 첫 카드 중복 확인용 안정적 고유 토큰 2~3개를 `|`로 연결한 `IG_DUPLICATE_TOKENS`
 - exact payload에 대한 사용자 건별 승인 또는 `NEWS_PICK_SCHEDULED_MODE=1` 회차의 정책 standing approval
 
-기본값은 `IG_ACCOUNT=newspick_studio`, `NEWS_PICK_CHROME_PROFILE=Profile 3`이지만 다른 workspace에서는 명시적으로 바꿀 수 있다. 웹 UI 경로에는 password, cookie export, `sessionid`, 앱 비밀번호가 필요 없다. 선택한 Chrome profile의 기존 로그인 세션을 그대로 사용한다.
+계정 기본값은 `IG_ACCOUNT=newspick_studio`다. 브라우저 종류·연결 이름·CDP URL·profile 경로는 바꿀 수 없다. 웹 UI 경로에는 password, cookie export, `sessionid`, 앱 비밀번호가 필요 없고 고정 Edge profile의 기존 로그인 세션을 그대로 사용한다.
 
 ## 불변조건
 
 - 대상 계정은 승인 payload의 계정 및 `IG_ACCOUNT`와 일치해야 한다.
-- 사용자가 로그인한 `NEWS_PICK_CHROME_PROFILE` 전용 Chrome과 loopback CDP만 사용한다.
-- Browser Harness에서 설정된 profile의 Instagram 탭 하나만 제어한다. 다른 탭을 닫거나 탐색하지 않는다.
+- Microsoft Edge, named connection `edge9333`, loopback CDP `http://127.0.0.1:9333`만 사용한다. Chrome/default/다른 endpoint는 fail closed다.
+- Browser Harness에서 설정된 Edge profile의 Instagram 탭 하나만 제어한다. 다른 탭을 닫거나 탐색하지 않는다.
 - 웹 UI 게시 경로에서는 해당 Instagram 탭의 활성화·탐색·파일 선택을 허용한다. 공개 검증은 background target으로 수행한다.
+- 현재 URL은 다른 공개 프로필일 수 있으므로 계정 판정에 쓰지 않는다. 작성기를 열기 직전 왼쪽 rail의 정확한 `https://www.instagram.com/<IG_ACCOUNT>/` 링크와 그 안의 계정명 profile image alt를 확인하고 설정 계정 프로필로 이동한다.
+- 다른 run이 `status=in_progress`, `current_stage=publish-news-pick`이면 열린 draft를 폐기하거나 새 파일을 올리지 않는다. 수동·예약 run은 서로의 디렉터리와 작성기를 공유하지 않는다.
 - password, MFA, CAPTCHA, 동의 화면을 자동 처리하지 않는다.
 - cookie·Authorization·client settings를 출력하거나 저장하지 않는다.
 - 웹 UI에서는 cookie를 읽지 않는다. 선택적 private API에서만 `sessionid`를 Browser Harness 프로세스 메모리에서 `Client.login_by_sessionid()`로 전달하고 즉시 버린다.
@@ -38,25 +41,28 @@ description: 승인된 3~4장 PNG를 설정된 Instagram 계정의 사진 캐러
 
 ## 최초 설정
 
-현재 Browser Harness 기본 연결과 기대 프로필을 등록한다.
+고정 Edge profile을 열고 Edge 전용 게시 설정을 등록한다.
 
 ```powershell
 $env:NEWS_PICK_OUTPUT_ROOT = '<workspace>/output'
 $env:IG_ACCOUNT = 'newspick_studio'
-$env:NEWS_PICK_CHROME_PROFILE = 'Profile 3'
-python scripts/launch_chrome_profile.py --profile $env:NEWS_PICK_CHROME_PROFILE --account $env:IG_ACCOUNT
-python scripts/carousel_queue.py configure --browser-harness-connection default --expected-profile $env:NEWS_PICK_CHROME_PROFILE --dedicated-profile
+$env:NEWS_PICK_BROWSER = 'edge'
+$env:NEWS_PICK_BROWSER_HARNESS_NAME = 'edge9333'
+$env:NEWS_PICK_EDGE_CDP_URL = 'http://127.0.0.1:9333'
+python scripts/launch_edge_profile.py --account $env:IG_ACCOUNT
+python scripts/carousel_queue.py configure --endpoint http://127.0.0.1:9333 --dedicated-profile
 ```
 
-별도 Chrome이 loopback CDP URL을 직접 노출하는 환경에서는 `--endpoint http://127.0.0.1:<port>`를 대신 사용할 수 있다.
+다른 browser·port·connection name으로 바꾸지 않는다. `/json/version`이 Edge product를 반환하지 않으면 설정하지 않는다.
 
-설정된 Chrome profile의 Instagram 로그인을 읽기 전용으로 확인한다.
+설정된 Edge profile의 Instagram 로그인을 targeted DOM 한 번의 bounded probe로 읽기 전용 확인한다.
 
 ```powershell
-browser-harness < scripts/browser_web_preflight.py
+$env:IG_DUPLICATE_TOKENS = '<고유 토큰1>|<고유 토큰2>|<고유 토큰3>'
+python scripts/invoke_edge_browser_harness.py scripts/browser_web_preflight.py
 ```
 
-`ready=true`, target account, 소유자 전용 control, `새로운 게시물`, login/challenge 부재를 모두 확인해야 한다. 실패하면 사용자가 설정된 profile 창에서 로그인·MFA·challenge를 직접 완료할 때까지 멈춘다.
+`ready=true`, target account, 소유자 전용 control, `새로운 게시물`, login/challenge 부재와 `duplicate_match=false`를 한 Harness 호출에서 모두 확인해야 한다. 실패하면 사용자가 설정된 profile 창에서 로그인·MFA·challenge를 직접 완료할 때까지 멈춘다.
 
 비공식 backend 설치를 사용자가 승인한 뒤에만 project-local venv를 만든다.
 
@@ -90,22 +96,27 @@ python scripts/carousel_queue.py approve <job_id> --sha256 <payload_sha256>
 
 ## 제출 — 기본 웹 UI 경로
 
-Browser Harness로 설정된 Chrome profile의 Instagram 작성 화면을 열고 다음 순서를 지킨다.
+Browser Harness로 설정된 Edge profile의 Instagram 작성 화면을 열고 다음 순서를 지킨다. 각 번호를 모델-브라우저 왕복으로 잘게 쪼개지 말고, helper script 하나가 담당하는 bounded phase는 Browser Harness 프로세스 하나에서 끝낸다.
 
 1. `새로운 게시물` → `컴퓨터에서 선택`
 2. `scripts/browser_web_upload_prepare.py`로 `input[type=file][multiple]`에 승인된 PNG 3~4장을 번호 순서로 한 번에 전달
 3. 업로드 뒤 React가 file input을 제거할 수 있으므로 input이 사라진 것만으로 실패 처리하지 않는다. input의 `multiple=true`와 `files.length`만 믿지 말고 `미디어 갤러리 열기`에서 실제 썸네일 3~4개와 순서를 확인. 썸네일이 1개면 즉시 중단
-4. 1:1 crop과 `원본` 필터 확인
+4. 1:1 crop과 첫/마지막 썸네일을 확인한 뒤 `scripts/browser_web_advance_to_caption.py` 한 번으로 두 `다음` 전환과 `원본` 필터 선택을 끝낸다. Browser Harness의 `switch_tab`은 기본적으로 target을 활성화하지 않으므로 변경 helper는 writable target을 명시적으로 활성화해야 한다.
 5. 승인된 caption을 `scripts/browser_web_fill_caption_ai.py`로 입력. Instagram이 `<textarea>` 또는 `[role=textbox][contenteditable=true]` 중 어느 형식으로 렌더링해도 로컬 원문과 글자 수를 대조한다. 일반 입력이 줄바꿈만 남기면 스크립트가 paste event로 한 번 대체한다. 편집기가 끝에 추가하는 개행만 정규화하고 내부 줄바꿈은 그대로 비교하며, `AI로 재구성한 인포그래픽` 계열 문구가 없어야 함
 6. 사실적 AI 재구성 카드에는 `AI 라벨 추가` 활성화
 7. 게시 직전 장수·첫 카드·마지막 카드 출처 블록·caption 글자 수·AI 라벨을 재확인
 8. 예약 모드는 `NEWS_PICK_EDITION_AT`까지 대기한 뒤 `scripts/browser_web_share_once.py`로 `공유하기`를 한 번만 클릭. 이 스크립트는 회차 시각 전 클릭과 회차 시각 30분 뒤의 보충 게시를 차단한다.
-9. Instagram의 성공 표시를 확인하고 공개 프로필에서 shortcode를 수집
+9. Instagram의 성공 표시를 확인하고 `scripts/browser_web_find_latest_post.py`로 공개 프로필에서 shortcode를 수집. Instagram이 반환하는 `/<account>/p/<code>/` 형식은 `https://www.instagram.com/p/<code>/`로 정규화한다.
 
 성공 표시와 shortcode가 확인되면 재업로드하지 않고 제출 기록을 연결한다.
 
 ```powershell
 python scripts/carousel_queue.py record-web-submitted <job_id> --shortcode <code> --card-count <3|4>
+```
+
+```powershell
+$env:IG_EXPECTED_ALT_TOKENS = '<고유 토큰1>|<고유 토큰2>|<고유 토큰3>'
+python scripts/invoke_edge_browser_harness.py scripts/browser_web_find_latest_post.py
 ```
 
 ## 제출 — 선택적 private API 경로
@@ -120,19 +131,15 @@ private API가 shortcode를 반환해도 상태는 `submitted`다. 제출 호출
 
 ## 공개 확인
 
-[references/post-publish-verification.md](references/post-publish-verification.md)에 따라 Browser Harness background target으로 프로필과 게시물을 읽는다. `scripts/browser_web_verify.py`로 caption과 `AI 콘텐츠` 표시를 확인하고, shortcode, 카드 장수와 첫 카드까지 모두 맞을 때만:
+[references/post-publish-verification.md](references/post-publish-verification.md)에 따라 Browser Harness background target으로 프로필과 게시물을 읽는다. caption, 계정, `AI 콘텐츠`, shortcode, 카드 장수와 첫·마지막 카드를 `browser_web_verify_carousel.py`의 Harness 프로세스 하나에서 확인한다.
 
 ```powershell
 $env:IG_POST_URL="https://www.instagram.com/$env:IG_ACCOUNT/p/<code>/"
 $env:IG_CAPTION_PREFIX='<caption 첫 문장>'
 $env:IG_REQUIRE_AI_LABEL='1'
-browser-harness < scripts/browser_web_verify.py
-```
-
-```powershell
 $env:IG_CARD_COUNT='<3|4>'
 $env:IG_SCREENSHOT_DIR='<run-directory>/04-publish/public-carousel'
-browser-harness < scripts/browser_web_verify_carousel.py
+python scripts/invoke_edge_browser_harness.py scripts/browser_web_verify_carousel.py
 
 python scripts/carousel_queue.py verify-published <job_id> --shortcode <code> --card-count <3|4> --caption-match --first-card-match --run-dir <run-directory>
 ```
@@ -167,7 +174,7 @@ python scripts/run_story.py --account newspick_studio --media <story.jpg> --sha2
 $env:IG_ACCOUNT='newspick_studio'
 $env:IG_STORY_URL='https://www.instagram.com/stories/newspick_studio/<story-id>/'
 $env:IG_STORY_VERIFY_SCREENSHOT='<verified.png>'
-cmd /c "browser-harness < scripts\browser_web_verify_story.py"
+python scripts/invoke_edge_browser_harness.py scripts/browser_web_verify_story.py
 ```
 
 제출이 시작된 뒤 오류나 timeout이 발생하면 자동 재시도하지 않는다.

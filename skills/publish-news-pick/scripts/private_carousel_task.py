@@ -76,19 +76,6 @@ def ensure_account(session_id, account):
         raise RuntimeError("Instagram 로그인 또는 보안 확인이 필요하다.")
 
 
-def ensure_expected_profile(session_id):
-    expected = os.environ.get("CAROUSEL_EXPECTED_PROFILE_SUFFIX")
-    if not expected:
-        return
-    cdp("Page.navigate", session_id=session_id, url="chrome://version/")
-    if not wait_until(session_id, "['interactive','complete'].includes(document.readyState)"):
-        raise RuntimeError("Chrome profile 확인 timeout")
-    body = str(evaluate(session_id, "document.body?.innerText||''") or "")
-    normalized = body.replace("\\", "/").casefold()
-    if f"/{expected.casefold()}" not in normalized:
-        raise RuntimeError(f"현재 Browser Harness 연결이 기대 프로필 {expected}가 아니다.")
-
-
 def session_secret(session_id):
     cookies = cdp("Network.getAllCookies", session_id=session_id).get("cookies", [])
     cookie = next((x for x in cookies if x.get("name") == "sessionid" and str(x.get("domain") or "").lstrip(".").endswith("instagram.com")), None)
