@@ -12,8 +12,39 @@ from typing import Any
 
 ROLES_4 = ["hook", "verified_facts", "context_and_positions", "impact_unknowns_sources"]
 ROLES_3 = ["hook", "facts_and_context", "impact_unknowns_sources"]
-FORBIDDEN = ("전 국민 충격", "발칵", "난리", "역대급", "초비상", "끝났다", "대체 무슨 일이", "결국 터졌다", "알고 보니", "숨긴 진실")
+FORBIDDEN = (
+    "전 국민 충격",
+    "발칵",
+    "난리",
+    "역대급",
+    "초비상",
+    "끝났다",
+    "대체 무슨 일이",
+    "결국 터졌다",
+    "알고 보니",
+    "숨긴 진실",
+    "국민만 바보",
+    "세금 퍼준다",
+    "외국인 특혜",
+)
 CARD_INDEX_CAPTION = re.compile(r"(?m)^\s*[1-4]\s*장\s*[|:]", re.UNICODE)
+HOOK_TYPES = {
+    "immediate_consequence",
+    "reversal_contrast",
+    "loss_gap",
+    "decision_deadline",
+    "answerable_question",
+}
+SCORE_RANGES = {
+    "specificity": (0, 2),
+    "life_impact": (0, 2),
+    "immediacy": (0, 2),
+    "tension": (0, 2),
+    "curiosity_gap": (0, 2),
+    "visual_grip": (0, 2),
+    "continuation_value": (0, 2),
+    "exaggeration_risk": (-2, 0),
+}
 
 
 def validate(story: dict[str, Any], board: dict[str, Any]) -> None:
@@ -81,11 +112,34 @@ def validate(story: dict[str, Any], board: dict[str, Any]) -> None:
     candidates = board.get("hook_candidates", [])
     if len(candidates) != 5:
         raise ValueError("hook 후보는 정확히 5개여야 한다.")
+    candidate_types = [str(candidate.get("hook_type") or "") for candidate in candidates]
+    if set(candidate_types) != HOOK_TYPES or len(set(candidate_types)) != 5:
+        raise ValueError("hook 후보는 다섯 가지 hook_type을 하나씩 사용해야 한다.")
     for candidate in candidates:
         score = candidate.get("score", {})
-        total = sum(int(score.get(k, 0)) for k in ("specificity", "life_impact", "immediacy", "exaggeration_risk"))
+        if set(score) != set(SCORE_RANGES):
+            raise ValueError("hook candidate score 항목이 고강도 사실형 기준과 맞지 않는다.")
+        values = {}
+        for key, (minimum, maximum) in SCORE_RANGES.items():
+            value = int(score[key])
+            if not minimum <= value <= maximum:
+                raise ValueError(f"hook candidate {key} 점수 범위가 맞지 않는다.")
+            values[key] = value
+        total = sum(values.values())
         if candidate.get("total") != total:
             raise ValueError("hook candidate total 계산이 맞지 않는다.")
+    selected = [candidate for candidate in candidates if candidate.get("headline") == headline]
+    if len(selected) != 1:
+        raise ValueError("선택한 hook headline은 후보 5개 중 하나와 정확히 같아야 한다.")
+    best_total = max(int(candidate["total"]) for candidate in candidates)
+    if int(selected[0]["total"]) != best_total:
+        raise ValueError("선택한 hook은 최고점 후보가 아니다.")
+    tied = [candidate for candidate in candidates if int(candidate["total"]) == best_total]
+    shortest = min(len(str(candidate.get("headline") or "").replace(" ", "")) for candidate in tied)
+    if len(headline.replace(" ", "")) != shortest:
+        raise ValueError("최고점 동점에서는 가장 짧은 hook을 선택해야 한다.")
+    if best_total < 11:
+        raise ValueError("선택 hook은 고강도 사실형 기준 11/14 이상이어야 한다.")
     caption = str(board.get("caption") or "").strip()
     if not caption:
         raise ValueError("caption이 비었다.")
@@ -98,7 +152,7 @@ def validate(story: dict[str, Any], board: dict[str, Any]) -> None:
     if not narrative or "\n\n" in narrative:
         raise ValueError("caption의 뉴스 본문은 기준시각 앞에서 하나의 문단이어야 한다.")
     qa = board.get("qa", {})
-    if qa.get("hard_fail_passed") is not True or int(qa.get("editorial_score", 0)) < 13:
+    if qa.get("hard_fail_passed") is not True or int(qa.get("editorial_score", 0)) < 16:
         raise ValueError("기획 QA가 통과되지 않았다.")
 
 

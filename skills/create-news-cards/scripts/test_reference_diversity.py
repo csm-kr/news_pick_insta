@@ -47,6 +47,8 @@ class ReferenceDiversityTests(unittest.TestCase):
             self.assertEqual(plan["candidate_count"], 12)
             first_job = Path(plan["jobs"][0]["job"]).read_text(encoding="utf-8")
             self.assertIn("SET DIVERSITY", first_job)
+            self.assertIn("verified consequence, loss, gap, reversal, or deadline", first_job)
+            self.assertIn("Never postpone a crucial limitation", first_job)
 
     def test_duplicate_primary_reference_is_blocked(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,6 +1,6 @@
 ---
 name: plan-news-pick
-description: 검증된 단일 뉴스 JSON을 중립적이고 강한 첫 카드 후킹, 3~4장 Instagram 카드뉴스 스토리보드, caption과 근거 연결로 바꾼다. 뉴스 카드 기획, 헤드라인 후보 작성, 정치·부동산 중립 문안, upload-news-pick 2단계를 요청할 때 사용한다.
+description: 검증된 단일 뉴스 JSON을 근거를 훼손하지 않는 고강도 사실형 첫 카드 후킹, 3~4장 Instagram 카드뉴스 스토리보드, caption과 근거 연결로 바꾼다. 뉴스 카드 기획, 강한 헤드라인 후보 작성, 정치·부동산 균형 문안, upload-news-pick 2단계를 요청할 때 사용한다.
 ---
 
 # Plan News Pick
@@ -23,27 +23,38 @@ description: 검증된 단일 뉴스 JSON을 중립적이고 강한 첫 카드 �
 
 장별 역할과 관찰 사례는 [references/card-news-formulas.md](references/card-news-formulas.md)를 읽는다.
 
-## 3. 후킹 후보 5개를 만든다
+## 3. 고강도 사실형 후킹 후보 5개를 만든다
 
-후킹은 감정어가 아니라 숫자, 결정, 시점, 영향 대상, 기존 상태와의 차이에서 만든다. [references/hook-patterns.md](references/hook-patterns.md)의 허용 공식을 사용하고 금지 공식을 피한다. 반드시 [references/popular-cardnews-benchmark.md](references/popular-cardnews-benchmark.md)를 읽고, 지표명보다 사람에게 생긴 결과를 먼저 쓴다.
+기본 톤은 `고강도 사실형`이다. 제목은 감정어 대신 결과·손실·격차·반전·마감시점에서 긴장을 만들고, 부제는 그 결과가 성립하는 조건·주체·범위를 바로 밝혀 오해를 막는다. 제목만 밋밋하게 사실을 요약하거나 기관 발표명을 옮기지 않는다. [references/hook-patterns.md](references/hook-patterns.md)의 허용 공식과 제목-부제 계약을 사용하고 금지 공식을 피한다. 반드시 [references/popular-cardnews-benchmark.md](references/popular-cardnews-benchmark.md)를 읽고, 지표명보다 사람에게 생긴 결과를 먼저 쓴다.
+
+후보 5개는 각각 다음 `hook_type`을 하나씩 사용한다.
+
+- `immediate_consequence`: 지금 누구에게 무엇이 생기는가
+- `reversal_contrast`: 기존 상식·상태와 확인된 결과가 어떻게 달라졌는가
+- `loss_gap`: 누가 더 내고, 덜 받고, 기다리거나 제외되는가
+- `decision_deadline`: 어떤 결정·시점이 결과를 가르는가
+- `answerable_question`: 다음 장에서 바로 답할 구체 질문은 무엇인가
 
 각 후보를 다음으로 채점한다.
 
 - 사실 구체성 0~2
 - 생활 영향 0~2
 - 즉시 이해 0~2
-- 과장 위험 0~-2
-- 인간 영향 0~2
-- 사진-카피 결속 0~2
+- 긴장도 0~2
+- 호기심 간극 0~2
+- 시각 장악력 0~2
 - 다음 장의 새 정보 약속 0~2
+- 과장 위험 0~-2
 
-최고점이 같으면 더 짧은 제목을 선택한다. 제목의 모든 명사·동사·숫자·최상급을 evidence ID에 연결한다.
+`score` 키는 `specificity`, `life_impact`, `immediacy`, `tension`, `curiosity_gap`, `visual_grip`, `continuation_value`, `exaggeration_risk`를 정확히 사용한다.
+
+14점 만점에서 11점 이상인 최고점 후보만 선택한다. 최고점이 같으면 더 짧은 제목을 선택한다. 제목의 모든 명사·동사·숫자·최상급을 evidence ID에 연결한다. 11점 후보가 없으면 같은 사실로 후보를 다시 쓰고, 그래도 없으면 해당 사건을 약한 카드로 억지 제작하지 않는다.
 
 ## 4. 스토리보드를 쓴다
 
 4장 기본:
 
-1. `hook`: 사람에게 생긴 결과 + 가장 강한 비교 숫자. `visual_role`은 현장·인물·사건 사진 중심 훅
+1. `hook`: 사람에게 생긴 결과 + 가장 강한 비교 숫자·격차·반전 중 하나. 제목은 결과를 세게 말하고 부제는 조건·원인을 정밀하게 제한한다. `visual_role`은 현장·인물·사건 사진 중심 훅
 2. `verified_facts`: 첫 장에 없던 기준선·추세·확정 사실. `visual_role`은 수치 차트·전후 비교
 3. `context_and_positions`: 원인·쟁점·주요 입장과 반론. `visual_role`은 분할 화면·입장 비교·증거 주석
 4. `impact_unknowns_sources`: 독자가 비교할 것·적용 조건·미정 + 전체 출처 블록. `visual_role`은 체크리스트·영향표·출처 요약
@@ -73,7 +84,7 @@ caption의 본문은 장별 목차가 아니라 뉴스 기사처럼 이어지는
 
 ## 6. QA하고 출력한다
 
-[references/copy-qa.md](references/copy-qa.md)의 hard fail을 모두 통과하고 편집 품질 13/16 이상이어야 한다.
+[references/copy-qa.md](references/copy-qa.md)의 hard fail을 모두 통과하고 편집 품질 16/20 이상이어야 한다.
 
 ```powershell
 python scripts/validate_plan.py --story <selected-story.json> --storyboard <storyboard.json>

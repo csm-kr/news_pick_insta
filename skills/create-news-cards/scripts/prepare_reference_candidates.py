@@ -14,7 +14,7 @@ from pathlib import Path
 DIRECTIONS = [
     {
         "name": "human-impact-photo-news",
-        "style": "high-impact Korean photo-news carousel, full-bleed factual editorial photography, strong bottom gradient, one concrete human consequence and comparison number in a bold two-to-three-line headline",
+        "style": "high-tension factual Korean photo-news carousel, full-bleed editorial photography, decisive bottom gradient, one verified human consequence plus the sharpest loss, gap, reversal, deadline, or comparison number in a bold two-to-three-line headline",
         "palette": "natural photo colors, charcoal gradient, crisp white, one restrained signal red",
     },
     {
@@ -100,7 +100,7 @@ def card_prompt(direction: dict, card: dict, card_count: int, target: str, visua
     chart_spec = card.get("chart_spec") or "No chart; create a photo-led headline cover."
     width, height = (int(value) for value in target.split("x"))
     canvas = f"Square {width}x{height}" if width == height else f"Portrait {width}x{height}"
-    photo_share = "25-40%" if width == height else "35-55%"
+    photo_share = "45-60% on card 1 and 25-40% on explanatory cards" if width == height else "50-65% on card 1 and 35-55% on explanatory cards"
     return f"""
 Create a FINISHED Instagram news infographic card, card {card['index']} of a coherent {card_count}-card carousel.
 
@@ -123,9 +123,11 @@ SET DIVERSITY — HARD REQUIREMENT
 LAYOUT AND READABILITY
 - {canvas}, mobile-first, generous safe margins, exact vertical alignment and strong negative space.
 - One dominant message per card. The main statistic or headline must be readable at Instagram feed size.
-- Card 1 must state a concrete human consequence plus the strongest comparison number; never stop at an indicator name and a percentage.
+- Card 1 must lead with a verified consequence, loss, gap, reversal, or deadline plus the strongest comparison number. Put this tension in the first visual reading beat; never stop at an institution name, policy name, indicator name, or percentage.
+- On card 1, make the headline forceful while the deck immediately states the affected group, eligibility condition, procedure, or basis time that keeps it accurate. Never postpone a crucial limitation to a later card.
 - Cards 2-4 must each add at least one new fact that did not appear on the previous card.
 - Use real editorial photography as an integrated visual anchor occupying roughly {photo_share} of the composition, with chart or text panels layered in a controlled way.
+- Build one dominant sightline linking the headline, one key number, and the factual hero image. Do not dilute the cover with many small panels or decorative widgets.
 - Korean typography must be crisp, correctly spaced, and not cropped. Keep each headline to at most two lines.
 - Render all text, numbers, units, chart marks, labels, and source footer directly in the generated final image.
 
@@ -144,6 +146,7 @@ FORBIDDEN
 - No Korean spelling errors or malformed glyphs.
 - No logo, wording, typeface, publisher mark, or color identity copied from the style reference.
 - No English placeholder text, lorem ipsum, random microtext, fake news logo, fake bank logo, fake UI, extra watermark, chart distortion, decorative 3D icon set, abstract staircase, or unrelated house illustration.
+- No siren, flame, breaking-glass effect, warning triangle, panic-red wash, or outrage cue unless the verified event itself is a documented emergency or hazard.
 - Do not include 한국경제, 한경, 한경BUSINESS, or their logos anywhere.
 """.strip()
 

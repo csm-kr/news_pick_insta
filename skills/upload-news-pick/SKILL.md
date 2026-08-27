@@ -1,6 +1,6 @@
 ---
 name: upload-news-pick
-description: 한국 종합 이슈 하나를 탐색·검증하고, 중립적 강후킹의 3~4장 Instagram 카드뉴스로 기획·제작한 뒤 설정된 계정에 캐러셀로 안전하게 게시하는 portable 전체 오케스트레이터. 오늘의 뉴스픽 제작, 카드뉴스 자동화, 네 단계 일괄 실행, 새 workspace 설치, 중단된 run 재개, 실게시 전 검증, 07·12·17시 KST 예약 무인 게시를 요청할 때 사용한다.
+description: 한국 종합 이슈 하나를 탐색·검증하고, 근거를 훼손하지 않는 고강도 사실형 후킹의 3~4장 Instagram 카드뉴스로 기획·제작한 뒤 설정된 계정에 캐러셀로 안전하게 게시하는 portable 전체 오케스트레이터. 오늘의 뉴스픽 제작, 자극적인 사실형 카드뉴스 자동화, 네 단계 일괄 실행, 중단된 run 재개, 실게시 전 검증, 07·12·17시 KST 예약 무인 게시를 요청할 때 사용한다.
 ---
 
 # Upload News Pick
@@ -61,7 +61,7 @@ python scripts/orchestrate.py complete-stage --run <run-directory> --stage searc
 02-plan/storyboard.json
 ```
 
-3~4장, hook의 근거 연결, hard-fail 통과, 편집 점수 13/16 이상을 확인한 뒤 `plan-news-pick` 단계를 완료 처리한다.
+3~4장, hook의 근거 연결, 선택 hook 점수 11/14 이상, hard-fail 통과, 편집 점수 16/20 이상을 확인한 뒤 `plan-news-pick` 단계를 완료 처리한다.
 
 1~3장에는 보이는 출처 footer를 반복하지 않는다. 마지막 카드의 `source_block`에만 사용한 모든 근거의 출처명·날짜·도메인을 모은다. 전체 URL과 locator는 storyboard, caption과 manifest에도 보존한다.
 

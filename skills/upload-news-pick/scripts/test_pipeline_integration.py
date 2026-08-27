@@ -14,6 +14,24 @@ SPEC.loader.exec_module(MOD)
 
 
 class PipelineIntegrationTests(unittest.TestCase):
+    def test_plan_stage_rejects_old_thirteen_point_threshold(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp)
+            folder = run / "02-plan"
+            folder.mkdir(parents=True)
+            board = {
+                "card_count": 3,
+                "cards": [
+                    {"index": 1, "evidence_ids": ["c1"]},
+                    {"index": 2, "evidence_ids": ["c1"]},
+                    {"index": 3, "evidence_ids": ["c1"]},
+                ],
+                "qa": {"hard_fail_passed": True, "editorial_score": 15},
+            }
+            (folder / "storyboard.json").write_text(json.dumps(board), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "기획 QA"):
+                MOD.validate_stage(run, "plan-news-pick")
+
     def test_all_four_skills_contracts_connect(self):
         with tempfile.TemporaryDirectory() as tmp:
             run = Path(MOD.init_run(Path(tmp), "2026-08-17T17:00:00+09:00", "newspick_studio")["run"])
@@ -44,7 +62,7 @@ class PipelineIntegrationTests(unittest.TestCase):
                     {"index": 2, "role": "facts_and_context", "copy": "b", "evidence_ids": ["c1"]},
                     {"index": 3, "role": "impact_unknowns_sources", "copy": "c", "evidence_ids": ["c1"]},
                 ],
-                "qa": {"hard_fail_passed": True, "editorial_score": 13},
+                "qa": {"hard_fail_passed": True, "editorial_score": 16},
             }
             (run / "02-plan" / "storyboard.json").write_text(json.dumps(board), encoding="utf-8")
             (run / "02-plan" / "editorial-plan.json").write_text("{}", encoding="utf-8")

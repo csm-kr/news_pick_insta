@@ -82,7 +82,7 @@ def validate_stage(run: Path, stage: str) -> None:
         count = board.get("card_count")
         if count not in (3, 4) or len(board.get("cards", [])) != count:
             raise ValueError("storyboard는 정확히 3장 또는 4장이어야 한다.")
-        if not board.get("qa", {}).get("hard_fail_passed") or board.get("qa", {}).get("editorial_score", 0) < 13:
+        if not board.get("qa", {}).get("hard_fail_passed") or board.get("qa", {}).get("editorial_score", 0) < 16:
             raise ValueError("기획 QA가 통과되지 않았다.")
         for card in board["cards"]:
             if not card.get("evidence_ids"):
