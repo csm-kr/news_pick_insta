@@ -38,7 +38,7 @@ try:
         url:location.href,
         account_visible:text.includes(%s),
         caption_match:text.includes(%s),
-        ai_label:text.includes('AI \uCF58\uD150\uCE20'),
+        ai_label:text.includes('AI \uCF58\uD150\uCE20') || text.includes('AI \uD06C\uB9AC\uC5D0\uC774\uD130') || text.includes('Made with AI'),
         login_wall:location.href.includes('/accounts/login') || !!document.querySelector('input[type=password]'),
         challenge:/(challenge|checkpoint)/.test(location.href)
       };

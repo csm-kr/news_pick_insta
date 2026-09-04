@@ -151,8 +151,8 @@ def payload_hash(job: dict[str, Any]) -> str:
 
 
 def validate_job(job: dict[str, Any], path: Path) -> None:
-    if job.get("backend") != "private_carousel" or len(job.get("media", [])) not in (3, 4):
-        raise ValueError("private_carousel은 PNG 3~4장이어야 한다.")
+    if job.get("backend") != "private_carousel" or len(job.get("media", [])) != 5:
+        raise ValueError("private_carousel은 PNG 5장이어야 한다.")
     root = path.parent.resolve()
     for expected, item in enumerate(job["media"], 1):
         media = (root / item["path"]).resolve()
@@ -166,8 +166,8 @@ def validate_job(job: dict[str, Any], path: Path) -> None:
 
 
 def prepare(account: str, scheduled_at: str, timezone_name: str | None, media: list[Path], caption: str, jobs_root: Path = JOBS_ROOT) -> dict[str, Any]:
-    if len(media) not in (3, 4):
-        raise ValueError("PNG 3~4장이 필요하다.")
+    if len(media) != 5:
+        raise ValueError("PNG 5장이 필요하다.")
     if len(caption) > MAX_CAPTION:
         raise ValueError("caption은 2200자를 넘을 수 없다.")
     forbidden = next((fragment for fragment in FORBIDDEN_CAPTION_FRAGMENTS if fragment in caption), None)
@@ -265,7 +265,7 @@ def run_publish_result_path(run_dir: Path, account: str) -> Path:
     return run / "04-publish" / "result.json"
 
 
-def verify_published(identifier: str, shortcode: str, card_count: int, caption_match: bool, first_card_match: bool, jobs_root: Path = JOBS_ROOT, run_dir: Path | None = None) -> dict[str, Any]:
+def verify_published(identifier: str, shortcode: str, card_count: int, caption_match: bool, first_card_match: bool, jobs_root: Path = JOBS_ROOT, run_dir: Path | None = None, portrait_4x5: bool = False) -> dict[str, Any]:
     path, job = load_job(identifier, jobs_root)
     if job["status"] not in {"submitted", "needs_review"}:
         raise ValueError(f"공개 확인할 수 없는 상태: {job['status']}")
@@ -273,9 +273,9 @@ def verify_published(identifier: str, shortcode: str, card_count: int, caption_m
     submitted_code = str(((job.get("submission_result") or job.get("private_result") or {}).get("shortcode")) or "")
     if submitted_code and shortcode != submitted_code:
         raise ValueError("공개 shortcode가 private 응답과 다르다.")
-    if card_count != len(job["media"]) or not caption_match or not first_card_match:
+    if card_count != len(job["media"]) or not caption_match or not first_card_match or not portrait_4x5:
         raise ValueError("공개 게시물이 준비 payload와 일치하지 않는다.")
-    result = {"schema_version": "1.0", "status": "published", "public_verified": True, "verified_at": now(), "shortcode": shortcode, "url": f"https://www.instagram.com/p/{shortcode}/", "card_count": card_count, "caption_match": True, "first_card_match": True, "payload_sha256": job["payload_sha256"]}
+    result = {"schema_version": "1.0", "status": "published", "public_verified": True, "verified_at": now(), "shortcode": shortcode, "url": f"https://www.instagram.com/p/{shortcode}/", "card_count": card_count, "caption_match": True, "first_card_match": True, "portrait_4x5": True, "payload_sha256": job["payload_sha256"]}
     job["status"] = "published"
     job["public_result"] = result
     atomic_json(path, job)
@@ -362,7 +362,7 @@ def main() -> int:
     app = commands.add_parser("approve"); app.add_argument("job_id"); app.add_argument("--sha256", required=True)
     stat = commands.add_parser("status"); stat.add_argument("job_id", nargs="?")
     commands.add_parser("run-due")
-    ver = commands.add_parser("verify-published"); ver.add_argument("job_id"); ver.add_argument("--shortcode", required=True); ver.add_argument("--card-count", type=int, required=True); ver.add_argument("--caption-match", action="store_true"); ver.add_argument("--first-card-match", action="store_true"); ver.add_argument("--run-dir", type=Path)
+    ver = commands.add_parser("verify-published"); ver.add_argument("job_id"); ver.add_argument("--shortcode", required=True); ver.add_argument("--card-count", type=int, required=True); ver.add_argument("--caption-match", action="store_true"); ver.add_argument("--first-card-match", action="store_true"); ver.add_argument("--portrait-4x5", action="store_true"); ver.add_argument("--run-dir", type=Path)
     web = commands.add_parser("record-web-submitted"); web.add_argument("job_id"); web.add_argument("--shortcode", required=True); web.add_argument("--card-count", type=int, required=True)
     args = parser.parse_args()
     try:
@@ -372,7 +372,7 @@ def main() -> int:
         elif args.command == "approve": result = summary(approve(args.job_id, args.sha256))
         elif args.command == "status": result = summary(load_job(args.job_id)[1]) if args.job_id else [summary(read_json(x)) for x in sorted(JOBS_ROOT.glob("*/job.json"))]
         elif args.command == "record-web-submitted": result = summary(record_web_submitted(args.job_id, args.shortcode, args.card_count))
-        elif args.command == "verify-published": result = verify_published(args.job_id, args.shortcode, args.card_count, args.caption_match, args.first_card_match, run_dir=args.run_dir)
+        elif args.command == "verify-published": result = verify_published(args.job_id, args.shortcode, args.card_count, args.caption_match, args.first_card_match, run_dir=args.run_dir, portrait_4x5=args.portrait_4x5)
         else:
             with lock(): result = [summary(execute(path)) for path in due()]
     except Exception as exc:

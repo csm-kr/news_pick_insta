@@ -47,7 +47,7 @@ class QueueTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "skills"):
                 MOD.default_output_root()
 
-    def files(self, root, count=3):
+    def files(self, root, count=5):
         result = []
         for i in range(count):
             path = root / f"{i}.png"
@@ -66,8 +66,9 @@ class QueueTests(unittest.TestCase):
             stored["status"] = "submitted"
             stored["private_result"] = {"shortcode": "abc"}
             MOD.atomic_json(path, stored)
-            result = MOD.verify_published(job["job_id"], "abc", 3, True, True, jobs)
+            result = MOD.verify_published(job["job_id"], "abc", 5, True, True, jobs, portrait_4x5=True)
             self.assertTrue(result["public_verified"])
+            self.assertTrue(result["portrait_4x5"])
 
     def test_hash_detects_order_change(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -83,12 +84,12 @@ class QueueTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             jobs = root / "jobs"
-            job = MOD.prepare("newspick_studio", "2026-08-17T17:00:00+09:00", "Asia/Seoul", self.files(root, 4), "caption", jobs)
+            job = MOD.prepare("newspick_studio", "2026-08-17T17:00:00+09:00", "Asia/Seoul", self.files(root, 5), "caption", jobs)
             MOD.approve(job["job_id"], job["payload_sha256"], jobs)
-            recorded = MOD.record_web_submitted(job["job_id"], "DcKLQMmk5lp", 4, jobs)
+            recorded = MOD.record_web_submitted(job["job_id"], "DcKLQMmk5lp", 5, jobs)
             self.assertEqual(recorded["status"], "submitted")
             self.assertEqual(recorded["submission_result"]["backend"], "browser_harness_web_ui")
-            result = MOD.verify_published(job["job_id"], "DcKLQMmk5lp", 4, True, True, jobs)
+            result = MOD.verify_published(job["job_id"], "DcKLQMmk5lp", 5, True, True, jobs, portrait_4x5=True)
             self.assertTrue(result["public_verified"])
 
     def test_verify_writes_orchestrator_run_result(self):
@@ -98,10 +99,10 @@ class QueueTests(unittest.TestCase):
             run = root / "runs" / "run-1"
             run.mkdir(parents=True)
             (run / "run.json").write_text('{"account":"newspick_studio"}', encoding="utf-8")
-            job = MOD.prepare("newspick_studio", "2026-08-17T17:00:00+09:00", "Asia/Seoul", self.files(root, 4), "caption", jobs)
+            job = MOD.prepare("newspick_studio", "2026-08-17T17:00:00+09:00", "Asia/Seoul", self.files(root, 5), "caption", jobs)
             MOD.approve(job["job_id"], job["payload_sha256"], jobs)
-            MOD.record_web_submitted(job["job_id"], "DcKLQMmk5lp", 4, jobs)
-            result = MOD.verify_published(job["job_id"], "DcKLQMmk5lp", 4, True, True, jobs, run)
+            MOD.record_web_submitted(job["job_id"], "DcKLQMmk5lp", 5, jobs)
+            result = MOD.verify_published(job["job_id"], "DcKLQMmk5lp", 5, True, True, jobs, run, portrait_4x5=True)
             stored = json.loads((run / "04-publish" / "result.json").read_text(encoding="utf-8"))
             self.assertEqual(stored, result)
             self.assertEqual(MOD.load_job(job["job_id"], jobs)[1]["public_result"], result)
@@ -112,18 +113,28 @@ class QueueTests(unittest.TestCase):
             jobs = root / "publish-news-pick" / "jobs"
             job = MOD.prepare("newspick_studio", "2026-08-17T17:00:00+09:00", "Asia/Seoul", self.files(root), "caption", jobs)
             MOD.approve(job["job_id"], job["payload_sha256"], jobs)
-            MOD.record_web_submitted(job["job_id"], "DcKLQMmk5lp", 3, jobs)
+            MOD.record_web_submitted(job["job_id"], "DcKLQMmk5lp", 5, jobs)
             with self.assertRaisesRegex(ValueError, "NEWS_PICK_OUTPUT_ROOT/runs"):
-                MOD.verify_published(job["job_id"], "DcKLQMmk5lp", 3, True, True, jobs, Path(other))
+                MOD.verify_published(job["job_id"], "DcKLQMmk5lp", 5, True, True, jobs, Path(other))
+
+    def test_verify_requires_public_portrait_4x5(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            jobs = root / "jobs"
+            job = MOD.prepare("newspick_studio", "2026-08-17T17:00:00+09:00", "Asia/Seoul", self.files(root, 5), "caption", jobs)
+            MOD.approve(job["job_id"], job["payload_sha256"], jobs)
+            MOD.record_web_submitted(job["job_id"], "DcKLQMmk5lp", 5, jobs)
+            with self.assertRaisesRegex(ValueError, "준비 payload"):
+                MOD.verify_published(job["job_id"], "DcKLQMmk5lp", 5, True, True, jobs)
 
     def test_record_web_submission_requires_matching_card_count(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             jobs = root / "jobs"
-            job = MOD.prepare("newspick_studio", "2026-08-17T17:00:00+09:00", "Asia/Seoul", self.files(root, 4), "caption", jobs)
+            job = MOD.prepare("newspick_studio", "2026-08-17T17:00:00+09:00", "Asia/Seoul", self.files(root, 5), "caption", jobs)
             MOD.approve(job["job_id"], job["payload_sha256"], jobs)
             with self.assertRaises(ValueError):
-                MOD.record_web_submitted(job["job_id"], "DcKLQMmk5lp", 3, jobs)
+                MOD.record_web_submitted(job["job_id"], "DcKLQMmk5lp", 4, jobs)
 
     def test_prepare_rejects_ai_reconstruction_caption_phrase(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -133,7 +144,7 @@ class QueueTests(unittest.TestCase):
                     "newspick_studio",
                     "2026-08-17T17:00:00+09:00",
                     "Asia/Seoul",
-                    self.files(root, 4),
+                    self.files(root, 5),
                     "기사·공식 이미지를 참고해 AI로 재구성한 인포그래픽입니다.",
                     root / "jobs",
                 )

@@ -106,8 +106,8 @@ def main():
         job = json.loads(job_path.read_text(encoding="utf-8"))
         if job.get("backend") != "private_carousel" or job.get("status") != "submitting" or job.get("account") != account:
             raise RuntimeError("worker job 계약이 올바르지 않다.")
-        if len(job.get("media", [])) not in (3, 4):
-            raise RuntimeError("carousel은 PNG 3~4장이어야 한다.")
+        if len(job.get("media", [])) != 5:
+            raise RuntimeError("carousel은 PNG 5장이어야 한다.")
         for item in job["media"]:
             path = (job_path.parent / item["path"]).resolve()
             path.relative_to(job_path.parent.resolve())

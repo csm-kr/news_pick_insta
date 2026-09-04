@@ -1,6 +1,6 @@
 ---
 name: publish-news-pick
-description: 승인된 3~4장 PNG를 설정된 Instagram 계정의 사진 캐러셀로 게시한다. 고정 Microsoft Edge profile의 Instagram 웹 UI를 named Browser Harness 연결로 제어하고 private API는 선택적 보조 경로로만 사용한다. 불변 payload 승인, AI 라벨, 중복 방지, 모호한 제출의 needs_review, 공개 프로필 검증이 필요한 뉴스픽 업로드에 사용한다.
+description: 승인된 1080×1350 PNG 다섯 장을 설정된 Instagram 계정의 사진 캐러셀로 게시한다. 고정 Microsoft Edge profile의 Instagram 웹 UI를 named Browser Harness 연결로 제어하고 private API는 선택적 보조 경로로만 사용한다. 불변 payload 승인, AI 라벨, 중복 방지, 모호한 제출의 needs_review, 공개 프로필 검증이 필요한 뉴스픽 업로드에 사용한다.
 ---
 
 # Publish News Pick
@@ -11,7 +11,7 @@ description: 승인된 3~4장 PNG를 설정된 Instagram 계정의 사진 캐러
 
 ## 필요한 입력과 환경
 
-- 승인된 1024×1024 PNG 3~4장과 고정된 순서
+- 승인된 1080×1350 PNG 5장과 고정된 순서
 - 2200자 이하 caption과 게시 시각
 - `IG_ACCOUNT`의 계정에 로그인된 `%LOCALAPPDATA%\NewsPick\EdgeProfile` 표시형 Microsoft Edge
 - skill 폴더 밖의 절대 `NEWS_PICK_OUTPUT_ROOT`
@@ -26,16 +26,16 @@ description: 승인된 3~4장 PNG를 설정된 Instagram 계정의 사진 캐러
 - 대상 계정은 승인 payload의 계정 및 `IG_ACCOUNT`와 일치해야 한다.
 - Microsoft Edge, named connection `edge9333`, loopback CDP `http://127.0.0.1:9333`만 사용한다. Chrome/default/다른 endpoint는 fail closed다.
 - Browser Harness에서 설정된 Edge profile의 Instagram 탭 하나만 제어한다. 다른 탭을 닫거나 탐색하지 않는다.
-- 웹 UI 게시 경로에서는 해당 Instagram 탭의 활성화·탐색·파일 선택을 허용한다. 공개 검증은 background target으로 수행한다.
+- 웹 UI 게시 경로에서는 해당 Instagram 탭의 활성화·탐색·파일 선택을 허용한다. 공유 성공 직후 같은 승인 거래의 공개 검증만 동일한 전용 Instagram target 하나에서 읽기 전용으로 수행하며 다른 탭을 만들거나 닫지 않는다. 독립 조회는 background target 원칙을 유지한다.
 - 현재 URL은 다른 공개 프로필일 수 있으므로 계정 판정에 쓰지 않는다. 작성기를 열기 직전 왼쪽 rail의 정확한 `https://www.instagram.com/<IG_ACCOUNT>/` 링크와 그 안의 계정명 profile image alt를 확인하고 설정 계정 프로필로 이동한다.
 - 다른 run이 `status=in_progress`, `current_stage=publish-news-pick`이면 열린 draft를 폐기하거나 새 파일을 올리지 않는다. 수동·예약 run은 서로의 디렉터리와 작성기를 공유하지 않는다.
 - password, MFA, CAPTCHA, 동의 화면을 자동 처리하지 않는다.
 - cookie·Authorization·client settings를 출력하거나 저장하지 않는다.
 - 웹 UI에서는 cookie를 읽지 않는다. 선택적 private API에서만 `sessionid`를 Browser Harness 프로세스 메모리에서 `Client.login_by_sessionid()`로 전달하고 즉시 버린다.
-- PNG 3~4장 순서, caption, 계정, 시각, 파일 hash를 승인 payload로 잠근다.
-- 1~3장에는 반복 출처 footer가 없어야 하고, 마지막 카드에만 사용한 모든 출처의 출처명·날짜·도메인이 읽을 수 있게 들어 있어야 한다.
+- PNG 5장 순서, caption, 계정, 시각, 파일 hash를 승인 payload로 잠근다.
+- 1~4장에는 반복 출처 footer가 없어야 하고, 5장에만 사용한 모든 출처의 출처명·날짜·도메인이 읽을 수 있게 들어 있어야 한다.
 - caption에 `AI로 재구성한 인포그래픽`과 그 변형 문구를 넣지 않는다. 공개 표시는 Instagram `AI 콘텐츠` 라벨로 처리한다.
-- 웹 UI에서는 반드시 `input[type=file][multiple]`에 모든 PNG를 한 번에 전달한다. 단일 파일 input에 여러 경로를 강제로 넣으면 DOM의 `files.length`가 4여도 Instagram이 첫 장만 소비할 수 있다. 이후 `여러 항목 선택` 갤러리에서 3~4개 썸네일, 1:1 crop, `원본` 필터, 정확한 카드 순서와 caption을 확인하고 사실적 AI 재구성에는 `AI 라벨 추가`를 켠다.
+- 웹 UI에서는 반드시 `input[type=file][multiple]`에 모든 PNG를 한 번에 전달한다. 이후 `여러 항목 선택` 갤러리에서 5개 썸네일을 확인하고, 입력 PNG가 이미 1080×1350이어도 실제 접근성 이름 `자르기 선택`인 종횡비 control을 열어 exact `4:5`를 명시적으로 선택한다. 첫 카드 상·하단 전체와 세로 프레임이 보이는 screenshot, 자연 비율과 렌더 비율이 모두 `0.78~0.82`인 DOM 증거 없이는 `다음`으로 진행하지 않는다. 그다음 `원본` 필터, 정확한 카드 순서와 caption을 확인하고 사실적 AI 재구성에는 `AI 라벨 추가`를 켠다.
 - `공유하기`는 한 번만 누르고 `게시물이 공유되었습니다` 성공 표시가 확인되지 않으면 자동 재시도하지 않는다.
 - `album_upload()` 호출 뒤 오류·timeout은 자동 재시도하지 않는다.
 
@@ -99,9 +99,9 @@ python scripts/carousel_queue.py approve <job_id> --sha256 <payload_sha256>
 Browser Harness로 설정된 Edge profile의 Instagram 작성 화면을 열고 다음 순서를 지킨다. 각 번호를 모델-브라우저 왕복으로 잘게 쪼개지 말고, helper script 하나가 담당하는 bounded phase는 Browser Harness 프로세스 하나에서 끝낸다.
 
 1. `새로운 게시물` → `컴퓨터에서 선택`
-2. `scripts/browser_web_upload_prepare.py`로 `input[type=file][multiple]`에 승인된 PNG 3~4장을 번호 순서로 한 번에 전달
-3. 업로드 뒤 React가 file input을 제거할 수 있으므로 input이 사라진 것만으로 실패 처리하지 않는다. input의 `multiple=true`와 `files.length`만 믿지 말고 `미디어 갤러리 열기`에서 실제 썸네일 3~4개와 순서를 확인. 썸네일이 1개면 즉시 중단
-4. 1:1 crop과 첫/마지막 썸네일을 확인한 뒤 `scripts/browser_web_advance_to_caption.py` 한 번으로 두 `다음` 전환과 `원본` 필터 선택을 끝낸다. Browser Harness의 `switch_tab`은 기본적으로 target을 활성화하지 않으므로 변경 helper는 writable target을 명시적으로 활성화해야 한다.
+2. `scripts/browser_web_upload_prepare.py`로 `input[type=file][multiple]`에 승인된 PNG 5장을 번호 순서로 한 번에 전달. 좌측 create link의 wrapper 이름이 비어 있으면 자식 SVG의 exact `aria-label="새로운 게시물"` 또는 `aria-label="만들기"`를 사용한다.
+3. 업로드 뒤 React가 file input을 제거할 수 있으므로 input이 사라진 것만으로 실패 처리하지 않는다. helper가 dialog의 `자르기`·`다음`과 `미디어 갤러리 열기` 또는 5개 dot으로 이미 열린 crop session을 확인하면 `existing_confirmed_crop_session`으로 재사용하고 create control을 다시 누르거나 파일을 다시 올리지 않는다. input의 `multiple=true`와 `files.length`만 믿지 말고 `미디어 갤러리 열기`에서 실제 썸네일 5개와 순서를 확인. 썸네일이 1개면 즉시 중단
+4. `scripts/browser_web_advance_to_caption.py`가 `자르기 선택` 종횡비 control을 열고 exact `4:5` 항목을 직접 선택해야 한다. 입력 파일 크기나 carousel dot만으로 4:5를 추정하면 안 된다. 첫 카드 상·하단 전체와 세로 프레임을 screenshot으로 확인하고, 선택 직후 주 미디어의 자연 비율과 렌더 비율이 모두 `0.78~0.82`일 때만 두 `다음` 전환과 `원본` 필터 선택을 끝낸다. Instagram이 주 미디어를 `<img>` 대신 `background-image: blob(...)`로 렌더링하면, exact `4:5` 선택과 4:5 입력 계약을 함께 확인한 뒤 CSS 배경 요소의 렌더 비율을 사용한다. 고정 DOM selector를 기본 경로로 쓰고 전체 AX tree는 exact control을 DOM에서 찾지 못한 경우 한 번만 fallback한다. 편집 화면의 두 번째 `다음`이 무시되면 화면이 여전히 `필터·조정` 단계인지 확인한 경우에만 한 번 더 누른다. Browser Harness의 `switch_tab`은 기본적으로 target을 활성화하지 않으므로 변경 helper는 writable target을 명시적으로 활성화해야 한다.
 5. 승인된 caption을 `scripts/browser_web_fill_caption_ai.py`로 입력. Instagram이 `<textarea>` 또는 `[role=textbox][contenteditable=true]` 중 어느 형식으로 렌더링해도 로컬 원문과 글자 수를 대조한다. 일반 입력이 줄바꿈만 남기면 스크립트가 paste event로 한 번 대체한다. 편집기가 끝에 추가하는 개행만 정규화하고 내부 줄바꿈은 그대로 비교하며, `AI로 재구성한 인포그래픽` 계열 문구가 없어야 함
 6. 사실적 AI 재구성 카드에는 `AI 라벨 추가` 활성화
 7. 게시 직전 장수·첫 카드·마지막 카드 출처 블록·caption 글자 수·AI 라벨을 재확인
@@ -111,7 +111,7 @@ Browser Harness로 설정된 Edge profile의 Instagram 작성 화면을 열고 �
 성공 표시와 shortcode가 확인되면 재업로드하지 않고 제출 기록을 연결한다.
 
 ```powershell
-python scripts/carousel_queue.py record-web-submitted <job_id> --shortcode <code> --card-count <3|4>
+python scripts/carousel_queue.py record-web-submitted <job_id> --shortcode <code> --card-count 5
 ```
 
 ```powershell
@@ -131,20 +131,21 @@ private API가 shortcode를 반환해도 상태는 `submitted`다. 제출 호출
 
 ## 공개 확인
 
-[references/post-publish-verification.md](references/post-publish-verification.md)에 따라 Browser Harness background target으로 프로필과 게시물을 읽는다. caption, 계정, `AI 콘텐츠`, shortcode, 카드 장수와 첫·마지막 카드를 `browser_web_verify_carousel.py`의 Harness 프로세스 하나에서 확인한다.
+[references/post-publish-verification.md](references/post-publish-verification.md)에 따라 공유에 사용한 승인된 Instagram target 하나에서 공개 permalink를 읽는다. caption, 계정, `AI 콘텐츠`, shortcode, 서로 다른 카드 5장, 모든 카드의 공개 4:5 비율과 첫·마지막 카드를 `browser_web_verify_carousel.py`의 Harness 프로세스 하나에서 확인한다. 프로필 아래 추천 게시물 이미지는 본문 카드로 세지 않는다.
 
 ```powershell
-$env:IG_POST_URL="https://www.instagram.com/$env:IG_ACCOUNT/p/<code>/"
+$env:IG_POST_URL="https://www.instagram.com/p/<code>/"
 $env:IG_CAPTION_PREFIX='<caption 첫 문장>'
 $env:IG_REQUIRE_AI_LABEL='1'
-$env:IG_CARD_COUNT='<3|4>'
+$env:IG_CARD_COUNT='5'
 $env:IG_SCREENSHOT_DIR='<run-directory>/04-publish/public-carousel'
+$env:IG_APPROVED_PUBLISH_VERIFY='1' # 공유 성공 직후 같은 승인 거래에서만 설정
 python scripts/invoke_edge_browser_harness.py scripts/browser_web_verify_carousel.py
 
-python scripts/carousel_queue.py verify-published <job_id> --shortcode <code> --card-count <3|4> --caption-match --first-card-match --run-dir <run-directory>
+python scripts/carousel_queue.py verify-published <job_id> --shortcode <code> --card-count 5 --caption-match --first-card-match --portrait-4x5 --run-dir <run-directory>
 ```
 
-공개 캐러셀은 permalink의 `?img_index=1`부터 `?img_index=<장수>`까지 background target에서 열어 pagination dot 수와 active index 순서를 확인하고 첫·마지막 screenshot을 승인 payload와 시각 대조한다. 마지막 장은 `wait_for_load()` 뒤에도 회색 placeholder가 잠시 남을 수 있으므로 최대 15초 기다리고, 실제 출처 카드가 렌더링된 screenshot만 인정한다. 화살표 버튼은 hover 상태에서 DOM에 생겼다 사라질 수 있으므로 장수 검증에는 직접 index URL을 우선한다. `verify-published --run-dir`가 queue job과 `<run>/04-publish/result.json` 양쪽에 같은 `public_verified=true` 결과를 기록한 뒤에만 성공을 보고한다.
+공개 캐러셀은 공유 성공 직후 같은 승인 거래에서 permalink의 `?img_index=1`부터 `?img_index=<장수>`까지 같은 승인 target에서 열고 각 index의 주 미디어를 확인한다. 주 미디어는 화면 상단의 4:5 이미지, 자연 비율 `0.78~0.82`, 렌더 비율 `0.78~0.82` 조건으로 고르며 페이지 아래 추천 게시물의 정방형 thumbnail은 제외한다. 서로 다른 media source가 정확히 5개이고 active index가 `0..4` 순서여야 한다. 첫·마지막 JPEG screenshot을 승인 payload와 시각 대조하고, 실제 출처 카드가 렌더링된 screenshot만 인정한다. 화살표와 pagination dot은 DOM에서 사라질 수 있으므로 장수 검증에는 직접 index URL과 서로 다른 media source 수를 우선한다. `verify-published --run-dir`가 queue job과 `<run>/04-publish/result.json` 양쪽에 같은 `public_verified=true` 결과를 기록한 뒤에만 성공을 보고한다.
 
 작성 화면에서 AI switch가 `true`였지만 공개 페이지에 `AI 콘텐츠`가 없으면 새로 게시하지 않는다. 기존 게시물의 `옵션 더 보기 → 수정`에서 switch를 `false → true`로 한 번 순환하고 저장한 뒤 다시 검증한다. 한 번의 복구 후에도 없으면 `needs_review`로 남긴다.
 

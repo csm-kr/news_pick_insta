@@ -22,7 +22,7 @@ def attach_writable_target(target_id):
     return attach_without_focus(target_id)
 
 
-def paced_wait(low=0.28, high=0.62):
+def paced_wait(low=0.22, high=0.48):
     time.sleep(random.uniform(low, high))
 
 
@@ -33,7 +33,10 @@ def click_named_control(name):
   const candidates=[...document.querySelectorAll('a,button,[role=button]')];
   const e=candidates.find(x=>{
     const r=x.getBoundingClientRect();
-    const label=(x.getAttribute('aria-label')||x.innerText||'').trim();
+    const ownLabel=(x.getAttribute('aria-label')||'').trim();
+    const textLabel=(x.innerText||'').trim();
+    const svgLabel=(x.querySelector('svg[aria-label]')?.getAttribute('aria-label')||'').trim();
+    const label=ownLabel||textLabel||svgLabel;
     return label===name && r.width>0 && r.height>0;
   });
   if(!e)return null;
@@ -79,17 +82,27 @@ def read_upload_state():
     return js(
         """
 (() => {
-  const text=document.body?.innerText||'';
+  const dialog=document.querySelector('[role=dialog]');
+  const root=dialog||document;
+  const text=(dialog||document.body)?.innerText||'';
   const input=document.querySelector('input[type=file][multiple]');
+  const labels=[...root.querySelectorAll('[aria-label]')]
+    .map(e=>(e.getAttribute('aria-label')||'').trim());
+  const mediaDots=[...root.querySelectorAll('div._acnb')].filter(e=>{
+    const r=e.getBoundingClientRect();
+    return r.width===6&&r.height===6;
+  });
   return {
     url:location.href,
+    dialog_present:!!dialog,
     input_present:!!input,
     file_count:input?.files?.length||0,
     file_names:input?[...input.files].map(f=>f.name):[],
     multiple:input?.multiple===true,
     has_next:text.includes('다음'),
     has_crop:text.includes('자르기'),
-    has_media_gallery:text.includes('미디어 갤러리 열기'),
+    has_media_gallery:text.includes('미디어 갤러리 열기')||labels.includes('미디어 갤러리 열기'),
+    media_dot_count:mediaDots.length,
     login_wall:location.href.includes('/accounts/login'),
     challenge:/(challenge|checkpoint)/.test(location.href)
   };
@@ -141,33 +154,47 @@ if js(r"location.href.split('?',1)[0].replace(/\/$/,'')") != profile_url.rstrip(
     wait_for_load()
 
 media = os.environ["IG_MEDIA_FILES"].split("|")
-if len(media) not in (3, 4):
-    raise RuntimeError("exactly three or four media files are required")
+if len(media) != 5:
+    raise RuntimeError("exactly five media files are required")
 
 selector = "input[type=file][multiple]"
-input_state = js("(() => { const input=document.querySelector('input[type=file][multiple]'); return {exists:!!input,multiple:input?.multiple===true}; })()")
-if input_state.get("exists"):
-    clicked = {"source": "existing_create_modal"}
+state = read_upload_state()
+confirmed_existing_crop = bool(
+    state.get("dialog_present")
+    and state.get("has_next")
+    and state.get("has_crop")
+    and (state.get("has_media_gallery") or state.get("media_dot_count", 0) >= 5)
+)
+if confirmed_existing_crop:
+    clicked = {"source": "existing_confirmed_crop_session"}
 else:
-    try:
-        clicked = click_named_control("새로운 게시물")
-    except RuntimeError:
-        clicked = click_named_control("만들기")
-    paced_wait(0.55, 1.05)
-deadline = time.monotonic() + 8
-while time.monotonic() < deadline:
     input_state = js("(() => { const input=document.querySelector('input[type=file][multiple]'); return {exists:!!input,multiple:input?.multiple===true}; })()")
     if input_state.get("exists"):
-        break
-    paced_wait(0.18, 0.38)
-if not input_state.get("exists") or input_state.get("multiple") is not True:
-    raise RuntimeError("multiple file input was not found")
-upload_file(selector, media)
-deadline = time.monotonic() + 12
-state = read_upload_state()
-while not state.get("has_next") and not state.get("login_wall") and not state.get("challenge") and time.monotonic() < deadline:
-    paced_wait(0.28, 0.58)
+        clicked = {"source": "existing_create_modal"}
+    else:
+        try:
+            clicked = click_named_control("새로운 게시물")
+        except RuntimeError:
+            clicked = click_named_control("만들기")
+        paced_wait(0.32, 0.58)
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline:
+        input_state = js("(() => { const input=document.querySelector('input[type=file][multiple]'); return {exists:!!input,multiple:input?.multiple===true}; })()")
+        if input_state.get("exists"):
+            break
+        paced_wait(0.22, 0.36)
+    if not input_state.get("exists") or input_state.get("multiple") is not True:
+        raise RuntimeError("multiple file input was not found")
+    upload_file(selector, media)
+    deadline = time.monotonic() + 12
     state = read_upload_state()
+    while (
+        not state.get("dialog_present")
+        or not state.get("has_next")
+        or not state.get("has_crop")
+    ) and not state.get("login_wall") and not state.get("challenge") and time.monotonic() < deadline:
+        paced_wait(0.24, 0.42)
+        state = read_upload_state()
 shot = cdp("Page.captureScreenshot", format="jpeg", quality=72, captureBeyondViewport=False)
 with open(os.environ["IG_CROP_SCREENSHOT"], "wb") as handle:
     handle.write(base64.b64decode(shot["data"]))
@@ -176,7 +203,8 @@ print(
     + json.dumps({"account": account, "active_account": active_account, "clicked": clicked, "state": state, "harness_processes": 1}, ensure_ascii=True)
 )
 if (
-    not state.get("has_next")
+    not state.get("dialog_present")
+    or not state.get("has_next")
     or not state.get("has_crop")
     or state.get("login_wall")
     or state.get("challenge")

@@ -26,10 +26,13 @@ python scripts/launch_edge_profile.py --account $env:IG_ACCOUNT
 2. 하나의 bounded phase 안에서 target 선택, targeted DOM 판독, 필요한 UI 조작, 완료 검증을 묶는다.
 3. 전체 DOM·전체 AX tree·반복 screenshot 탐색을 기본 경로로 사용하지 않는다. 고정 selector와 작은 allowlist 결과를 우선한다.
 4. 고정 sleep 대신 상태가 준비되는 즉시 끝나는 짧은 polling을 사용한다.
-5. 조회와 공개 검증은 background target에서 수행하고 `document.hasFocus() is False`를 확인한다.
-6. 사용자가 열어 둔 기존 target은 닫거나 다른 URL로 탐색하지 않는다. 작업용으로 만든 background target만 닫는다.
+5. 독립 조회와 제출 전 preflight는 background target에서 수행하고 `document.hasFocus() is False`를 확인한다.
+6. 사용자가 승인한 웹 UI 게시가 성공한 직후의 캐러셀 공개 검증만 예외다. `browser_web_verify_carousel.py`는 같은 승인 거래 안에서 공유에 사용한 전용 Instagram target 하나를 읽기 전용으로 재사용해 정확한 permalink와 `?img_index=1..N`만 탐색할 수 있다. 이 예외에서는 작성·수정·공유 control을 누르지 않으며, 다른 target을 만들거나 닫거나 탐색하지 않는다.
+7. 그 밖의 사용자가 열어 둔 기존 target은 닫거나 다른 URL로 탐색하지 않는다. 작업용으로 만든 background target만 닫는다.
 
 Instagram 변경 동작은 속도보다 정확히 한 번 실행되는 계약이 우선이다. 작성 화면의 단계 전환에는 짧은 random jitter를 두되, 장시간 사람 흉내 지연이나 카드별 별도 Harness 호출은 사용하지 않는다. `공유하기`는 최대 한 번이며 결과가 모호하면 재클릭하지 않는다.
+
+웹 작성 단계의 기본 속도는 의미 있는 클릭 사이 `0.22~0.48초`, 준비 상태 polling `0.22~0.42초`, 공유 성공 polling `0.35~0.65초`다. DOM이 이미 준비되면 즉시 다음 상태로 넘어가되 zero-delay 연속 클릭은 만들지 않는다.
 
 변경 helper는 `switch_tab(..., activate=True)` 또는 `Target.activateTarget`으로 writable target을 명시적으로 활성화한다. 현재 Browser Harness의 단순 `switch_tab(target)`은 attach만 하고 전면 활성화하지 않을 수 있다. 작성 화면 증거 screenshot은 활성 target에서 저용량 JPEG(`Page.captureScreenshot`, quality 72)를 우선해 PNG 캡처 timeout을 줄인다.
 

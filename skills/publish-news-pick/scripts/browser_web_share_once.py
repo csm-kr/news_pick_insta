@@ -45,31 +45,49 @@ if len(targets) != 1:
     )
 switch_tab(targets[0]["targetId"], activate=True)
 
-nodes = cdp("Accessibility.getFullAXTree").get("nodes", [])
-candidates = [
-    node
-    for node in nodes
-    if str((node.get("name") or {}).get("value") or "").strip() == "공유하기"
-]
-clicked = None
-for node in candidates:
-    try:
-        box = cdp(
-            "DOM.getBoxModel", backendNodeId=node["backendDOMNodeId"]
-        )["model"]["content"]
-        x, y = sum(box[0::2]) / 4, sum(box[1::2]) / 4
-        if x >= 0 and y >= 0:
-            click_at_xy(x, y)
-            clicked = {
-                "x": x,
-                "y": y,
-                "backendDOMNodeId": node["backendDOMNodeId"],
-            }
-            break
-    except Exception:
-        pass
+clicked = js(
+    """
+(() => {
+  const root=document.querySelector('[role=dialog]')||document;
+  const controls=[...root.querySelectorAll('button,[role=button]')].filter(e=>{
+    const r=e.getBoundingClientRect();
+    const label=(e.getAttribute('aria-label')||e.innerText||'').trim();
+    return label==='공유하기'&&r.width>0&&r.height>0&&r.right>0&&r.bottom>0&&r.left<innerWidth&&r.top<innerHeight;
+  });
+  const e=controls[0];
+  if(!e)return null;
+  const r=e.getBoundingClientRect();
+  return {x:r.x+r.width/2,y:r.y+r.height/2,source:'dom'};
+})()
+"""
+)
+if not clicked:
+    nodes = cdp("Accessibility.getFullAXTree").get("nodes", [])
+    candidates = [
+        node
+        for node in nodes
+        if str((node.get("name") or {}).get("value") or "").strip() == "공유하기"
+    ]
+    for node in candidates:
+        try:
+            box = cdp(
+                "DOM.getBoxModel", backendNodeId=node["backendDOMNodeId"]
+            )["model"]["content"]
+            x, y = sum(box[0::2]) / 4, sum(box[1::2]) / 4
+            if x >= 0 and y >= 0:
+                clicked = {
+                    "x": x,
+                    "y": y,
+                    "backendDOMNodeId": node["backendDOMNodeId"],
+                    "source": "ax_fallback",
+                }
+                break
+        except Exception:
+            pass
 if not clicked:
     raise RuntimeError("visible Share control not found; nothing was clicked")
+time.sleep(random.uniform(0.22, 0.48))
+click_at_xy(clicked["x"], clicked["y"])
 
 markers = (
     "게시물이 공유되었습니다",
@@ -80,7 +98,7 @@ markers = (
 deadline = time.time() + 120
 state = None
 while time.time() < deadline:
-    time.sleep(random.uniform(0.65, 1.15))
+    time.sleep(random.uniform(0.35, 0.65))
     state = js(
         """
         (() => {

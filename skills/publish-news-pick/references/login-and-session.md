@@ -8,7 +8,7 @@
 - 같은 profile에 열린 `https://www.instagram.com/<IG_ACCOUNT>/` 탭 하나
 - Browser Harness named 연결 `edge9333`과 `http://127.0.0.1:9333`
 - 안정적인 네트워크
-- 게시할 1024×1024 PNG 3~4장, caption, 승인된 payload hash
+- 게시할 1080×1350 PNG 5장, caption, 승인된 payload hash
 
 전용 profile 창이 없으면 launcher로 표시형 Edge를 연다.
 
