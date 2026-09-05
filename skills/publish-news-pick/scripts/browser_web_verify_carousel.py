@@ -23,6 +23,7 @@ expected = int(os.environ["IG_CARD_COUNT"])
 caption_prefix = os.environ["IG_CAPTION_PREFIX"]
 account = os.environ.get("IG_ACCOUNT", "newspick_studio").strip().lstrip("@").lower()
 require_ai = os.environ.get("IG_REQUIRE_AI_LABEL", "1") != "0"
+capture_all_cards = os.environ.get("IG_CAPTURE_ALL_CARDS", "0") == "1"
 approved_publish_verify = os.environ.get("IG_APPROVED_PUBLISH_VERIFY", "0") == "1"
 if expected != 5:
     raise RuntimeError("IG_CARD_COUNT must be 5")
@@ -133,7 +134,7 @@ for index in range(1, expected + 1):
         time.sleep(0.3)
     state["render_attempts"] = attempts
 
-    if index in {1, expected}:
+    if capture_all_cards or index in {1, expected}:
         screenshot = shot_dir / f"public-card-{index:02d}.jpg"
         capture_jpeg(screenshot, quality=74)
         state["screenshot"] = str(screenshot)
@@ -173,6 +174,7 @@ result = {
     "challenge": any(state.get("challenge") for state in states),
     "first_screenshot": states[0].get("screenshot"),
     "last_screenshot": states[-1].get("screenshot"),
+    "card_screenshots": [state["screenshot"] for state in states if state.get("screenshot")],
     "first_alt": states[0].get("media_alt"),
     "last_alt": states[-1].get("media_alt"),
     "visual_confirmation_required": True,
@@ -190,6 +192,7 @@ result["verified"] = bool(
     and not result["login_wall"]
     and not result["challenge"]
 )
+(shot_dir / "verification.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 print("INSTAGRAM_CAROUSEL_VERIFY=" + json.dumps(result, ensure_ascii=True))
 if not result["verified"]:
     raise RuntimeError("public carousel verification failed")

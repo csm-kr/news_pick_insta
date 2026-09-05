@@ -20,9 +20,21 @@
 5. 첫 번째 `다음` 뒤 편집 화면에서 `원본` 필터가 선택됐는지 확인한다. 두 번째 `다음`이 무시되면 화면이 여전히 `필터·조정` 단계임을 확인한 경우에만 한 번 더 누른다.
    - `browser_web_advance_to_caption.py`는 crop→편집→caption 전환을 한 Harness 프로세스에서 처리한다. 고정 DOM selector가 기본 경로이고, exact control을 DOM에서 찾지 못했을 때만 전체 AX tree를 한 번 fallback한다. 의미 있는 클릭 사이에는 `0.22~0.48초` jitter를 둔다.
 6. 두 번째 `다음` 뒤 승인된 caption을 그대로 입력한다. 입력 요소는 `<textarea>` 또는 `[role=textbox][contenteditable=true]`일 수 있으므로 둘 다 지원한다. `type_text` 뒤 본문이 줄바꿈만 남는 Lexical 편집기에서는 전체 선택·삭제 후 `ClipboardEvent('paste')`를 한 번 보내고, 끝의 추가 개행만 제거해 로컬 원문과 비교한다. 내부 줄바꿈과 문단은 정규화하지 않는다.
-7. 사실적 AI 재구성 카드이면 `AI 라벨 추가` switch의 `aria-checked=true`를 확인한다.
+7. 사실적 AI 재구성 카드이면 `AI 라벨 추가` 또는 `AI 레이블 추가`의 실제 switch 상태를 확인한다. `<input role=switch>`는 `checked` boolean, 그 밖의 role switch는 `aria-checked`를 사용한다. 상세 복구는 아래 절차를 따른다.
 
 게시 직전 screenshot에 첫 카드, caption 끝부분, 글자 수, AI switch를 함께 남긴다.
+
+### 갤러리와 작성 미디어 판독
+
+- 갤러리 thumbnail은 `<img>`나 `<canvas>`가 아니라 `linear-gradient(...), url("blob:...")` CSS 배경일 수 있다. `backgroundImage.startsWith('url(')`만 검사하면 모두 누락된다. 실제 갤러리의 가로 `overflow-x:auto` scroller 내부에서 `url(...)` 부분을 추출해 서로 다른 미디어 5개와 DOM 순서를 확인한다. gradient 문자열 차이는 다른 카드의 근거가 아니다.
+- 다섯 번째 thumbnail이 오른쪽에서 일부 잘려 보이면 갤러리 scroller를 끝으로 이동해 마지막 출처 thumbnail을 확인한다. 왼쪽·오른쪽 screenshot으로 순서를 비교하고 갤러리를 닫는다. 갤러리 viewport 잘림과 업로드 원본 잘림은 다르며, 이 때문에 재업로드하지 않는다.
+- caption 단계의 주 미디어는 crop 단계와 다른 DOM일 수 있다. 전역에서 가장 큰 CSS 배경을 고른 결과가 `null`, 같은 source, 잘못된 비율이라는 이유만으로 카드 전환 실패나 실제 잘림을 단정하지 않는다. 현재 보이는 카드·pagination·해당 미디어의 DOM을 좁혀 확인한다. 클릭은 이미 성공했을 수 있으므로 다시 `다음`을 누르기 전에 실제 index를 확인한다. 입력 파일, exact 4:5 선택, 공개 자연·렌더 비율 검증은 그대로 유지한다.
+
+### 공유 전 AI switch 복구
+
+2026-09-05 게시에서는 820자 caption이 정확히 입력됐지만 첫 toggle 뒤 `checked=false`였다. 현재 dialog의 단일 `AI 레이블 추가` input을 다시 확인하고, 가시 영역과 hit-test가 맞는 상태에서 한 번 더 클릭하자 켜졌고 공개 `AI 크리에이터` 표시도 확인됐다. 첫 클릭이 무시된 내부 원인은 확인되지 않았으며 로그인·이미지 업로드 오류로 분류하지 않는다.
+
+`browser_web_fill_caption_ai.py`는 기존 caption이 정확하면 보존한다. switch는 dialog 안의 AI label과 단일 control이 확인되고, 켜져 있지 않으며, 가시·활성·hit-test 조건이 맞을 때만 누른다. 클릭 뒤 최대 3초 상태를 기다린다. 계속 꺼져 있으면 새로운 판독으로 같은 조건을 재확인한 뒤 복구 클릭 한 번만 허용한다. 이미 켜졌거나 switch가 사라졌거나 여러 개로 모호해지면 다시 toggle하지 않는다. 두 번 뒤에도 꺼져 있으면 공유하지 않는다. `공유하기`의 최대 한 번 규칙에는 이 복구를 적용하지 않는다.
 
 ## 정확히 한 번 공유
 
@@ -56,6 +68,8 @@ python scripts/carousel_queue.py record-web-submitted <job_id> --shortcode <code
 - 사실적 AI 재구성 카드에 현재 Instagram 공개 DOM의 `AI 콘텐츠`, `AI 크리에이터` 또는 `Made with AI` 표시가 보임
 
 화살표와 pagination dot은 DOM에서 사라질 수 있다. 공유 성공 직후 같은 승인 거래임을 나타내는 `IG_APPROVED_PUBLISH_VERIFY=1`을 설정하고 `scripts/browser_web_verify_carousel.py`로 permalink의 `?img_index=1`부터 `?img_index=<장수>`까지 열어 active index 순서와 서로 다른 media source 5개를 확인한다. 본문 주 이미지는 화면 상단의 4:5 이미지와 자연·렌더 비율로 고르며, 페이지 아래 `게시물 더 보기`의 정방형 thumbnail을 제외한다. 첫·마지막 JPEG screenshot을 남기고 실제 마지막 출처 카드가 보이지 않으면 검증 실패다.
+
+잘림 복구 게시에서는 `IG_CAPTURE_ALL_CARDS=1`로 같은 프로세스에서 5장 모두 캡처한다. 실패 여부를 포함한 기계 검증 결과는 screenshot 디렉터리의 UTF-8 `verification.json`에 저장된다. 화살표 판독인 `navigation_boundary=false`만으로 실패 처리하지 않으며, 대신 active sequence `0..4`, 서로 다른 source 5개, 계정·caption·AI 라벨, 모든 자연·렌더 비율과 실제 screenshot이 일치해야 한다.
 
 모두 맞을 때만 `verify-published --run-dir <run-directory>`를 실행해 queue result와 run의 `04-publish/result.json`을 함께 쓴다.
 

@@ -4,15 +4,55 @@ import random
 import time
 
 
-def attach_target(target_id):
-    wrapped = switch_tab
-    inner = wrapped.__closure__[0].cell_contents if wrapped.__closure__ else wrapped
-    private = inner.__globals__
-    session_id = cdp("Target.attachToTarget", targetId=target_id, flatten=True)["sessionId"]
-    private["_send"](
-        {"meta": "set_session", "session_id": session_id, "target_id": target_id}
+def read_ai_switch():
+    return js(
+        """
+(() => {
+  const root=document.querySelector('[role=dialog]');
+  if(!root)return null;
+  const labels=['AI 라벨 추가','AI 레이블 추가','Add AI label'];
+  const lines=(root.innerText||'').split('\\n').map(line=>line.trim());
+  const label=labels.find(value=>lines.includes(value));
+  const switches=[...root.querySelectorAll('[role=switch],input[type=checkbox]')];
+  if(!label||switches.length!==1)return null;
+  const element=switches[0];
+  const rect=element.getBoundingClientRect();
+  const style=getComputedStyle(element);
+  const x=rect.x+rect.width/2,y=rect.y+rect.height/2;
+  const hit=document.elementFromPoint(x,y);
+  return {
+    label,x,y,
+    checked:typeof element.checked==='boolean'?element.checked:element.getAttribute('aria-checked')==='true',
+    visible:rect.width>0&&rect.height>0&&x>=0&&y>=0&&x<innerWidth&&y<innerHeight&&style.display!=='none'&&style.visibility!=='hidden',
+    disabled:element.disabled===true||element.getAttribute('aria-disabled')==='true',
+    hit_matches:!!hit&&(hit===element||element.contains(hit))
+  };
+})()
+"""
     )
-    private["_mark_tab"]()
+
+
+def ensure_ai_label():
+    clicks = 0
+    while True:
+        state = read_ai_switch()
+        if not state:
+            raise RuntimeError("unambiguous AI label switch was not found")
+        if state["checked"]:
+            return {**state, "clicks": clicks}
+        if clicks >= 2 or not state["visible"] or state["disabled"] or not state["hit_matches"]:
+            print("INSTAGRAM_AI_SWITCH_DIAGNOSTIC=" + json.dumps({**state, "clicks": clicks}, ensure_ascii=True))
+            raise RuntimeError("AI label remains off or is not actionable; preserve caption and do not share")
+        click_at_xy(state["x"], state["y"])
+        clicks += 1
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            time.sleep(random.uniform(0.22, 0.36))
+            state = read_ai_switch()
+            if not state:
+                raise RuntimeError("AI label switch disappeared; do not retry")
+            if state["checked"]:
+                return {**state, "clicks": clicks}
 
 
 targets = [
@@ -22,10 +62,10 @@ targets = [
 ]
 if len(targets) != 1:
     raise RuntimeError("Instagram page target count is " + str(len(targets)))
-cdp("Target.activateTarget", targetId=targets[0]["targetId"])
-attach_target(targets[0]["targetId"])
+switch_tab(targets[0]["targetId"], activate=True)
 
-caption = open(os.environ["IG_CAPTION_FILE"], "r", encoding="utf-8").read()
+with open(os.environ["IG_CAPTION_FILE"], "r", encoding="utf-8") as handle:
+    caption = handle.read()
 if "AI로 재구성한 인포그래픽" in caption:
     raise RuntimeError("forbidden caption disclosure phrase is present")
 
@@ -58,12 +98,14 @@ field = js(
 )
 if not field:
     raise RuntimeError("caption textbox was not found")
-click_at_xy(field["x"] + 18, field["y"] + 18)
-press_key("a", modifiers=2)
-press_key("Backspace")
-type_text(caption)
-time.sleep(random.uniform(0.45, 0.85))
-input_method = "type_text"
+input_method = "existing_exact_caption"
+if normalize_editor_text(field.get("text")) != normalize_editor_text(caption):
+    click_at_xy(field["x"] + 18, field["y"] + 18)
+    press_key("a", modifiers=2)
+    press_key("Backspace")
+    type_text(caption)
+    time.sleep(random.uniform(0.45, 0.85))
+    input_method = "type_text"
 
 # Instagram의 Lexical 편집기는 CDP text insertion에서 줄바꿈만 남기는 경우가 있다.
 # 실제 값이 다를 때만 사용자가 붙여넣은 것과 같은 paste event로 한 번 대체한다.
@@ -94,38 +136,26 @@ if normalize_editor_text(read_caption()) != normalize_editor_text(caption):
     input_method = "clipboard_event"
     time.sleep(random.uniform(0.65, 1.15))
 
-switch = js(
-    """
-(() => {
-  const e=document.querySelector('[role=switch],input[type=checkbox]');
-  if(!e) return null;
-  const r=e.getBoundingClientRect();
-  return {x:r.x,y:r.y,w:r.width,h:r.height,checked:e.checked===true||e.getAttribute('aria-checked')==='true'};
-})()
-"""
-)
-if not switch:
-    raise RuntimeError("AI label switch was not found")
-if not switch["checked"]:
-    click_at_xy(switch["x"] + switch["w"] / 2, switch["y"] + switch["h"] / 2)
-    time.sleep(random.uniform(0.45, 0.95))
+if normalize_editor_text(read_caption()) != normalize_editor_text(caption):
+    raise RuntimeError("caption mismatch; AI label and Share were not touched")
+ai_switch = ensure_ai_label()
 
 state = js(
     """
 (() => {
   const e=document.querySelector('textarea,[role=textbox][contenteditable=true],[role=textbox][aria-label]');
   const caption=e?(typeof e.value==='string'?e.value:(e.innerText||e.textContent||'')):'';
-  const s=document.querySelector('[role=switch],input[type=checkbox]');
   const text=document.body?.innerText||'';
   return {
     caption,caption_chars:caption.length,
-    ai_checked:!!(s&&(s.checked===true||s.getAttribute('aria-checked')==='true')),
     has_share:text.includes('공유하기'),url:location.href
   };
 })()
 """
 )
 state["caption_matches"] = normalize_editor_text(state.get("caption")) == normalize_editor_text(caption)
+state["ai_checked"] = bool((read_ai_switch() or {}).get("checked"))
+state["ai_switch_clicks"] = ai_switch["clicks"]
 state["expected_chars"] = len(caption)
 state["input_method"] = input_method
 state["harness_processes"] = 1

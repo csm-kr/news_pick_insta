@@ -107,7 +107,7 @@ Browser Harness로 설정된 Edge profile의 Instagram 작성 화면을 열고 �
 3. 업로드 뒤 React가 file input을 제거할 수 있으므로 input이 사라진 것만으로 실패 처리하지 않는다. helper가 dialog의 `자르기`·`다음`과 `미디어 갤러리 열기` 또는 5개 dot으로 이미 열린 crop session을 확인하면 `existing_confirmed_crop_session`으로 재사용하고 create control을 다시 누르거나 파일을 다시 올리지 않는다. input의 `multiple=true`와 `files.length`만 믿지 말고 `미디어 갤러리 열기`에서 실제 썸네일 5개와 순서를 확인. 썸네일이 1개면 즉시 중단
 4. `scripts/browser_web_advance_to_caption.py`가 `자르기 선택` 종횡비 control을 열고 exact `4:5` 항목을 직접 선택해야 한다. 입력 파일 크기나 carousel dot만으로 4:5를 추정하면 안 된다. 첫 카드 상·하단 전체와 세로 프레임을 screenshot으로 확인하고, 선택 직후 주 미디어의 자연 비율과 렌더 비율이 모두 `0.78~0.82`일 때만 두 `다음` 전환과 `원본` 필터 선택을 끝낸다. Instagram이 주 미디어를 `<img>` 대신 `background-image: blob(...)`로 렌더링하면, exact `4:5` 선택과 4:5 입력 계약을 함께 확인한 뒤 CSS 배경 요소의 렌더 비율을 사용한다. 고정 DOM selector를 기본 경로로 쓰고 전체 AX tree는 exact control을 DOM에서 찾지 못한 경우 한 번만 fallback한다. 편집 화면의 두 번째 `다음`이 무시되면 화면이 여전히 `필터·조정` 단계인지 확인한 경우에만 한 번 더 누른다. Browser Harness의 `switch_tab`은 기본적으로 target을 활성화하지 않으므로 변경 helper는 writable target을 명시적으로 활성화해야 한다.
 5. 승인된 caption을 `scripts/browser_web_fill_caption_ai.py`로 입력. Instagram이 `<textarea>` 또는 `[role=textbox][contenteditable=true]` 중 어느 형식으로 렌더링해도 로컬 원문과 글자 수를 대조한다. 일반 입력이 줄바꿈만 남기면 스크립트가 paste event로 한 번 대체한다. 편집기가 끝에 추가하는 개행만 정규화하고 내부 줄바꿈은 그대로 비교하며, `AI로 재구성한 인포그래픽` 계열 문구가 없어야 함
-6. 사실적 AI 재구성 카드에는 `AI 라벨 추가` 활성화
+6. 사실적 AI 재구성 카드에는 `AI 라벨 추가` 또는 `AI 레이블 추가` 활성화. caption helper는 이미 일치하는 본문을 다시 입력하지 않고, dialog 안의 단일 AI switch를 hit-test한 뒤 실제 켜짐을 기다린다. 여전히 꺼져 있고 조작 가능한 경우만 한 번 복구 클릭하며, 확인 불가·가림·실패 시 공유하지 않는다.
 7. 게시 직전 장수·첫 카드·마지막 카드 출처 블록·caption 글자 수·AI 라벨을 재확인
 8. 예약 모드는 `NEWS_PICK_EDITION_AT`까지 대기한 뒤 `scripts/browser_web_share_once.py`로 `공유하기`를 한 번만 클릭. 이 스크립트는 회차 시각 전 클릭과 회차 시각 30분 뒤의 보충 게시를 차단한다.
 9. Instagram의 성공 표시를 확인하고 `scripts/browser_web_find_latest_post.py`로 공개 프로필에서 shortcode를 수집. Instagram이 반환하는 `/<account>/p/<code>/` 형식은 `https://www.instagram.com/p/<code>/`로 정규화한다.
@@ -136,6 +136,8 @@ private API가 shortcode를 반환해도 상태는 `submitted`다. 제출 호출
 ## 공개 확인
 
 [references/post-publish-verification.md](references/post-publish-verification.md)에 따라 공유에 사용한 승인된 Instagram target 하나에서 공개 permalink를 읽는다. caption, 계정, `AI 콘텐츠`, shortcode, 서로 다른 카드 5장, 모든 카드의 공개 4:5 비율과 첫·마지막 카드를 `browser_web_verify_carousel.py`의 Harness 프로세스 하나에서 확인한다. 프로필 아래 추천 게시물 이미지는 본문 카드로 세지 않는다.
+
+중간 카드 잘림을 복구한 게시에는 `IG_CAPTURE_ALL_CARDS=1`을 함께 설정한다. 같은 검증 순회에서 5장 JPEG와 `verification.json`을 저장하며, 2~4장의 제목·사진·표 마지막 행을 승인본과 직접 비교한다. 이 옵션이나 screenshot 존재 자체가 시각 QA 통과는 아니다.
 
 ```powershell
 $env:IG_POST_URL="https://www.instagram.com/p/<code>/"

@@ -23,6 +23,7 @@ python skills/publish-news-pick/scripts/invoke_edge_browser_harness.py skills/pu
 - **구조 변경 후보:** 로딩 한도 후에도 dialog 안 input이 없거나 `multiple=false`뿐이면 DOM 증거와 현재 helper를 대조한다. selector를 `input[type=file]`로 넓히지 않는다. 실제 관찰한 새 구조에만 좁은 수정과 회귀 테스트를 추가한다.
 - **이미 crop 단계:** `자르기`·`다음`·갤러리/5개 dot이 확인되면 React의 input 제거는 정상일 수 있다. 재업로드하지 않고 기존 crop 상태를 검수한다.
 - **인증 경계:** login/challenge/checkpoint이면 대기·우회를 멈추고 사용자가 Edge에서 직접 처리하게 한다.
+- **caption은 맞고 AI switch만 꺼짐:** 이미 일치하는 caption을 재입력하거나 업로드를 반복하지 않는다. [web-ui-carousel.md](web-ui-carousel.md)의 공유 전 AI switch 복구에 따라 해당 dialog의 label·단일 switch·checked·가시 영역·hit-test만 추가 판독한다. 첫 클릭의 내부 실패 원인을 추측하지 않으며 최대 한 번 복구 뒤에도 켜짐이 확인되지 않으면 공유하지 않는다.
 
 2026-09-05 12시 실행은 `create_dialog_unavailable`로 제출 전 취소되었다. 같은 날 17:48 KST Edge `Edg/152.0.4191.62` 실측에서는 create를 한 번 누른 뒤 dialog가 먼저 보이고, 후속 판독에서 dialog 내부 `input[type=file][multiple]`과 `컴퓨터에서 선택`이 확인됐다. 따라서 당시 실패를 DOM selector 변경으로 단정하지 않는다. 17시 실행의 이미지 backend HTTP 400은 별개 오류이며 DOM 수정으로 해결됐다고 보고하지 않는다.
 

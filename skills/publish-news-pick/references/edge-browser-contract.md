@@ -36,6 +36,8 @@ Instagram 변경 동작은 속도보다 정확히 한 번 실행되는 계약이
 
 변경 helper는 `switch_tab(..., activate=True)` 또는 `Target.activateTarget`으로 writable target을 명시적으로 활성화한다. 현재 Browser Harness의 단순 `switch_tab(target)`은 attach만 하고 전면 활성화하지 않을 수 있다. 작성 화면 증거 screenshot은 활성 target에서 저용량 JPEG(`Page.captureScreenshot`, quality 72)를 우선해 PNG 캡처 timeout을 줄인다.
 
+이 활성화는 이전 Harness 호출에서 했다는 이유로 생략하지 않는다. 승인된 작성 화면이나 동일 거래 공개 검증을 새 프로세스에서 캡처할 때도 target 하나를 다시 선택·활성화한다. 2026-09-05 갤러리 캡처는 이 단계가 없는 호출에서 timeout이 났고 명시 활성화 후 같은 화면에서 성공했다. 캡처 실패는 파일 선택·AI toggle·공유의 실패 증거가 아니므로 변경 동작을 반복하지 않고 현재 상태부터 읽는다. 독립 읽기 전용 조회의 background 원칙은 유지한다.
+
 preflight는 `IG_DUPLICATE_TOKENS`가 있으면 계정·소유자 control·login/challenge와 최근 게시물 중복을 한 background Harness phase에서 함께 판정한다. 모델-브라우저 왕복이나 중복 전용 프로세스를 추가하지 않는다.
 
 각 browser script는 다음처럼 실행한다.
