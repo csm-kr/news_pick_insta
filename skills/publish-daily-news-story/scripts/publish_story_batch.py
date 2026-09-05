@@ -87,6 +87,14 @@ def verify_existing(result: dict, result_path: Path, account: str, entries: list
         VERIFY_PREFIX,
         timeout=240,
     )
+    result["public_verification"] = verification
+    result["updated_at"] = datetime.now(KST).isoformat()
+    if verification.get("focus_preserved") is False:
+        result["status"] = "needs_review"
+        result["public_verified"] = False
+        result["diagnostic"] = verify_diagnostic or "Edge background verification lost focus; ask before further browser calls"
+        legacy.atomic_json(result_path, result)
+        return result
     metadata_code, metadata, metadata_diagnostic = legacy.harness_call(
         TASK,
         {
@@ -102,7 +110,6 @@ def verify_existing(result: dict, result_path: Path, account: str, entries: list
         PRIVATE_PREFIX,
         timeout=180,
     )
-    result["public_verification"] = verification
     result["metadata_verification"] = metadata
     result["updated_at"] = datetime.now(KST).isoformat()
     public_ok = bool(

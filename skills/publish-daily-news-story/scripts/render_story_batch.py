@@ -162,7 +162,10 @@ def render(
     target_date: date,
     explicit_runs: list[str] | None = None,
     force: bool = False,
+    include_manual_editions: bool = False,
 ) -> dict:
+    if include_manual_editions and os.environ.get("NEWS_PICK_DAILY_STORY_SCHEDULED_MODE") == "1":
+        raise ValueError("scheduled Story runs cannot include manual editions")
     ffmpeg = shutil.which("ffmpeg")
     ffprobe = shutil.which("ffprobe")
     if not ffmpeg or not ffprobe:
@@ -172,7 +175,8 @@ def render(
         raise ValueError(
             f"21:00 batch requires exactly {STORY_COUNT} publicly verified posts; found {len(sources)}"
         )
-    sources = ordered_slot_sources(sources, target_date)
+    if not include_manual_editions:
+        sources = ordered_slot_sources(sources, target_date)
     set_hash = batch_input_sha256(sources, target_date)
     output_dir = output_root / "daily-story" / target_date.isoformat()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -204,6 +208,7 @@ def render(
         "input_set_sha256": set_hash,
         "source_count": STORY_COUNT,
         "story_count": STORY_COUNT,
+        "source_selection": "verified_date" if include_manual_editions else "fixed_editions",
         "sources": [source.record() for source in sources],
         "stories": stories,
         "layout": {
@@ -228,6 +233,7 @@ def main() -> int:
     parser.add_argument("--date", dest="target_date")
     parser.add_argument("--run", action="append", dest="runs")
     parser.add_argument("--force-render", action="store_true")
+    parser.add_argument("--include-manual-editions", action="store_true")
     args = parser.parse_args()
     try:
         output_root = (args.output_root or legacy.default_output_root()).expanduser().resolve()
@@ -236,7 +242,7 @@ def main() -> int:
             if args.target_date
             else datetime.now(legacy.KST).date()
         )
-        result = render(output_root, target_date, args.runs, args.force_render)
+        result = render(output_root, target_date, args.runs, args.force_render, args.include_manual_editions)
     except Exception as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 2

@@ -18,6 +18,8 @@ description: 지정일의 05·12·17시 공개 검증 뉴스픽 표지 3장을 �
 - 해당 날짜의 공개 검증 후보가 정확히 3개여야 한다. 하나라도 누락되거나 추가 수동 게시물 때문에 4개 이상이면 임의 선택하지 않고 게시 없이 중단한다.
 - 각 run의 실제 표지는 `03-create/slides/01.png`이며 1024×1024인지 확인한다.
 
+기본 배치는 설정된 정규 회차를 각각 하나씩 요구한다. 사용자가 **지금 오늘 게시물로 스토리 게시**를 요청했고 당일 공개 검증본이 정확히 3개지만 수동 회차가 섞였다면 `--include-manual-editions`로 당일 `verified_at` 순서의 세 게시물을 사용한다. 이 옵션은 `NEWS_PICK_DAILY_STORY_SCHEDULED_MODE=1`에서 거부되며, 기존 run의 회차·시각이나 실패한 예약 상태를 수정하지 않는다. 오늘 3개가 맞는지, 기존 스토리 제출 이력이 없는지 먼저 확인한다.
+
 ## 한 번에 실행
 
 사용자가 생성과 게시를 모두 명시적으로 요청했을 때만 다음을 실행한다.
@@ -35,6 +37,8 @@ python scripts/run_daily_story.py --date <YYYY-MM-DD> --account $env:IG_ACCOUNT 
 ```powershell
 python scripts/run_daily_story.py --date <YYYY-MM-DD>
 ```
+
+수동 회차를 포함한 오늘 게시물 3개를 미리보기로 준비할 때는 같은 명령에 `--include-manual-editions`를 추가한다. 비공식 API 사용과 게시 승인을 확인한 뒤에만 `--publish`를 추가한다.
 
 모든 proof frame과 manifest의 전체 source run, Instagram URL, SHA-256을 확인한 뒤 결과를 보여준다. 사용자가 이후 게시를 승인하면 같은 명령에 `--publish`를 붙인다. 이미 `status=published`인 동일 SHA-256 결과는 재게시하지 않고 성공으로 재사용한다.
 
@@ -62,6 +66,8 @@ Windows 작업은 매일 `21:00` KST에 시작한다. 같은 날짜의 상태 �
 - 세 Story URL과 영상 metadata를 모두 확인해야 성공이다. 공개 확인은 Microsoft Edge `edge9333`의 background target 하나에서 순서대로 수행하고 기존 Edge tab과 focus를 보존한다. Chrome/default/다른 CDP 연결은 사용하지 않는다.
 
 ## 개발과 검증
+
+업로드 후 검은 화면·캡처 timeout·focus 변경이 발생했거나 MoviePy 설치 여부가 불분명하면 [references/story-recovery.md](references/story-recovery.md)를 먼저 읽는다. **업로드 성공과 공개 검증 성공은 별개**이며, Edge 전면 활성화는 별도 승인 없이 시도하지 않는다. 복구는 기록된 Story ID를 확인하는 작업이지 재업로드가 아니다.
 
 FFmpeg·ffprobe·Pillow·Browser Harness, Microsoft Edge `edge9333`, `publish-news-pick`이 준비한 project-local `instagrapi` venv가 필요하다.
 

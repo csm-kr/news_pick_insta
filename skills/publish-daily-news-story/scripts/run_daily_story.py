@@ -22,6 +22,7 @@ def main() -> int:
     parser.add_argument("--run", action="append", dest="runs")
     parser.add_argument("--account", default=os.environ.get("IG_ACCOUNT"))
     parser.add_argument("--force-render", action="store_true")
+    parser.add_argument("--include-manual-editions", action="store_true")
     parser.add_argument(
         "--publish",
         action="store_true",
@@ -40,6 +41,7 @@ def main() -> int:
             target_date,
             explicit_runs=args.runs,
             force=args.force_render,
+            include_manual_editions=args.include_manual_editions,
         )
         response = {"render": rendered, "publish_requested": args.publish}
         if args.publish:
