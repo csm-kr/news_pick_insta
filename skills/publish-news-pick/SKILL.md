@@ -39,6 +39,10 @@ description: 승인된 1080×1350 PNG 다섯 장을 설정된 Instagram 계정�
 - `공유하기`는 한 번만 누르고 `게시물이 공유되었습니다` 성공 표시가 확인되지 않으면 자동 재시도하지 않는다.
 - `album_upload()` 호출 뒤 오류·timeout은 자동 재시도하지 않는다.
 
+## DOM 오류와 스킬 갱신
+
+작성창·file input·exact control 오류가 나면 [references/dom-diagnostics-and-update.md](references/dom-diagnostics-and-update.md)를 따른다. 먼저 고정 Edge `edge9333`의 읽기 전용 `browser_web_dom_probe.py`로 현재 단계·가시 control·다중 input을 기록한다. 로딩 지연과 실제 구조 변경을 구분한 뒤 저장소 helper·회귀 테스트를 수정하고, 테스트 → 백업을 포함한 설치본 갱신 → SHA-256 일치 → 설치본 재진단 순서로 검증한다. 공유 여부가 모호한 job이나 이미 열린 crop은 재업로드하지 않는다.
+
 ## 최초 설정
 
 고정 Edge profile을 열고 Edge 전용 게시 설정을 등록한다.

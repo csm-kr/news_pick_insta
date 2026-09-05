@@ -95,6 +95,10 @@ def read_upload_state():
   return {
     url:location.href,
     dialog_present:!!dialog,
+    has_create_dialog:!!dialog && ['새 게시물 만들기','Create new post'].includes(
+      (dialog.getAttribute('aria-label')||dialog.querySelector('[role=heading]')?.innerText||'').trim()),
+    file_inputs:[...root.querySelectorAll('input[type=file]')].slice(0,10)
+      .map(element=>({multiple:element.multiple,accept:element.accept,disabled:element.disabled})),
     input_present:!!input,
     file_count:input?.files?.length||0,
     file_names:input?[...input.files].map(f=>f.name):[],
@@ -109,6 +113,31 @@ def read_upload_state():
 })()
 """
     )
+
+
+def wait_for_multiple_input(timeout=8, dialog_grace=12):
+    started = time.monotonic()
+    deadline = started + timeout
+    state = {}
+    while time.monotonic() < deadline:
+        input_state = js("(() => { const input=document.querySelector('input[type=file][multiple]'); return {exists:!!input,multiple:input?.multiple===true}; })()")
+        state = read_upload_state()
+        if state.get('login_wall') or state.get('challenge'):
+            raise RuntimeError('Instagram authentication boundary while opening composer')
+        if input_state.get('exists') and input_state.get('multiple') is True:
+            return input_state
+        if state.get('has_create_dialog'):
+            deadline = started + timeout + dialog_grace
+        paced_wait(0.22, 0.36)
+    reason = 'create_dialog_input_missing' if state.get('has_create_dialog') else 'create_dialog_unavailable'
+    diagnostic = {key: state.get(key) for key in (
+        'dialog_present', 'has_create_dialog', 'file_inputs', 'input_present',
+        'has_crop', 'has_next', 'login_wall', 'challenge')}
+    print('INSTAGRAM_COMPOSER_DIAGNOSTIC=' + json.dumps({
+        'reason': reason, 'elapsed_seconds': round(time.monotonic() - started, 2),
+        'state': diagnostic, 'retry_create': False, 'submission_started': False,
+    }, ensure_ascii=True))
+    raise RuntimeError('multiple file input was not found: ' + reason + '; run browser_web_dom_probe.py before updating selectors')
 
 
 targets = [
@@ -177,14 +206,7 @@ else:
         except RuntimeError:
             clicked = click_named_control("만들기")
         paced_wait(0.32, 0.58)
-    deadline = time.monotonic() + 8
-    while time.monotonic() < deadline:
-        input_state = js("(() => { const input=document.querySelector('input[type=file][multiple]'); return {exists:!!input,multiple:input?.multiple===true}; })()")
-        if input_state.get("exists"):
-            break
-        paced_wait(0.22, 0.36)
-    if not input_state.get("exists") or input_state.get("multiple") is not True:
-        raise RuntimeError("multiple file input was not found")
+    input_state = wait_for_multiple_input()
     upload_file(selector, media)
     deadline = time.monotonic() + 12
     state = read_upload_state()

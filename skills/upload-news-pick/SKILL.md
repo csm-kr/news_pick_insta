@@ -116,6 +116,8 @@ python scripts/orchestrate.py complete-stage --run <run-directory> --stage searc
 
 ## 자동 게시 차단
 
+DOM/control 오류나 이전 게시 실패 점검을 요청받으면 `publish-news-pick`의 [DOM 점검·업데이트 절차](../publish-news-pick/references/dom-diagnostics-and-update.md)를 먼저 적용한다. 모든 진단도 Edge `edge9333`에 고정하며, 라이브 관찰 없이 selector 변경으로 단정하거나 run-local 우회 업로더를 만들지 않는다. 저장소와 실제 설치본을 함께 갱신·검증한 다음 정상 단계로 돌아온다.
+
 다음 중 하나면 즉시 멈춘다.
 
 - 검증되지 않은 유출·루머·사생활, 선거 결과 또는 충돌하는 근거
