@@ -122,6 +122,8 @@ SET DIVERSITY — HARD REQUIREMENT
 
 LAYOUT AND READABILITY
 - {canvas}, mobile-first, generous safe margins, exact vertical alignment and strong negative space.
+- For a 4:5 target with 1024x1536 raw, the surviving crop is x=0..1024, y=128..1408, NOT the full raw canvas. Every glyph, logo and table border must be inside raw x=69..955, y=197..1339; use extra breathing room x=95..929, y=230..1290 when possible. Do not treat a 72px raw margin as sufficient.
+- For a 4:5 target, do not compose body cards as tall 2:3 posters. Fit the complete title, readable prose, factual image, ALL table rows and basis date into the central 4:5 design. Reduce oversized headings and photo-panel height before losing text, the last table row, or the date. Do not solve overflow by making prose or table cells tiny.
 - One dominant message per card. The main statistic or headline must be readable at Instagram feed size.
 - Card 1 must lead with a verified consequence, loss, gap, reversal, or deadline plus the strongest comparison number. Put this tension in the first visual reading beat; never stop at an institution name, policy name, indicator name, or percentage.
 - On card 1, make the headline forceful while the deck immediately states the affected group, eligibility condition, procedure, or basis time that keeps it accurate. Never postpone a crucial limitation to a later card.

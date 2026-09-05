@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import concurrent.futures
 import hashlib
 import json
 import os
@@ -12,6 +11,8 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+from image_backend_runtime import resolve_runtime, run_checked_batch
 
 
 def sha256(path: Path) -> str:
@@ -90,7 +91,7 @@ def validate_public_reference_egress(jobs: list[dict], work: Path) -> list[Path]
     return approved
 
 
-def run_one(record: dict, work: Path, script: Path, dry_run: bool, force: bool) -> dict:
+def run_one(record: dict, work: Path, script: Path, dry_run: bool, force: bool, environment=None) -> dict:
     job_path = Path(record["job"])
     target = work / "candidates" / record["direction_id"] / f"card-{record['card_index']:02d}.png"
     if not dry_run and not force and target.is_file() and target.stat().st_size > 0:
@@ -102,13 +103,16 @@ def run_one(record: dict, work: Path, script: Path, dry_run: bool, force: bool) 
             "path": str(target.resolve()),
             "sha256": sha256(target),
         }
-    command = [os.environ.get("GOD_TIBO_NODE", "node"), str(script), "--job", str(job_path)]
+    diagnostic = Path(__file__).with_name("image_backend_diagnostic.mjs").resolve()
+    command = [os.environ.get("GOD_TIBO_NODE", "node"), "--import", diagnostic.as_uri(), str(script), "--job", str(job_path)]
     if dry_run:
         command.append("--dry-run")
-    completed = subprocess.run(command, cwd=str(job_path.parent), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1200)
+    completed = subprocess.run(command, cwd=str(job_path.parent), env=environment, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1200)
     result = {**record, "returncode": completed.returncode}
     if completed.returncode != 0:
-        result["error"] = (completed.stderr or completed.stdout)[-2000:]
+        error_output = completed.stderr or completed.stdout
+        diagnostics = [line for line in error_output.splitlines() if line.startswith("IMAGE_BACKEND_DIAGNOSTIC=")]
+        result["error"] = "\n".join(diagnostics[-1:] + [error_output[-1400:]])
         return result
     if dry_run:
         result["dry_run"] = True
@@ -139,6 +143,8 @@ def main() -> int:
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--workers", type=int, default=12)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--imagegen-auth-file", type=Path)
+    parser.add_argument("--imagegen-model")
     parser.add_argument(
         "--approve-public-reference-egress",
         action="store_true",
@@ -165,9 +171,12 @@ def main() -> int:
         script = (tibo_root() / "scripts" / "tibo-batch.mjs").resolve()
         if not script.is_file():
             raise ValueError(f"Tibo 실행기를 찾을 수 없다: {script}")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
-            futures = [pool.submit(run_one, record, args.work_dir, script, args.dry_run, args.force) for record in jobs]
-            results = [future.result() for future in futures]
+        environment, runtime = resolve_runtime(args.imagegen_auth_file, args.imagegen_model)
+        print(json.dumps({"backend_runtime": runtime}, ensure_ascii=False), flush=True)
+        results = run_checked_batch(
+            jobs, lambda record: run_one(record, args.work_dir, script, args.dry_run, args.force, environment),
+            args.workers, args.dry_run,
+        )
         failures = [item for item in results if not item.get("ok") and not item.get("dry_run")]
         manifest = {
             "schema_version": "1.0",
@@ -180,10 +189,14 @@ def main() -> int:
             "approved_reference_count": len({path.resolve() for path in approved_references}),
             "status": "complete" if not failures else "incomplete",
             "results": results,
+            "backend_runtime": runtime,
+            "backend_preflight": "dry_run_only" if args.dry_run else "first_uncached_candidate",
+            "skipped_count": sum(bool(item.get("skipped")) for item in results),
         }
         (args.work_dir / "visual-manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         if failures:
-            raise RuntimeError(f"12장 중 {len(failures)}장이 실패했다.")
+            skipped = sum(bool(item.get("skipped")) for item in failures)
+            raise RuntimeError(f"생성 실패 {len(failures) - skipped}건, 사전 점검으로 미실행 {skipped}건. visual-manifest.json을 확인한다.")
     except (OSError, ValueError, RuntimeError, KeyError, json.JSONDecodeError, subprocess.SubprocessError) as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 1

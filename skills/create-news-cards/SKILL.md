@@ -5,6 +5,10 @@ description: 검증된 뉴스 스토리보드와 실제 기사 사진·공식 �
 
 # Create News Cards
 
+중간 카드의 제목·표·사진이 잘리면 [references/crop-loss-recovery.md](references/crop-loss-recovery.md)에 따라 실제 backend raw와 최종본을 비교한다. `audit_generated_crops.py`의 생존 영역·손실량은 진단값일 뿐 내용 QA 통과가 아니다. 잘린 후보는 게시하지 않고 해당 카드만 재생성한다.
+
+이미지 생성의 401/400, 재로그인 후 동일 오류, 지원하지 않는 모델 오류는 [references/image-backend-recovery.md](references/image-backend-recovery.md)를 먼저 따른다. 실행기는 인증 경로와 현재 설정 모델을 기록하고 첫 미생성 후보 성공 후 나머지를 병렬 처리한다. 로그인 표시만으로 실제 인증 성공을 단정하거나 다른 인증 홈으로 자동 전환하지 않는다.
+
 생성 모델이 완성 카드 전체를 만든다. 실제 기사 대표 사진과 공식 발표·공시 화면을 reference로 제공하고, 모델이 사진 재구성·한글 카피·핵심 수치·차트를 한 이미지 안에서 완성하게 한다. 코드는 렌더링이나 오버레이에 쓰지 않고 크기·해시·장수·매니페스트 QA에만 쓴다.
 
 모든 `--work-dir`은 `<NEWS_PICK_OUTPUT_ROOT>/runs/<run_id>/03-create`처럼 skill 폴더 밖에 둔다. Tibo는 `GOD_TIBO_SKILL_ROOT`, 형제 skill, `$CODEX_HOME/skills`, `~/.agents/skills` 순서로 찾고 없으면 생성 전에 중단한다. 기사·공식 reference를 웹에서 확보해야 할 때는 `../publish-news-pick/references/edge-browser-contract.md`를 읽고 Microsoft Edge의 Browser Harness `edge9333` 연결만 사용한다.
