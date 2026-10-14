@@ -1,0 +1,4 @@
+interface:
+  display_name: "맞팔 아닌 팔로잉 정리"
+  short_description: "나를 팔로우하지 않는 계정을 천천히 팔로우 취소"
+  default_prompt: "Use $unfollow-non-followers to unfollow accounts that do not follow newspick_studio back."
