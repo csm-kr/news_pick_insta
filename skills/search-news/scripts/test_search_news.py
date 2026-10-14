@@ -27,6 +27,11 @@ class SearchNewsTests(unittest.TestCase):
             "topic": topic,
             "editorial_lane": lane,
             "audience_fit": audience_fit or {"everyday_relevance": 3, "conversation_value": 2, "visual_explainability": 2, "novelty": 2},
+            "reaction_score": {"observable_response": 3, "coverage_breadth": 2, "conversation_heat": 2, "persistence": 2},
+            "reaction_signals": [
+                {"type": "portal_rank", "source": "portal.example", "value": "1위", "observed_at": "2026-08-17T08:05:00Z"},
+                {"type": "cross_outlet_coverage", "source": "press survey", "value": "8개 매체", "observed_at": "2026-08-17T08:06:00Z"},
+            ],
             "verified_headline": "x",
             "why_it_matters": "x",
             "official_required": True,
@@ -63,7 +68,7 @@ class SearchNewsTests(unittest.TestCase):
         self.assertNotIn("yna-economy", enabled)
 
     def test_rejects_portal_url(self):
-        story = {"schema_version": "1.0", "story_id": "x", "edition_at": "x", "topic": "society", "editorial_lane": "popular_interest", "audience_fit": {"everyday_relevance": 3, "conversation_value": 2, "visual_explainability": 2, "novelty": 2}, "verified_headline": "x", "why_it_matters": "x", "claims": [{"id": "c", "text": "x", "status": "verified", "evidence_ids": ["a", "b"]}], "sources": [
+        story = {"schema_version": "1.0", "story_id": "x", "edition_at": "x", "topic": "society", "editorial_lane": "popular_interest", "audience_fit": {"everyday_relevance": 3, "conversation_value": 2, "visual_explainability": 2, "novelty": 2}, "reaction_score": {"observable_response": 3, "coverage_breadth": 2, "conversation_heat": 2, "persistence": 2}, "reaction_signals": [{"type": "portal_rank", "source": "portal", "value": "1", "observed_at": "x"}, {"type": "coverage", "source": "press", "value": "2", "observed_at": "x"}], "verified_headline": "x", "why_it_matters": "x", "claims": [{"id": "c", "text": "x", "status": "verified", "evidence_ids": ["a", "b"]}], "sources": [
             {"id": "a", "publisher": "A", "source_type": "press_article", "canonical_url": "https://news.google.com/x", "published_at": "x", "observed_at": "x", "locator": "x"},
             {"id": "b", "publisher": "B", "source_type": "press_article", "canonical_url": "https://b.example/x", "published_at": "x", "observed_at": "x", "locator": "x"}], "verification_status": "verified"}
         with self.assertRaises(ValueError):
