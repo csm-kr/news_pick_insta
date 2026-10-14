@@ -59,9 +59,9 @@ python skills/upload-news-pick/scripts/orchestrate.py init `
 
 ## 예약 무인 게시
 
-Windows에서는 Task Scheduler로 `05:00 연예`, `12:00 주요 이슈`, `17:00 정치` KST 회차를 등록합니다. 로그인된 사용자 세션, Codex CLI 로그인, `%LOCALAPPDATA%\NewsPick\EdgeProfile`의 Instagram 로그인이 필요합니다.
+Windows에서는 Task Scheduler로 `07:00 연예`, `12:00 연예`, `17:00 최고 반응 이슈` KST 회차를 등록합니다. 각 회차는 `scheduled_runner.py`가 Claude Code 비대화형 실행(`claude -p`)으로 네 스킬을 수행합니다. 로그인된 사용자 세션, Claude Code CLI 로그인(`claude auth status`), `%LOCALAPPDATA%\NewsPick\EdgeProfile`의 Instagram 로그인이 필요합니다. 모델·effort는 `NEWS_PICK_CLAUDE_MODEL`, `NEWS_PICK_CLAUDE_EFFORT`로 바꾸고, 이미지 백엔드 인증 파일·모델은 `output/workspace.json`의 `imagegen` 블록으로 지정합니다.
 
-매일 `21:00`에는 위 세 회차의 공개 검증 표지를 각각 6초 Story로 만들어 정확히 3개를 Edge `edge9333` 세션에서 게시·검증합니다.
+매일 `19:00`에는 위 세 회차의 공개 검증 표지를 각각 6초 Story로 만들어 정확히 3개를 Edge `edge9333` 세션에서 게시·검증합니다.
 
 ```powershell
 python skills/upload-news-pick/scripts/scheduled_runner.py --slot 17:00 --dry-run
@@ -71,7 +71,7 @@ powershell -ExecutionPolicy Bypass -File skills/upload-news-pick/scripts/manage_
 
 동일 회차 중복 실행, 30분을 넘긴 missed run, QA 실패, 모호한 제출은 자동 게시하지 않습니다. 상태와 로그는 Git에서 제외된 `output/scheduler`와 `output/logs/scheduler`에 저장됩니다.
 
-매일 `21:00`에는 그날 공개 검증된 뉴스 캐러셀 전부의 첫 카드만 모아 6초 Story로 게시합니다. 게시물이 3개면 대문 3장, 4개면 대문 4장처럼 당일 게시 완료 목록 전체를 사용합니다.
+매일 `19:00`에는 그날 공개 검증된 뉴스 캐러셀 전부의 첫 카드만 모아 6초 Story로 게시합니다. 게시물이 3개면 대문 3장, 4개면 대문 4장처럼 당일 게시 완료 목록 전체를 사용합니다.
 
 ```powershell
 python skills/publish-daily-news-story/scripts/scheduled_story_runner.py --dry-run
@@ -85,12 +85,12 @@ powershell -ExecutionPolicy Bypass -File skills/publish-daily-news-story/scripts
 2. `plan-news-pick` — 중립적 강후킹, 사실·카피·차트·고유 시각 역할 기획
 3. `create-news-cards` — 기사·공식 이미지 reference 기반 1024×1024 카드 생성과 중복 QA
 4. `publish-news-pick` — 고정 Microsoft Edge `edge9333` 연결의 Instagram 웹 UI 게시·공개 검증
-5. `publish-daily-news-story` — 오늘 검증된 모든 표지를 FFmpeg 6초 영상으로 만들어 Story 게시·검증
+5. `publish-daily-news-story` — 오늘 검증된 모든 표지를 FFmpeg 6초 영상으로 만들어 19시에 Story 게시·검증
 6. `upload-news-pick` — 네 단계를 hash·승인 게이트로 연결하는 오케스트레이터
 
 ## 외부 의존성
 
-- Python 3.10 이상과 Pillow
+- Python 3.10 이상과 Pillow, numpy, OpenCV(`opencv-python`, 같은 장면 reference 중복 검사용)
 - Node.js
 - FFmpeg와 ffprobe
 - Browser Harness CLI
