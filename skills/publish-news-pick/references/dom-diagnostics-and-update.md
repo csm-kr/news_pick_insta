@@ -41,3 +41,20 @@ Get-FileHash "$HOME/.codex/skills/publish-news-pick/scripts/browser_web_upload_p
 ```
 
 bootstrap은 기존 뉴스픽 pack을 백업한 뒤 함께 갱신한다. 실제 설치 경로가 다르면 `--skills-dir`에 그 경로를 명시한다. 활성 게시 executor와 겹치는 동안에는 설치하지 않는다. 테스트 통과, 설치본 hash 일치, 설치본 읽기 전용 진단까지 확인해야 갱신 완료다. 코드 테스트와 실제 게시 성공은 별개로 보고한다. exact payload 승인을 새로 받기 전에는 공유하지 않는다.
+
+## 클릭이 화면에 닿지 않을 때 (2026-09-12 실측)
+
+2026-09-11 밤 수동 run에서 `create_dialog_unavailable`가 세 번 연속 났다. 라이브 관찰에서 두 가지가 확인됐다.
+
+- 스토리 뷰어 탭에서 프로필로 막 이동한 직후에는 `새로운 게시물` 라벨이 계정 프로필 링크(`href=/<account>/`)에 붙어 후보 목록 앞에 나온다. 그 후보를 누르면 프로필로 이동만 하고 작성 dialog는 열리지 않는다. `click_named_control`은 이제 계정 프로필 href를 가진 후보를 항상 뒤로 민다.
+- 좌표 클릭 자체는 브라우저 줌이 올라가 있어도 정확히 도달한다. 빈 탭과 Instagram 탭에서 보낸 좌표와 페이지가 받은 `clientX/clientY`가 일치했다. 반면 `Emulation.setDeviceMetricsOverride`로 레이아웃 폭을 넓힌 상태에서는 같은 좌표 클릭이 도달하지 않았다. 폭을 넓히려고 override를 걸지 않는다.
+
+그래서 `browser_web_upload_prepare.py`와 `browser_web_share_once.py`는 좌표 클릭 뒤 상태를 한 번 확인하고, 아무 변화가 없을 때만 같은 좌표로 합성 포인터 시퀀스를 한 번 더 보낸다. 공유는 `공유하기` control이 같은 자리에 그대로 남아 있을 때만 보강하고, control이 사라졌으면 다른 주체가 이미 제출했을 수 있으므로 다시 누르지 않고 성공 표지만 확인한다(`submission_already_started`). 두 보강 모두 한 번뿐이며 결과 JSON의 `reinforced_with_pointer_sequence`로 남는다.
+
+사이드바가 좁아지는 레이아웃(실측 855~933px)에서도 `새로운 게시물` 컨트롤 자체는 `href="#"`로 존재한다. 좁다는 이유만으로 줌 조정을 요구하기 전에 후보 목록과 href를 먼저 읽는다.
+
+## AI 라벨 switch의 hit-test (2026-09-12)
+
+2026-09-12 07:00 회차는 `ensure_ai_label`이 `hit_matches=false`로 클릭을 한 번도 시도하지 못한 채 멈췄다. switch는 `visible=true`, `disabled=false`인데 `elementFromPoint(중심좌표)`가 그 요소도 자식도 아닌 형제를 돌려줬다. Instagram의 toggle이 숨은 `input` 위에 렌더 요소를 덮는 구조이기 때문이며, 그 형제는 같은 toggle 래퍼 안에 있으므로 좌표 클릭은 toggle에 도달한다.
+
+그래서 `hit_matches`는 `element.parentElement.contains(hit)`까지 인정한다. 래퍼 밖의 다른 오버레이가 찍히면 여전히 `false`이고 클릭하지 않는다. 회귀 테스트는 Node DOM fixture의 `sibling` 케이스다. 이 판정을 더 넓히지 않는다.

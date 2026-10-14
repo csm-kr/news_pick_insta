@@ -65,7 +65,7 @@ python scripts/carousel_queue.py record-web-submitted <job_id> --shortcode <code
 - carousel 장수가 일치
 - 5개 index가 서로 다른 media source이며 모든 주 이미지의 자연·렌더 비율이 `0.78~0.82`
 - caption 첫 문장과 기준시각이 일치
-- 사실적 AI 재구성 카드에 현재 Instagram 공개 DOM의 `AI 콘텐츠`, `AI 크리에이터` 또는 `Made with AI` 표시가 보임
+- 사실적 AI 재구성 카드에 현재 Instagram 공개 DOM의 `AI 콘텐츠`, `AI 크리에이터`, `Made with AI` 또는 `AI로 생성한 프로필` 표시가 보임
 
 화살표와 pagination dot은 DOM에서 사라질 수 있다. 공유 성공 직후 같은 승인 거래임을 나타내는 `IG_APPROVED_PUBLISH_VERIFY=1`을 설정하고 `scripts/browser_web_verify_carousel.py`로 permalink의 `?img_index=1`부터 `?img_index=<장수>`까지 열어 active index 순서와 서로 다른 media source 5개를 확인한다. 본문 주 이미지는 화면 상단의 4:5 이미지와 자연·렌더 비율로 고르며, 페이지 아래 `게시물 더 보기`의 정방형 thumbnail을 제외한다. 첫·마지막 JPEG screenshot을 남기고 실제 마지막 출처 카드가 보이지 않으면 검증 실패다.
 
@@ -75,7 +75,7 @@ python scripts/carousel_queue.py record-web-submitted <job_id> --shortcode <code
 
 ## AI 라벨 저장 누락 복구
 
-작성 직전 switch가 `true`였어도 공개 페이지에 `AI 콘텐츠`, `AI 크리에이터`, `Made with AI` 중 어느 표시도 없을 수 있다. 이 경우 새 게시물을 만들지 않는다.
+작성 직전 switch가 `true`였어도 공개 페이지에 `AI 콘텐츠`, `AI 크리에이터`, `Made with AI`, `AI로 생성한 프로필` 중 어느 표시도 없을 수 있다. 이 경우 새 게시물을 만들지 않는다.
 
 1. 해당 permalink의 `옵션 더 보기` → `수정`을 연다.
 2. `AI 라벨 추가`가 `true`인지 확인한다.
