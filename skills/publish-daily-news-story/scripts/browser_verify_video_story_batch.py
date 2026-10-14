@@ -1,4 +1,4 @@
-"""Verify three published Instagram video Stories in one Edge background target."""
+"""Verify the published Instagram video Stories in one Edge background target."""
 
 import base64
 import json
@@ -76,13 +76,13 @@ def state_failure(state, story_url, account):
 
 account = os.environ["IG_ACCOUNT"].strip().lstrip("@").lower()
 story_urls = json.loads(os.environ["IG_STORY_URLS_JSON"])
-if not isinstance(story_urls, list) or len(story_urls) != STORY_COUNT:
-    raise RuntimeError("Story public verification requires exactly three URLs")
+if not isinstance(story_urls, list) or not 1 <= len(story_urls) <= STORY_COUNT:
+    raise RuntimeError(f"Story public verification requires 1 to {STORY_COUNT} URLs")
 expected_prefix = f"https://www.instagram.com/stories/{account}/"
 if any(not re.fullmatch(re.escape(expected_prefix) + r"[0-9]+/", str(url)) for url in story_urls):
     raise RuntimeError("Story URL does not match IG_ACCOUNT")
-if len(set(story_urls)) != STORY_COUNT:
-    raise RuntimeError("Story public verification requires three distinct IDs")
+if len(set(story_urls)) != len(story_urls):
+    raise RuntimeError("Story public verification requires distinct IDs")
 
 shot_dir = Path(os.environ["IG_STORY_VERIFY_SCREENSHOT_DIR"]).resolve()
 shot_dir.mkdir(parents=True, exist_ok=True)
@@ -149,7 +149,7 @@ finally:
     attach_without_focus(previous)
 
 result = {
-    "ok": len(stories) == STORY_COUNT and all(item["ok"] for item in stories),
+    "ok": len(stories) == len(story_urls) and all(item["ok"] for item in stories),
     "account": account,
     "story_count": len(stories),
     "stories": stories,

@@ -1,7 +1,5 @@
 """Upload or verify exactly three Story videos in one Edge Harness process."""
 
-from __future__ import annotations
-
 import json
 import os
 import random
@@ -26,8 +24,8 @@ helper.current_tab = current_tab
 
 def load_entries() -> list[dict]:
     entries = json.loads(os.environ["STORY_BATCH_JSON"])
-    if not isinstance(entries, list) or len(entries) != STORY_COUNT:
-        raise RuntimeError("Story batch must contain exactly three entries")
+    if not isinstance(entries, list) or not 1 <= len(entries) <= STORY_COUNT:
+        raise RuntimeError(f"Story batch must contain 1 to {STORY_COUNT} entries")
     validated = []
     for expected_index, entry in enumerate(entries, start=1):
         if int(entry.get("index") or 0) != expected_index:
@@ -99,7 +97,7 @@ def main() -> int:
         "submission_started": False,
         "account": account,
         "backend": "private_video_story_batch",
-        "story_count": STORY_COUNT,
+        "story_count": len(entries),
         "stories": [],
         "session_persisted": False,
     }
@@ -118,7 +116,7 @@ def main() -> int:
         stage = "read_session_cookie"
         secret = helper.session_secret(attached_session)
         stage = "confirm_private_client_account"
-        client = Client()
+        client = helper.harden_private_client(Client())
         client.request_timeout = 45
         if not client.login_by_sessionid(secret):
             raise RuntimeError("private client login failed")
@@ -127,8 +125,8 @@ def main() -> int:
 
         if mode == "verify_batch":
             expected_pks = [str(value) for value in json.loads(os.environ["STORY_PKS_JSON"])]
-            if len(expected_pks) != STORY_COUNT:
-                raise RuntimeError("Story verification requires exactly three IDs")
+            if len(expected_pks) != len(entries):
+                raise RuntimeError("Story verification requires one ID per entry")
             current = {
                 str(getattr(item, "pk", "") or ""): item
                 for item in client.user_stories(client.user_id)

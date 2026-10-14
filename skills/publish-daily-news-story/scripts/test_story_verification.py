@@ -19,12 +19,15 @@ import publish_story_batch
 
 
 class BrowserStoryVerificationTests(unittest.TestCase):
-    def run_task(self, change_state=None, capture_error=False, duplicate_urls=False):
+    def run_task(self, change_state=None, capture_error=False, duplicate_urls=False, story_count=3):
         navigations = []
         captures = []
         closed = []
         reads = []
-        urls = [f"https://www.instagram.com/stories/example/{index}/" for index in (1, 2, 3)]
+        urls = [
+            f"https://www.instagram.com/stories/example/{index}/"
+            for index in range(1, story_count + 1)
+        ]
         if duplicate_urls:
             urls[2] = urls[0]
 
@@ -109,6 +112,13 @@ class BrowserStoryVerificationTests(unittest.TestCase):
         self.assertTrue(all(item["url_match"] for item in outcome["result"]["stories"]))
         self.assertEqual(outcome["screenshot_bytes"], b"fresh-frame")
         self.assertEqual(outcome["closed"], ["work"])
+
+    def test_two_loaded_stories_verify_when_only_two_were_published(self):
+        outcome = self.run_task(story_count=2)
+        self.assertIsNone(outcome["error"])
+        self.assertTrue(outcome["result"]["ok"])
+        self.assertEqual(outcome["result"]["story_count"], 2)
+        self.assertTrue(all(item["url_match"] for item in outcome["result"]["stories"]))
 
     def test_loading_timeout_never_captures_placeholder_or_reuses_old_file(self):
         def unloaded(state, count):
@@ -236,3 +246,47 @@ class StoryRecoveryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PrivateClientHardeningTests(unittest.TestCase):
+    """Instagram이 제거한 qe/expose 404가 게시 성공을 덮어쓰지 않아야 한다."""
+
+    def load_helper(self):
+        import importlib
+        module = importlib.import_module("private_video_story_task")
+        return importlib.reload(module)
+
+    def test_harden_private_client_neutralizes_removed_expose_endpoint(self):
+        helper = self.load_helper()
+
+        class Client:
+            def __init__(self):
+                self.exposed = 0
+
+            def expose(self):
+                self.exposed += 1
+                raise RuntimeError(
+                    "404 Client Error: Not Found for url: https://i.instagram.com/api/v1/qe/expose/"
+                )
+
+        client = helper.harden_private_client(Client())
+        self.assertEqual(client.expose(), {})
+        self.assertEqual(client.exposed, 0)
+
+    def test_story_upload_is_not_lost_when_expose_fails(self):
+        helper = self.load_helper()
+        uploaded = []
+
+        class Client:
+            def video_upload_to_story(self, path, **kwargs):
+                uploaded.append(path)
+                self.expose()
+                return {"pk": "1", "id": "1_2"}
+
+            def expose(self):
+                raise RuntimeError("404 Client Error: Not Found for url: https://i.instagram.com/api/v1/qe/expose/")
+
+        client = helper.harden_private_client(Client())
+        story = client.video_upload_to_story("story-01.mp4")
+        self.assertEqual(story["pk"], "1")
+        self.assertEqual(uploaded, ["story-01.mp4"])

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run three separate verified-cover Instagram Stories at 21:00 KST."""
+"""Run three separate verified-cover Instagram Stories at 19:00 KST."""
 
 from __future__ import annotations
 
@@ -18,7 +18,9 @@ from zoneinfo import ZoneInfo
 
 
 KST = ZoneInfo("Asia/Seoul")
-STORY_TIME = time(21, 0)
+# 예약 작업은 pythonw로 창 없이 돈다. 콘솔 자식은 숨은 콘솔로 띄워 창이 번쩍이거나 닫혀 run이 죽지 않게 한다.
+NO_WINDOW_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+STORY_TIME = time(19, 0)
 MAX_START_LATENESS = timedelta(minutes=30)
 STALE_LOCK_AGE = timedelta(hours=2)
 
@@ -117,7 +119,7 @@ def dependency_paths(root: Path, output_root: Path) -> dict[str, str]:
     missing = [name for name, value in dependencies.items() if not value]
     if missing:
         raise FileNotFoundError(
-            "21시 Story 예약 실행 의존성이 없다: " + ", ".join(missing)
+            "19시 Story 예약 실행 의존성이 없다: " + ", ".join(missing)
         )
     return dependencies
 
@@ -192,7 +194,7 @@ def run_job(
 ) -> tuple[int, dict[str, Any]]:
     output_root: Path = settings["output_root"]
     dependencies = dependency_paths(root, output_root)
-    slot_id = target.strftime("%Y-%m-%d-2100")
+    slot_id = target.strftime("%Y-%m-%d-1900")
     scheduler_root = output_root / "scheduler" / "daily-story"
     state_path = scheduler_root / "editions" / f"{slot_id}.json"
     command = story_command(root, target.date(), settings)
@@ -269,6 +271,7 @@ def run_job(
             errors="replace",
             env=environment,
             check=False,
+            creationflags=NO_WINDOW_FLAGS,
         )
         if launched.returncode != 0:
             stdout_path.write_text(launched.stdout or "", encoding="utf-8")
@@ -290,6 +293,7 @@ def run_job(
             errors="replace",
             env=environment,
             check=False,
+            creationflags=NO_WINDOW_FLAGS,
         )
     stdout_path.write_text(completed.stdout or "", encoding="utf-8")
     stderr_path.write_text(completed.stderr or "", encoding="utf-8")

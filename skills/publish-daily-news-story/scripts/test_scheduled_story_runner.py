@@ -23,7 +23,7 @@ class ScheduledStoryRunnerTests(unittest.TestCase):
 
     def test_story_time_uses_korean_time(self):
         value = MOD.story_at(date(2026, 8, 20))
-        self.assertEqual(value.isoformat(), "2026-08-20T21:00:00+09:00")
+        self.assertEqual(value.isoformat(), "2026-08-20T19:00:00+09:00")
 
     def test_start_window_rejects_early_and_catch_up_runs(self):
         target = MOD.story_at(date(2026, 8, 20))
@@ -58,7 +58,7 @@ class ScheduledStoryRunnerTests(unittest.TestCase):
                 / "scheduler"
                 / "daily-story"
                 / "editions"
-                / "2026-08-20-2100.json"
+                / "2026-08-20-1900.json"
             )
             MOD.atomic_json(state, {"status": "published"})
             with patch.object(MOD, "dependency_paths", return_value={"ok": "yes"}):
@@ -103,6 +103,26 @@ class ScheduledStoryRunnerTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(result["status"], "published")
 
+
+    def test_run_job_starts_children_without_console_window(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            settings = self.settings(root)
+            target = MOD.story_at(date(2026, 8, 20))
+            launched = subprocess.CompletedProcess(args=[], returncode=0, stdout='{"ok": true}', stderr="")
+            completed = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="")
+            with patch.object(
+                MOD, "dependency_paths", return_value={"edge_launcher": "launch_edge_profile.py"}
+            ), patch.object(MOD.subprocess, "run", side_effect=[launched, completed]) as run:
+                MOD.run_job(root, target, settings, target)
+            for call in run.call_args_list:
+                self.assertEqual(call.kwargs.get("creationflags", 0), MOD.NO_WINDOW_FLAGS)
+            if MOD.sys.platform == "win32":
+                self.assertEqual(MOD.NO_WINDOW_FLAGS, subprocess.CREATE_NO_WINDOW)
+
+    def test_windows_task_uses_pythonw_so_no_console_opens(self):
+        script = Path(__file__).with_name("manage_windows_story_schedule.ps1").read_text(encoding="utf-8")
+        self.assertIn("pythonw.exe", script)
 
 if __name__ == "__main__":
     unittest.main()
