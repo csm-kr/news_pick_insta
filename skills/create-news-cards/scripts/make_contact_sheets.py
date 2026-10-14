@@ -22,19 +22,19 @@ def main() -> int:
         outputs = []
         for direction in sorted((args.work_dir / "candidates").glob("direction-*")):
             cards = sorted(direction.glob("card-*.png"))
-            if len(cards) not in (3, 4):
-                raise ValueError(f"{direction.name}은 완결된 3~4장 세트가 아니다.")
+            if len(cards) != 5:
+                raise ValueError(f"{direction.name}은 완결된 5장 세트가 아니다.")
             thumbs = []
             for path in cards:
                 with Image.open(path) as image:
                     thumb = image.convert("RGB")
-                    thumb.thumbnail((270, 338))
+                    thumb.thumbnail((216, 270))
                     thumbs.append(thumb.copy())
-            sheet = Image.new("RGB", (len(thumbs) * 290 + 20, 410), "#111111")
+            sheet = Image.new("RGB", (len(thumbs) * 236 + 20, 340), "#111111")
             draw = ImageDraw.Draw(sheet)
             draw.text((20, 12), direction.name, fill="white", font=ImageFont.load_default())
             for index, thumb in enumerate(thumbs):
-                sheet.paste(thumb, (20 + index * 290, 50))
+                sheet.paste(thumb, (20 + index * 236, 50))
             output = args.work_dir / "contact-sheets" / f"{direction.name}.png"
             output.parent.mkdir(parents=True, exist_ok=True)
             sheet.save(output)
@@ -48,4 +48,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

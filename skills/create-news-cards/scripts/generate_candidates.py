@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run 12 isolated Tibo jobs concurrently from one top-level command."""
+"""Run the 15 isolated Tibo jobs for three five-card director sets."""
 
 from __future__ import annotations
 
@@ -94,12 +94,13 @@ def validate_public_reference_egress(jobs: list[dict], work: Path) -> list[Path]
 def run_one(record: dict, work: Path, script: Path, dry_run: bool, force: bool, environment=None) -> dict:
     job_path = Path(record["job"])
     target = work / "candidates" / record["direction_id"] / f"card-{record['card_index']:02d}.png"
-    if not dry_run and not force and target.is_file() and target.stat().st_size > 0:
+    if not force and target.is_file() and target.stat().st_size > 0:
         return {
             **record,
             "returncode": 0,
             "ok": True,
             "reused": True,
+            "dry_run": dry_run,
             "path": str(target.resolve()),
             "sha256": sha256(target),
         }
@@ -141,7 +142,7 @@ def run_one(record: dict, work: Path, script: Path, dry_run: bool, force: bool, 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--work-dir", type=Path, required=True)
-    parser.add_argument("--workers", type=int, default=12)
+    parser.add_argument("--workers", type=int, default=15)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--imagegen-auth-file", type=Path)
     parser.add_argument("--imagegen-model")
@@ -156,12 +157,13 @@ def main() -> int:
     parser.add_argument("--force", action="store_true", help="Regenerate candidates even when a valid output file exists.")
     args = parser.parse_args()
     try:
-        if not 1 <= args.workers <= 12:
-            raise ValueError("--workers는 1~12다.")
+        if not 1 <= args.workers <= 15:
+            raise ValueError("--workers는 1~15다.")
         plan = json.loads((args.work_dir / "generation-plan.json").read_text(encoding="utf-8"))
         jobs = plan.get("jobs", [])
-        if len(jobs) != 12:
-            raise ValueError("generation plan은 정확히 12개 job이어야 한다.")
+        expected_jobs = int(plan.get("card_count", 0)) * int(plan.get("direction_count", 0))
+        if expected_jobs != 15 or len(jobs) != expected_jobs:
+            raise ValueError("generation plan은 3개 director × 5장, 정확히 15개 job이어야 한다.")
         approved_references = validate_public_reference_egress(jobs, args.work_dir)
         if not args.dry_run and not args.approve_public_reference_egress:
             raise ValueError(
@@ -179,9 +181,17 @@ def main() -> int:
         )
         failures = [item for item in results if not item.get("ok") and not item.get("dry_run")]
         manifest = {
-            "schema_version": "1.0",
+            "schema_version": "2.0",
             "candidate_count": len(results),
             "concurrency": args.workers,
+            "direction_pool_count": plan.get("direction_pool_count"),
+            "direction_count": plan.get("direction_count"),
+            "selected_direction_ids": plan.get("selected_direction_ids", []),
+            "selected_direction_names": plan.get("selected_direction_names", []),
+            "selected_director_ids": plan.get("selected_director_ids", []),
+            "selected_director_names": plan.get("selected_director_names", []),
+            "selection_strategy": plan.get("selection_strategy"),
+            "random_seed": plan.get("random_seed"),
             "dry_run": args.dry_run,
             "public_reference_egress_approved": bool(
                 args.approve_public_reference_egress and not args.dry_run

@@ -24,6 +24,67 @@ def load_duplicate_checker():
     return module
 
 
+def load_scene_similarity():
+    path = Path(__file__).with_name("scene_similarity.py")
+    spec = importlib.util.spec_from_file_location("scene_similarity", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("장면 중복 검사 모듈을 불러올 수 없다.")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def job_references(work: Path, direction: str, card_count: int) -> list[list[Path]]:
+    """카드별 job.json의 reference 목록. 첫 항목이 그 카드의 대표(content) reference다."""
+    references = []
+    for index in range(1, card_count + 1):
+        job_path = work / "jobs" / direction / f"card-{index:02d}" / "job.json"
+        if not job_path.is_file():
+            raise ValueError(f"card {index}의 생성 job 기록이 없다: {job_path}")
+        job = json.loads(job_path.read_text(encoding="utf-8"))
+        paths = [Path(value) for value in job.get("references") or []]
+        if not paths or not paths[0].is_file():
+            raise ValueError(f"card {index} job의 대표 reference를 찾을 수 없다.")
+        references.append(paths)
+    return references
+
+
+def scene_qa(candidate_paths: list[Path], references: list[list[Path]]) -> dict:
+    """같은 장면 대표 reference 반복과 여러 카드의 같은 reference 재현을 검사한다."""
+    scene = load_scene_similarity()
+    primaries = [paths[0] for paths in references]
+    same_scene_pairs = scene.find_same_scene_pairs(primaries)
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for paths in references:
+        for path in paths:
+            key = str(path.resolve()).casefold()
+            if path.is_file() and key not in seen:
+                seen.add(key)
+                unique.append(path)
+    groups = scene.scene_groups(unique)
+    card_matches = scene.match_cards_to_references(candidate_paths, unique)
+    card_groups = [sorted({groups[index - 1] for index in matched}) for matched in card_matches]
+    sharing = []
+    for left in range(len(card_groups)):
+        for right in range(left + 1, len(card_groups)):
+            if set(card_groups[left]) & set(card_groups[right]):
+                sharing.append([left + 1, right + 1])
+    return {
+        "schema_version": "1.0",
+        "passed": not same_scene_pairs and not sharing,
+        "thresholds": {
+            "dhash_near_max": scene.DHASH_NEAR_THRESHOLD,
+            "orb_inliers_min": scene.ORB_INLIER_THRESHOLD,
+        },
+        "primary_references": [str(path) for path in primaries],
+        "same_scene_reference_pairs": same_scene_pairs,
+        "reference_pool": [str(path) for path in unique],
+        "card_reference_matches": card_matches,
+        "cards_sharing_reference": sharing,
+    }
+
+
 def digest(path: Path) -> str:
     value = hashlib.sha256()
     with path.open("rb") as handle:
@@ -36,19 +97,33 @@ def finalize(work: Path, board: dict, direction: str, visual_qa_passed: bool) ->
     if not visual_qa_passed:
         raise ValueError("확대 육안 QA가 끝난 경우에만 --visual-qa-passed를 사용한다.")
     card_count = int(board.get("card_count", 0))
-    if card_count != 4:
-        raise ValueError("현재 완성 세트는 정확히 4장이어야 한다.")
+    if card_count != 5:
+        raise ValueError("현재 완성 세트는 정확히 5장이어야 한다.")
     plan = json.loads((work / "generation-plan.json").read_text(encoding="utf-8"))
-    width, height = (int(value) for value in plan.get("target_size", "1024x1024").split("x"))
+    width, height = (int(value) for value in plan.get("target_size", "1080x1350").split("x"))
     expected_size = (width, height)
     candidate_paths = [work / "candidates" / direction / f"card-{index:02d}.png" for index in range(1, card_count + 1)]
     duplicate_qa = load_duplicate_checker().analyze_paths(candidate_paths)
+    duplicate_qa["scene_qa"] = scene_qa(candidate_paths, job_references(work, direction, card_count))
     (work / "duplicate-qa.json").write_text(
         json.dumps(duplicate_qa, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     if not duplicate_qa["passed"]:
         failed_pairs = [f"{pair['left']}-{pair['right']}" for pair in duplicate_qa["failures"]]
         raise ValueError(f"중복·근접 중복 카드가 발견됐다: {', '.join(failed_pairs)}")
+    scene = duplicate_qa["scene_qa"]
+    if scene["same_scene_reference_pairs"]:
+        pairs = [f"{pair['left']}-{pair['right']}" for pair in scene["same_scene_reference_pairs"]]
+        raise ValueError(
+            f"대표 reference가 같은 장면인 카드가 있다: {', '.join(pairs)}. "
+            "겹친 카드만 다른 장면의 사진·공식 화면을 첫 reference로 바꿔 재생성한다."
+        )
+    if scene["cards_sharing_reference"]:
+        pairs = [f"{left}-{right}" for left, right in scene["cards_sharing_reference"]]
+        raise ValueError(
+            f"여러 카드가 같은 reference 이미지를 재현했다: {', '.join(pairs)}. "
+            "겹친 카드만 다른 대표 reference와 visual_role로 재생성한다."
+        )
 
     slides = work / "slides"
     slides.mkdir(parents=True, exist_ok=True)
@@ -78,8 +153,10 @@ def finalize(work: Path, board: dict, direction: str, visual_qa_passed: bool) ->
         "code_role": "dimension_hash_and_manifest_qa_only",
         "checks": {"card_count": True, "size_matches_target": True,
             "hash_matches_source": True, "no_exact_or_near_duplicate": True,
+            "no_same_scene_reference_reuse": True,
             "semantic_duplicate_visually_verified": True,
-            "korean_numbers_charts_visually_verified": True},
+            "korean_numbers_tables_visually_verified": True,
+            "readability_at_360px_visually_verified": True},
         "cards": records}
     (work / "selection.json").write_text(
         json.dumps(selection, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

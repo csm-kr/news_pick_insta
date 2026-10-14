@@ -1,4 +1,4 @@
 interface:
   display_name: "뉴스 카드 이미지 제작"
-  short_description: "Tibo 후보 12장 생성·세트 선택·한글 합성·QA"
-  default_prompt: "Use $create-news-cards to generate and QA twelve reference-aware square news-card candidates."
+  short_description: "4:5 뉴스 5장·랜덤 디렉터 후보 15장 생성·QA"
+  default_prompt: "Use $create-news-cards to generate and QA three random-director sets of five portrait news cards."
