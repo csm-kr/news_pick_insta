@@ -37,6 +37,7 @@ class OrchestrateTests(unittest.TestCase):
             run = Path(result["run"])
             story = {
                 "verification_status": "verified",
+                "reaction_signals": [{"type": "portal"}, {"type": "coverage"}],
                 "sources": [
                     {"source_type": "press_article", "publisher": "A"},
                     {"source_type": "press_article", "publisher": "B"},
@@ -51,7 +52,7 @@ class OrchestrateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             result = MOD.init_run(Path(tmp), "2026-08-17T17:00:00+09:00", "newspick_studio")
             run = Path(result["run"])
-            story = {"verification_status": "verified", "sources": [{"source_type": "press_article", "publisher": "A"}]}
+            story = {"verification_status": "verified", "reaction_signals": [{"type": "portal"}, {"type": "coverage"}], "sources": [{"source_type": "press_article", "publisher": "A"}]}
             (run / "01-search" / "selected-story.json").write_text(json.dumps(story), encoding="utf-8")
             with self.assertRaises(ValueError):
                 MOD.complete_stage(run, "search-news")

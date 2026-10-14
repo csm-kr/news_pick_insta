@@ -7,13 +7,27 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $taskPrefix = 'NewsPickInstagram'
-$slots = @('05:00', '12:00', '17:00')
-$legacyTaskNames = @('NewsPickInstagram-0700')
+$slots = @('07:00', '12:00', '17:00')
+$legacyTaskNames = @('NewsPickInstagram-0500')
 $preparationLead = New-TimeSpan -Minutes 30
 $runner = (Resolve-Path (Join-Path $PSScriptRoot 'scheduled_runner.py')).Path
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $python = (Get-Command python.exe -ErrorAction Stop).Source
-$codex = (Get-Command codex.exe -ErrorAction Stop).Source
+# 예약 작업은 콘솔 창 없이 돌도록 pythonw.exe로 실행한다. 창을 닫아 run이 죽는 일을 막는다.
+$pythonw = Join-Path (Split-Path $python) 'pythonw.exe'
+if (-not (Test-Path $pythonw)) {
+    throw "pythonw.exe를 찾을 수 없다: $pythonw"
+}
+$claudeCommand = Get-Command claude.exe -ErrorAction SilentlyContinue
+if ($null -eq $claudeCommand) {
+    $fallback = Join-Path $env:USERPROFILE '.local\bin\claude.exe'
+    if (-not (Test-Path $fallback)) {
+        throw 'Claude Code CLI(claude.exe)를 찾을 수 없다. 설치 후 다시 실행한다.'
+    }
+    $claude = $fallback
+} else {
+    $claude = $claudeCommand.Source
+}
 $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 
 function Get-NewsPickTaskRecords {
@@ -44,9 +58,11 @@ if ($Command -eq 'install') {
     if ($timezone -ne 'Korea Standard Time') {
         throw "Windows timezone이 Korea Standard Time이 아니다: $timezone"
     }
-    & $codex login status | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw 'Codex CLI 로그인이 필요하다.'
+    $authText = & $claude auth status --json 2>$null | Out-String
+    $auth = $null
+    try { $auth = $authText | ConvertFrom-Json } catch { $auth = $null }
+    if ($LASTEXITCODE -ne 0 -or $null -eq $auth -or -not $auth.loggedIn) {
+        throw 'Claude Code CLI 로그인이 필요하다(claude auth login).'
     }
     foreach ($legacyName in $legacyTaskNames) {
         if (Get-ScheduledTask -TaskName $legacyName -ErrorAction SilentlyContinue) {
@@ -60,7 +76,7 @@ if ($Command -eq 'install') {
         }
         $name = "$taskPrefix-$($slot.Replace(':', ''))"
         $arguments = "`"$runner`" --slot $slot"
-        $action = New-ScheduledTaskAction -Execute $python -Argument $arguments -WorkingDirectory $projectRoot
+        $action = New-ScheduledTaskAction -Execute $pythonw -Argument $arguments -WorkingDirectory $projectRoot
         $at = [datetime]::Today.Add([timespan]::Parse("$slot`:00")).Subtract($preparationLead)
         $trigger = New-ScheduledTaskTrigger -Daily -At $at
         $principal = New-ScheduledTaskPrincipal -UserId $currentUser -LogonType Interactive -RunLevel Limited
@@ -76,7 +92,7 @@ if ($Command -eq 'install') {
             -Trigger $trigger `
             -Principal $principal `
             -Settings $settings `
-            -Description "News Pick Edge edge9333 only. Start 30 minutes early for $slot KST. 05 entertainment, 12 issues, 17 politics."
+            -Description "News Pick Edge edge9333 only. Claude Code print-mode executor. Start 30 minutes early for $slot KST. 07 and 12 entertainment, 17 hottest issue."
         Register-ScheduledTask -TaskName $name -InputObject $task -Force | Out-Null
     }
 } elseif ($Command -eq 'remove') {
@@ -96,6 +112,8 @@ if ($Command -eq 'install') {
 [pscustomobject]@{
     ok = $true
     command = $Command
+    executor = 'claude-code'
+    claude = $claude
     timezone = (tzutil /g).Trim()
     user = $currentUser
     tasks = @(Get-NewsPickTaskRecords)
