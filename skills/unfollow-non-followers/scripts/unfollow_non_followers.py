@@ -49,15 +49,22 @@ FETCH_LISTS_JS = """(async () => {
 # 취소 직전에 맞팔 여부를 다시 확인한다. 목록 페이지 누락으로 맞팔을 끊지 않기 위한 장치다.
 UNFOLLOW_JS = """(async (id) => {
   const H = {"X-IG-App-ID": "936619743392459", "X-Requested-With": "XMLHttpRequest"};
-  const csrf = document.cookie.match(/csrftoken=([^;]+)/)[1];
   const s = await fetch(`/api/v1/friendships/show/${id}/`, {headers: H, credentials: "include"});
   if (!s.ok) return {step: "show", status: s.status, body: (await s.text()).slice(0, 200)};
   const f = await s.json();
   if (f.followed_by) return {step: "skip_mutual"};
   if (!f.following && !f.outgoing_request) return {step: "skip_not_following"};
-  const r = await fetch(`/api/v1/web/friendships/${id}/unfollow/`, {method: "POST", credentials: "include",
-    headers: {...H, "X-CSRFToken": csrf, "Content-Type": "application/x-www-form-urlencoded"}, body: ""});
-  return {step: "unfollow", status: r.status, body: (await r.text()).slice(0, 200)};
+  // 웹 화면의 언팔 버튼과 같은 호출이다. 직접 fetch하면 HTML이 오므로 페이지의 PolarisInstapi를 쓴다
+  const nav = window.require("IGNavChain").getInstance();
+  try {
+    const r = await window.require("PolarisInstapi").apiPost("/api/v1/friendships/destroy/{target_user_id}/", {
+      body: {container_module: "profile", nav_chain: nav ? nav.getNavChainForSend() : "", user_id: id},
+      path: {target_user_id: id}});
+    const following = r.data && r.data.friendship_status ? r.data.friendship_status.following : null;
+    return {step: "unfollow", status: r.statusCode, body: JSON.stringify({status: r.status, following})};
+  } catch (e) {
+    return {step: "unfollow", status: (e && e.statusCode) || 0, body: String(e).slice(0, 200)};
+  }
 })(%s)"""
 
 

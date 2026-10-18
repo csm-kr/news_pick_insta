@@ -28,5 +28,5 @@ Edge 디버그 프로필(CDP `127.0.0.1:9333`)에 로그인된 Instagram 탭에�
 
 ## 주의
 
-- 팔로우 취소 엔드포인트는 `/api/v1/web/friendships/{id}/unfollow/`다. `/api/v1/friendships/destroy/{id}/`는 웹 세션에서 HTML을 돌려주고 실제로 취소되지 않는다(2026-09-26 확인).
+- 팔로우 취소는 페이지 내부 모듈 `require("PolarisInstapi").apiPost("/api/v1/friendships/destroy/{target_user_id}/", {body: {container_module, nav_chain, user_id}})`로 한다. 웹 언팔 버튼과 같은 호출이다. `/api/v1/web/friendships/{id}/unfollow/`는 2026-10-18부터 404 HTML을 돌려주고, destroy 경로도 직접 `fetch`하면 HTML이 온다.
 - 대량 취소는 인스타그램 작업 제한을 부를 수 있고, 제한이 걸리면 예약 게시까지 막힐 수 있다. 속도 상수를 올리지 않는다.

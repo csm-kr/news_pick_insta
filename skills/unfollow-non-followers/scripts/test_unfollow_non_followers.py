@@ -47,6 +47,16 @@ class ResultTests(unittest.TestCase):
         self.assertFalse(MOD.is_success({"step": "unfollow", "status": 429, "body": '{"status":"fail"}'}))
         self.assertFalse(MOD.is_success({"step": "show", "status": 400, "body": ""}))
 
+    def test_unfollow_uses_page_instapi_destroy_endpoint(self):
+        # 2026-10-18부터 /api/v1/web/friendships/{id}/unfollow/는 404 HTML을 돌려준다
+        self.assertIn('require("PolarisInstapi").apiPost("/api/v1/friendships/destroy/{target_user_id}/"', MOD.UNFOLLOW_JS)
+        self.assertNotIn("/api/v1/web/friendships/", MOD.UNFOLLOW_JS)
+
+    def test_unfollow_body_keeps_status_even_when_response_is_long(self):
+        # 전체 응답을 잘라 담으면 맨 끝의 "status":"ok"가 잘려 성공을 실패로 판정한다
+        self.assertIn("body: JSON.stringify({status: r.status", MOD.UNFOLLOW_JS)
+        self.assertNotIn("JSON.stringify(r).slice", MOD.UNFOLLOW_JS)
+
     def test_skips_are_normal_results(self):
         self.assertTrue(MOD.is_success({"step": "skip_mutual"}))
         self.assertTrue(MOD.is_success({"step": "skip_not_following"}))
