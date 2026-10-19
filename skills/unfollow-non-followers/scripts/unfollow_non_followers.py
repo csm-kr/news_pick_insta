@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import subprocess
 import sys
 import time as time_module
 import urllib.request
@@ -26,6 +27,10 @@ SCHEDULED_RUNS = (
     (time(19, 0), time(19, 40)),
 )
 GUARD = timedelta(minutes=15)
+# follow-suggested 스킬이 남기는 팔로우 기록. 최근에 팔로우한 계정은 맞팔할 시간을 준다
+FOLLOW_LOG = Path("output/follow/follow_log.jsonl")
+LAUNCH_EDGE = Path(__file__).resolve().parents[2] / "publish-news-pick" / "scripts" / "launch_edge_profile.py"
+NO_WINDOW_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 FETCH_LISTS_JS = """(async () => {
   const H = {"X-IG-App-ID": "936619743392459", "X-Requested-With": "XMLHttpRequest"};
@@ -96,6 +101,19 @@ def pending(targets: list[dict], log_path: Path) -> list[dict]:
     return [u for u in targets if u["id"] not in done]
 
 
+def recent_follow_ids(log_path: Path, now: datetime, days: int) -> set[str]:
+    if not log_path.is_file():
+        return set()
+    cutoff = now - timedelta(days=days)
+    ids = set()
+    for line in log_path.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            row = json.loads(line)
+            if row.get("step") == "follow" and datetime.fromisoformat(row["at"]) > cutoff:
+                ids.add(row["id"])
+    return ids
+
+
 def _windows(day: datetime) -> list[tuple[datetime, datetime]]:
     return [
         (datetime.combine(day.date(), start, tzinfo=KST) - GUARD, datetime.combine(day.date(), end, tzinfo=KST))
@@ -112,6 +130,34 @@ def next_deadline(now: datetime) -> datetime:
         if start > now:
             return start
     raise AssertionError("다음 예약 run 시각을 찾지 못했다")
+
+
+def _has_instagram_tab() -> bool:
+    try:
+        tabs = json.load(urllib.request.urlopen(f"{CDP_URL}/json/list", timeout=10))
+    except OSError:
+        return False
+    return any(t["type"] == "page" and "instagram.com" in t["url"] for t in tabs)
+
+
+def ensure_edge() -> None:
+    """예약 run이 Edge를 닫고 끝나는 경우가 있어, Instagram 탭이 없으면 디버그 프로필을 연다."""
+    if _has_instagram_tab():
+        return
+    subprocess.run([sys.executable, str(LAUNCH_EDGE), "--account", "newspick_studio"],
+                   check=True, capture_output=True, creationflags=NO_WINDOW_FLAGS)
+    for _ in range(30):
+        if _has_instagram_tab():
+            return
+        time_module.sleep(1)
+    raise SystemExit("Edge(9333)를 열었지만 instagram.com 탭이 보이지 않는다.")
+
+
+def log_to_file_if_windowless(path: Path) -> None:
+    """pythonw로 예약 실행되면 stdout이 없으므로 출력을 파일로 돌린다."""
+    if sys.stdout is None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        sys.stdout = sys.stderr = path.open("a", encoding="utf-8", buffering=1)
 
 
 def evaluate(expression: str, timeout: int = 600):
@@ -135,9 +181,9 @@ def evaluate(expression: str, timeout: int = 600):
     return result["result"].get("value")
 
 
-def collect(out_dir: Path, exclude: set[str]) -> Path:
+def collect(out_dir: Path, exclude: set[str], exclude_ids: set[str] = frozenset()) -> Path:
     data = evaluate(FETCH_LISTS_JS)
-    targets = non_mutual(data["following"], data["followers"], exclude)
+    targets = [u for u in non_mutual(data["following"], data["followers"], exclude) if u["id"] not in exclude_ids]
     path = out_dir / "targets.json"
     path.write_text(json.dumps({
         "collected_at": datetime.now(KST).isoformat(timespec="seconds"),
@@ -145,7 +191,8 @@ def collect(out_dir: Path, exclude: set[str]) -> Path:
         "followers_count": len({u["id"] for u in data["followers"]}),
         "targets": targets,
     }, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"팔로잉 {len(data['following'])} · 팔로워 {len(data['followers'])} · 맞팔 아님 {len(targets)} → {path}")
+    print(f"팔로잉 {len(data['following'])} · 팔로워 {len(data['followers'])} · 맞팔 아님 {len(targets)}"
+          f" (최근 팔로우 유예 {len(exclude_ids)}개 제외) → {path}", flush=True)
     return path
 
 
@@ -183,17 +230,26 @@ def apply(out_dir: Path) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out-dir", type=Path, required=True)
+    parser.add_argument("--out-dir", type=Path, default=Path("output/unfollow") / datetime.now(KST).strftime("%Y%m%d"))
     parser.add_argument("--apply", action="store_true", help="targets.json 대상을 실제로 팔로우 취소한다")
+    parser.add_argument("--auto", action="store_true", help="예약 실행용: 목록을 추출한 뒤 바로 팔로우 취소한다")
     parser.add_argument("--exclude", default="", help="남길 계정, 쉼표 구분")
+    parser.add_argument("--min-follow-age-days", type=int, default=7,
+                        help="follow-suggested로 팔로우한 지 이 일수가 안 된 계정은 대상에서 뺀다")
     args = parser.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    if in_busy_window(datetime.now(KST)):
+    log_to_file_if_windowless(args.out_dir / "run.log")
+    now = datetime.now(KST)
+    if in_busy_window(now):
         print("예약 run 시간대(시작 15분 전~종료)라 Edge를 건드리지 않는다.")
         return 3
+    ensure_edge()
     if args.apply:
         return apply(args.out_dir)
-    collect(args.out_dir, {name for name in args.exclude.split(",") if name.strip()})
+    recent = recent_follow_ids(FOLLOW_LOG, now, args.min_follow_age_days)
+    collect(args.out_dir, {name for name in args.exclude.split(",") if name.strip()}, recent)
+    if args.auto:
+        return apply(args.out_dir)
     return 0
 
 

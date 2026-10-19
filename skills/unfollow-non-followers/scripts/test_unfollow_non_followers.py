@@ -40,6 +40,21 @@ class NonMutualTests(unittest.TestCase):
         )
 
 
+class RecentFollowTests(unittest.TestCase):
+    def test_only_follows_within_grace_days_are_recent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "follow_log.jsonl"
+            rows = [
+                {"id": "old", "step": "follow", "at": "2026-09-18T10:00:00+09:00"},
+                {"id": "new", "step": "follow", "at": "2026-09-24T21:00:00+09:00"},
+            ]
+            log.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+            self.assertEqual(MOD.recent_follow_ids(log, at(0, 30), days=7), {"new"})
+
+    def test_missing_follow_log_means_no_recent_follows(self):
+        self.assertEqual(MOD.recent_follow_ids(Path("없는/follow_log.jsonl"), at(0, 30), days=7), set())
+
+
 class ResultTests(unittest.TestCase):
     def test_only_json_ok_unfollow_counts_as_success(self):
         self.assertTrue(MOD.is_success({"step": "unfollow", "status": 200, "body": '{"status":"ok"}'}))
