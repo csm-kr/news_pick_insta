@@ -24,8 +24,8 @@ description: 승인된 1080×1350 PNG 다섯 장을 설정된 Instagram 계정�
 ## 불변조건
 
 - 대상 계정은 승인 payload의 계정 및 `IG_ACCOUNT`와 일치해야 한다.
-- Microsoft Edge, named connection `edge9333`, loopback CDP `http://127.0.0.1:9333`만 사용한다. Chrome/default/다른 endpoint는 fail closed다.
-- Browser Harness에서 설정된 Edge profile의 Instagram 탭 하나만 제어한다. 다른 탭을 닫거나 탐색하지 않는다.
+- 브라우저는 두 가지만 허용한다: 기본값 Microsoft Edge(named connection `edge9333`, loopback CDP `http://127.0.0.1:9333`), 또는 `NEWS_PICK_BROWSER=ego`일 때 ego lite TaskSpace `newspick-instagram`. 예약 게시(07·12·17시)는 ego를 쓴다. 두 경로 모두 같은 `invoke_edge_browser_harness.py`와 helper를 쓴다. Chrome/default/다른 endpoint는 fail closed다.
+- 설정된 브라우저의 Instagram 탭 하나만 제어한다(ego는 `newspick-instagram` agent 탭). 다른 탭을 닫거나 탐색하지 않는다.
 - 웹 UI 게시 경로에서는 해당 Instagram 탭의 활성화·탐색·파일 선택을 허용한다. 공유 성공 직후 같은 승인 거래의 공개 검증만 동일한 전용 Instagram target 하나에서 읽기 전용으로 수행하며 다른 탭을 만들거나 닫지 않는다. 독립 조회는 background target 원칙을 유지한다.
 - 현재 URL은 다른 공개 프로필일 수 있으므로 계정 판정에 쓰지 않는다. 작성기를 열기 직전 왼쪽 rail의 정확한 `https://www.instagram.com/<IG_ACCOUNT>/` 링크와 그 안의 계정명 profile image alt를 확인하고 설정 계정 프로필로 이동한다.
 - 다른 run이 `status=in_progress`, `current_stage=publish-news-pick`이면 열린 draft를 폐기하거나 새 파일을 올리지 않는다. 수동·예약 run은 서로의 디렉터리와 작성기를 공유하지 않는다.

@@ -114,6 +114,14 @@ class DomProbeTests(unittest.TestCase):
             self.assertEqual(report['connection'], 'edge9333')
             self.assertEqual(calls, ['Browser.getVersion', 'Target.getTargets', 'Target.attachToTarget'])
 
+    def test_ego_lite_is_accepted_and_reported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.run_probe(root, product='ego-lite/bridge')
+            report = json.loads((root / 'diagnostic.json').read_text(encoding='utf-8'))
+            self.assertEqual(report['browser'], 'ego-lite/bridge')
+            self.assertEqual(report['connection'], 'ego-lite')
+
     def test_chrome_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(RuntimeError, 'Microsoft Edge'):
             self.run_probe(Path(directory), product='Chrome/152.0')

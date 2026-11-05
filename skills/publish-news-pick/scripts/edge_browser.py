@@ -51,6 +51,16 @@ def _require_fixed(value: str | None, expected: str, label: str) -> str:
     return selected
 
 
+def selected_browser(environment: Mapping[str, str] | None = None) -> str:
+    """`edge`(기본, CDP 9333) 또는 `ego`(ego lite TaskSpace 중계)만 허용한다."""
+
+    source = os.environ if environment is None else environment
+    value = str(source.get("NEWS_PICK_BROWSER") or "edge").strip()
+    if value == "ego":
+        return "ego"
+    return _require_fixed(value, "edge", "NEWS_PICK_BROWSER")
+
+
 def connection_settings(environment: Mapping[str, str] | None = None) -> dict[str, str]:
     source = os.environ if environment is None else environment
     for key in ("NEWS_PICK_BROWSER_HARNESS_NAME", "BU_NAME"):
@@ -60,7 +70,7 @@ def connection_settings(environment: Mapping[str, str] | None = None) -> dict[st
         if source.get(key):
             _require_fixed(source[key], EDGE_CDP_URL, key)
     if source.get("NEWS_PICK_BROWSER"):
-        _require_fixed(source["NEWS_PICK_BROWSER"], "edge", "NEWS_PICK_BROWSER")
+        selected_browser(source)
     name = EDGE_CONNECTION_NAME
     endpoint = EDGE_CDP_URL
     parsed = urlsplit(endpoint)
@@ -123,6 +133,12 @@ def run_script(
     script = script.expanduser().resolve()
     if not script.is_file():
         raise FileNotFoundError(f"Browser Harness script가 없다: {script}")
+    if selected_browser() == "ego":
+        import ego_harness
+
+        return ego_harness.run_script(
+            script, capture_output=capture_output, timeout=timeout, extra_env=extra_env, check=check
+        )
     harness = shutil.which("browser-harness")
     if not harness:
         raise FileNotFoundError("browser-harness CLI가 없다.")

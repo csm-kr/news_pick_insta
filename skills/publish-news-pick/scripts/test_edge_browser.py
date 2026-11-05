@@ -68,6 +68,36 @@ class EdgeBrowserTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "edge"):
                 edge_browser.connection_settings()
 
+    def test_run_script_routes_to_ego_when_selected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "task.py"
+            script.write_bytes(b"print('ego')\n")
+            with patch.dict("os.environ", {"NEWS_PICK_BROWSER": "ego"}, clear=True), patch.object(
+                edge_browser, "probe_edge_endpoint"
+            ) as probe, patch.object(edge_browser.subprocess, "run") as run, patch(
+                "ego_harness.run_script"
+            ) as ego_run:
+                ego_run.return_value.returncode = 0
+                edge_browser.run_script(script, timeout=5, extra_env={"IG_ACCOUNT": "newspick_studio"})
+            probe.assert_not_called()
+            run.assert_not_called()
+            ego_run.assert_called_once()
+            self.assertEqual(ego_run.call_args.args[0], script.resolve())
+            self.assertEqual(ego_run.call_args.kwargs["timeout"], 5)
+            self.assertEqual(ego_run.call_args.kwargs["extra_env"], {"IG_ACCOUNT": "newspick_studio"})
+
+    def test_connection_settings_tolerates_ego_selection(self):
+        self.assertEqual(
+            edge_browser.connection_settings({"NEWS_PICK_BROWSER": "ego"}),
+            {"name": "edge9333", "endpoint": "http://127.0.0.1:9333"},
+        )
+
+    def test_ego_is_the_only_other_allowed_browser(self):
+        self.assertEqual(edge_browser.selected_browser({}), "edge")
+        self.assertEqual(edge_browser.selected_browser({"NEWS_PICK_BROWSER": "ego"}), "ego")
+        with self.assertRaisesRegex(ValueError, "edge"):
+            edge_browser.selected_browser({"NEWS_PICK_BROWSER": "chrome"})
+
     def test_probe_accepts_edge_and_rejects_chrome(self):
         edge = {"Browser": "Edg/151.0", "Protocol-Version": "1.3", "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/browser/id"}
         with patch.object(edge_browser.urllib.request, "urlopen", return_value=_Response(edge)):

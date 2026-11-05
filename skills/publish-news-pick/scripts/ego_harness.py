@@ -1,0 +1,500 @@
+#!/usr/bin/env python3
+"""Run News Pick Browser Harness scripts on ego lite instead of a raw CDP port.
+
+ego lite does not expose a remote-debugging port, so Browser Harness cannot attach
+to it. This module keeps the Browser Harness helper surface (`cdp`, `js`,
+`click_at_xy`, `switch_tab`, `_send` ...) that the News Pick helper scripts use,
+and replaces only the transport: every CDP call goes through `ego_bridge.mjs`,
+which runs inside `ego-browser nodejs` and forwards to the ego TaskSpace Page API.
+
+Target/session concepts are mapped onto ego Page labels (`p1`, `p2`, ...):
+a label is used as both targetId and sessionId.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+from typing import Any, Callable
+
+SPACE_NAME = "newspick-instagram"
+DEFAULT_START_URL = "https://www.instagram.com/newspick_studio/"
+BRIDGE_PATH = Path(__file__).resolve().parent / "ego_bridge.mjs"
+PRODUCT = "ego-lite/bridge"
+EGO_RUNTIME_GUARD = (
+    '_news_pick_product = str(cdp("Browser.getVersion").get("product") or "")\n'
+    'if not _news_pick_product.lower().startswith("ego-lite/"):\n'
+    '    raise RuntimeError("News Pick ego harness target is not ego lite: " + _news_pick_product)\n'
+)
+WINDOW_METHODS = {"Browser.getWindowForTarget", "Browser.setWindowBounds", "Browser.getWindowBounds"}
+
+
+class EgoSession:
+    """Browser Harness `_send` semantics implemented over an ego bridge transport."""
+
+    def __init__(self, transport: Any, start_url: str = DEFAULT_START_URL):
+        self.transport = transport
+        self.start_url = start_url
+        self.current = self._initial_page()
+
+    # --- page bookkeeping -------------------------------------------------
+    def _tabs(self) -> list[dict[str, Any]]:
+        return [tab for tab in self.transport.call({"op": "tabs"}) if tab.get("label")]
+
+    def _labels(self) -> set[str]:
+        return {tab["label"] for tab in self._tabs()}
+
+    def _initial_page(self) -> str:
+        tabs = self._tabs()
+        for tab in tabs:
+            if "instagram.com" in str(tab.get("url") or ""):
+                return tab["label"]
+        if not tabs:
+            label = self.transport.call({"op": "new_page"})["label"]
+        else:
+            label = tabs[0]["label"]
+        self.transport.call({"op": "goto", "page": label, "url": self.start_url})
+        return label
+
+    def _page_for(self, session_id: str | None) -> str:
+        label = session_id or self.current
+        if session_id and session_id not in self._labels():
+            raise RuntimeError(f"ego page session not found: {session_id}")
+        return label
+
+    def _page_cdp(self, page: str, method: str, params: dict[str, Any]) -> Any:
+        return self.transport.call({"op": "page_cdp", "page": page, "method": method, "params": params})
+
+    # --- Browser Harness protocol -----------------------------------------
+    def send(self, req: dict[str, Any]) -> dict[str, Any]:
+        if "meta" in req:
+            return self._meta(req)
+        method = str(req.get("method") or "")
+        params = dict(req.get("params") or {})
+        session_id = req.get("session_id")
+        if method.startswith("Target."):
+            return {"result": self._target(method, params)}
+        if method == "Browser.getVersion":
+            return {"result": {"product": PRODUCT, "protocolVersion": "1.3"}}
+        if method in WINDOW_METHODS:
+            target = params.pop("targetId", None)
+            page = self._page_for(target or session_id)
+            if method == "Browser.setWindowBounds":
+                return {"result": self.transport.call({"op": "task_cdp", "method": method, "params": params})}
+            return {"result": self._page_cdp(page, method, params)}
+        if method.startswith("Browser."):
+            raise RuntimeError(f"ego harness does not allow {method}")
+        page = self._page_for(session_id)
+        if method == "Page.captureScreenshot":
+            return {"result": self._screenshot(page, params)}
+        return {"result": self._page_cdp(page, method, params)}
+
+    def _meta(self, req: dict[str, Any]) -> dict[str, Any]:
+        meta = req["meta"]
+        if meta == "current_tab":
+            tab = next((t for t in self._tabs() if t["label"] == self.current), None)
+            if tab is None:
+                self.current = self._initial_page()
+                tab = next(t for t in self._tabs() if t["label"] == self.current)
+            return {"targetId": tab["label"], "url": tab.get("url", ""), "title": tab.get("title", "")}
+        if meta == "set_session":
+            target = req.get("target_id") or req.get("session_id")
+            self.current = self._page_for(target)
+            return {}
+        if meta == "session":
+            return {"session_id": self.current}
+        if meta == "drain_events":
+            return {"events": []}
+        if meta == "pending_dialog":
+            return {"dialog": None}
+        raise RuntimeError(f"ego harness does not support meta {meta}")
+
+    def _target(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        if method == "Target.getTargets":
+            return {
+                "targetInfos": [
+                    {"targetId": t["label"], "type": "page", "url": t.get("url", ""), "title": t.get("title", ""), "attached": True}
+                    for t in self._tabs()
+                ]
+            }
+        if method == "Target.createTarget":
+            label = self.transport.call({"op": "new_page"})["label"]
+            url = str(params.get("url") or "about:blank")
+            if url != "about:blank":
+                self.transport.call({"op": "goto", "page": label, "url": url})
+            return {"targetId": label}
+        if method == "Target.attachToTarget":
+            return {"sessionId": self._page_for(params.get("targetId"))}
+        if method == "Target.detachFromTarget":
+            return {}
+        if method == "Target.activateTarget":
+            self._page_cdp(self._page_for(params.get("targetId")), "Page.bringToFront", {})
+            return {}
+        if method == "Target.closeTarget":
+            label = self._page_for(params.get("targetId"))
+            self.transport.call({"op": "close_page", "page": label})
+            if label == self.current:
+                self.current = self._initial_page()
+            return {"success": True}
+        raise RuntimeError(f"ego harness does not allow {method}")
+
+    def _screenshot(self, page: str, params: dict[str, Any]) -> Any:
+        window = self._page_cdp(page, "Browser.getWindowForTarget", {})
+        minimized = (window.get("bounds") or {}).get("windowState") == "minimized"
+        if not minimized:
+            return self._page_cdp(page, "Page.captureScreenshot", params)
+        bounds = {"op": "task_cdp", "method": "Browser.setWindowBounds"}
+        self.transport.call({**bounds, "params": {"windowId": window["windowId"], "bounds": {"windowState": "normal"}}})
+        try:
+            return self._page_cdp(page, "Page.captureScreenshot", params)
+        finally:
+            self.transport.call({**bounds, "params": {"windowId": window["windowId"], "bounds": {"windowState": "minimized"}}})
+
+
+# --- Browser Harness helper surface ----------------------------------------
+# Subset adapted from browser-harness helpers.py (MIT License) so the News Pick
+# helper scripts run unchanged. Only functions those scripts call are included.
+_HELPERS_SOURCE = r'''
+import base64, json, math, os, time
+
+INTERNAL = ("chrome://", "chrome-untrusted://", "devtools://", "chrome-extension://", "about:")
+
+
+def cdp(method, session_id=None, **params):
+    return _send({"method": method, "params": params, "session_id": session_id}).get("result", {})
+
+
+def drain_events():
+    return _send({"meta": "drain_events"})["events"]
+
+
+def _js_snippet(expression, limit=160):
+    snippet = expression.strip().replace("\n", "\\n")
+    return snippet[:limit - 3] + "..." if len(snippet) > limit else snippet
+
+
+def _js_exception_description(result, details):
+    desc = result.get("description")
+    exc = details.get("exception") if details else None
+    if not desc and isinstance(exc, dict):
+        desc = exc.get("description")
+        if desc is None and "value" in exc:
+            desc = str(exc["value"])
+        if desc is None:
+            desc = exc.get("className")
+    if not desc and details:
+        desc = details.get("text")
+    return desc or "JavaScript evaluation failed"
+
+
+def _decode_unserializable_js_value(value):
+    if value == "NaN":
+        return math.nan
+    if value == "Infinity":
+        return math.inf
+    if value == "-Infinity":
+        return -math.inf
+    if value == "-0":
+        return -0.0
+    if value.endswith("n"):
+        return int(value[:-1])
+    return value
+
+
+def _runtime_value(response, expression):
+    result = response.get("result", {})
+    details = response.get("exceptionDetails")
+    if details or result.get("subtype") == "error":
+        desc = _js_exception_description(result, details)
+        line = details.get("lineNumber") if details else None
+        col = details.get("columnNumber") if details else None
+        loc = f" at line {line}, column {col}" if line is not None and col is not None else ""
+        raise RuntimeError(f"JavaScript evaluation failed{loc}: {desc}; expression: {_js_snippet(expression)}")
+    if "value" in result:
+        return result["value"]
+    if "unserializableValue" in result:
+        return _decode_unserializable_js_value(result["unserializableValue"])
+    return None
+
+
+def _runtime_evaluate(expression, session_id=None, await_promise=False):
+    r = cdp("Runtime.evaluate", session_id=session_id, expression=expression, returnByValue=True, awaitPromise=await_promise)
+    return _runtime_value(r, expression)
+
+
+def js(expression, target_id=None):
+    sid = cdp("Target.attachToTarget", targetId=target_id, flatten=True)["sessionId"] if target_id else None
+    try:
+        return _runtime_evaluate(expression, session_id=sid, await_promise=True)
+    except RuntimeError as e:
+        if "Illegal return statement" in str(e):
+            return _runtime_evaluate(f"(function(){{{expression}}})()", session_id=sid, await_promise=True)
+        raise
+
+
+def goto_url(url):
+    return cdp("Page.navigate", url=url)
+
+
+def page_info():
+    expression = "JSON.stringify({url:location.href,title:document.title,w:innerWidth,h:innerHeight,sx:scrollX,sy:scrollY,pw:document.documentElement.scrollWidth,ph:document.documentElement.scrollHeight})"
+    return json.loads(_runtime_evaluate(expression))
+
+
+def click_at_xy(x, y, button="left", clicks=1):
+    cdp("Input.dispatchMouseEvent", type="mousePressed", x=x, y=y, button=button, clickCount=clicks)
+    cdp("Input.dispatchMouseEvent", type="mouseReleased", x=x, y=y, button=button, clickCount=clicks)
+
+
+def type_text(text):
+    cdp("Input.insertText", text=text)
+
+
+_KEYS = {
+    "Enter": (13, "Enter", "\r"), "Tab": (9, "Tab", "\t"), "Backspace": (8, "Backspace", ""),
+    "Escape": (27, "Escape", ""), "Delete": (46, "Delete", ""), " ": (32, "Space", " "),
+    "ArrowLeft": (37, "ArrowLeft", ""), "ArrowUp": (38, "ArrowUp", ""),
+    "ArrowRight": (39, "ArrowRight", ""), "ArrowDown": (40, "ArrowDown", ""),
+    "Home": (36, "Home", ""), "End": (35, "End", ""),
+    "PageUp": (33, "PageUp", ""), "PageDown": (34, "PageDown", ""),
+}
+
+
+def press_key(key, modifiers=0):
+    vk, code, text = _KEYS.get(key, (ord(key[0]) if len(key) == 1 else 0, key, key if len(key) == 1 else ""))
+    base = {"key": key, "code": code, "modifiers": modifiers, "windowsVirtualKeyCode": vk, "nativeVirtualKeyCode": vk}
+    printable_char = len(key) == 1 and bool(text) and not (modifiers & (1 | 2 | 4))
+    cdp("Input.dispatchKeyEvent", type="keyDown", **base, **({} if printable_char or not text else {"text": text}))
+    if printable_char:
+        cdp("Input.dispatchKeyEvent", type="char", text=text, **{k: v for k, v in base.items() if k != "text"})
+    cdp("Input.dispatchKeyEvent", type="keyUp", **base)
+
+
+def scroll(x, y, dy=-300, dx=0):
+    cdp("Input.dispatchMouseEvent", type="mouseWheel", x=x, y=y, deltaX=dx, deltaY=dy)
+
+
+def capture_screenshot(path=None, full=False, max_dim=None):
+    path = path or os.path.join(os.environ.get("TEMP", "."), "ego-shot.png")
+    r = cdp("Page.captureScreenshot", format="png", captureBeyondViewport=full)
+    open(path, "wb").write(base64.b64decode(r["data"]))
+    if max_dim:
+        from PIL import Image
+        img = Image.open(path)
+        if max(img.size) > max_dim:
+            img.thumbnail((max_dim, max_dim))
+            img.save(path)
+    return path
+
+
+def list_tabs(include_chrome=True):
+    out = []
+    for t in cdp("Target.getTargets")["targetInfos"]:
+        if t["type"] != "page":
+            continue
+        url = t.get("url", "")
+        if not include_chrome and url.startswith(INTERNAL):
+            continue
+        out.append({"targetId": t["targetId"], "target_id": t["targetId"], "title": t.get("title", ""), "url": url})
+    return out
+
+
+def current_tab():
+    r = _send({"meta": "current_tab"})
+    return {"targetId": r["targetId"], "target_id": r["targetId"], "url": r["url"], "title": r["title"]}
+
+
+def _mark_tab():
+    return None
+
+
+def _target_id(target):
+    return (target.get("targetId") or target.get("target_id")) if isinstance(target, dict) else target
+
+
+def activate_tab(target):
+    target_id = _target_id(target)
+    cdp("Target.activateTarget", targetId=target_id)
+    return target_id
+
+
+def switch_tab(target, activate=False):
+    target_id = _target_id(target)
+    if activate:
+        activate_tab(target_id)
+    sid = cdp("Target.attachToTarget", targetId=target_id, flatten=True)["sessionId"]
+    _send({"meta": "set_session", "session_id": sid, "target_id": target_id})
+    _mark_tab()
+    return sid
+
+
+def new_tab(url="about:blank"):
+    tid = cdp("Target.createTarget", url="about:blank", background=True)["targetId"]
+    switch_tab(tid)
+    if url != "about:blank":
+        goto_url(url)
+    return tid
+
+
+def close_tab(target=None):
+    target_id = _target_id(target)
+    if target_id is None:
+        target_id = current_tab()["targetId"]
+    cdp("Target.closeTarget", targetId=target_id)
+
+
+def wait(seconds=1.0):
+    time.sleep(seconds)
+
+
+def wait_for_load(timeout=15.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if js("document.readyState") == "complete":
+            return True
+        time.sleep(0.3)
+    return False
+
+
+def upload_file(selector, path):
+    doc = cdp("DOM.getDocument", depth=-1)
+    nid = cdp("DOM.querySelector", nodeId=doc["root"]["nodeId"], selector=selector)["nodeId"]
+    if not nid:
+        raise RuntimeError(f"no element for {selector}")
+    cdp("DOM.setFileInputFiles", files=[path] if isinstance(path, str) else list(path), nodeId=nid)
+'''
+
+
+def helper_namespace(send: Callable[[dict[str, Any]], dict[str, Any]]) -> dict[str, Any]:
+    """Return a fresh globals dict exposing Browser Harness helpers bound to `send`."""
+
+    namespace: dict[str, Any] = {"__name__": "__main__", "_send": send}
+    exec(compile(_HELPERS_SOURCE, "<ego_harness_helpers>", "exec"), namespace)
+    return namespace
+
+
+# --- real transport ----------------------------------------------------------
+class BridgeTransport:
+    """Start ego_bridge.mjs under `ego-browser nodejs` and talk JSON lines over loopback TCP."""
+
+    def __init__(self, space: str = SPACE_NAME, startup_timeout: float = 30.0, call_timeout: float = 120.0):
+        executable = shutil.which("ego-browser")
+        if not executable:
+            raise FileNotFoundError("ego-browser CLI가 없다.")
+        self.workdir = Path(tempfile.mkdtemp(prefix="newspick-ego-"))
+        port_file = self.workdir / "bridge.port"
+        entry = self.workdir / "entry.mjs"
+        config = {"space": space, "portFile": port_file.as_posix()}
+        entry.write_text(
+            f"import {{ serve }} from {json.dumps(BRIDGE_PATH.as_uri())};\nawait serve({json.dumps(config)});\n",
+            encoding="utf-8",
+        )
+        # ego nodejs는 셸 환경변수를 상속하지 않으므로 설정은 entry 파일에 넣고, 진입 인자는 ASCII 한 줄만 쓴다.
+        self.process = subprocess.Popen(
+            [executable, "nodejs", "-e", f"await import('{entry.as_uri()}')"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        deadline = time.time() + startup_timeout
+        while not port_file.exists():
+            if self.process.poll() is not None:
+                err = (self.process.stderr.read() or b"").decode("utf-8", "replace")
+                raise RuntimeError(f"ego bridge가 시작 전에 종료됐다: {err[:800]}")
+            if time.time() > deadline:
+                self.close()
+                raise TimeoutError("ego bridge 시작 시간 초과")
+            time.sleep(0.05)
+        time.sleep(0.05)
+        port = int(port_file.read_text(encoding="utf-8").strip())
+        self.sock = socket.create_connection(("127.0.0.1", port), timeout=call_timeout)
+        self.reader = self.sock.makefile("r", encoding="utf-8")
+        self._next_id = 0
+
+    def call(self, op: dict[str, Any]) -> Any:
+        self._next_id += 1
+        payload = {**op, "id": self._next_id}
+        self.sock.sendall((json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8"))
+        line = self.reader.readline()
+        if not line:
+            raise RuntimeError("ego bridge 연결이 끊겼다")
+        response = json.loads(line)
+        if not response.get("ok"):
+            raise RuntimeError(str(response.get("error") or "ego bridge error"))
+        return response.get("result")
+
+    def close(self) -> None:
+        try:
+            if getattr(self, "sock", None):
+                try:
+                    self.call({"op": "exit"})
+                except Exception:
+                    pass
+                self.sock.close()
+        finally:
+            if self.process.poll() is None:
+                try:
+                    self.process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    self.process.kill()
+            shutil.rmtree(self.workdir, ignore_errors=True)
+
+
+def execute(script: Path, start_url: str = DEFAULT_START_URL) -> None:
+    """Execute one helper script in-process against ego lite."""
+
+    transport = BridgeTransport()
+    try:
+        session = EgoSession(transport, start_url=start_url)
+        namespace = helper_namespace(session.send)
+        # guard를 따로 실행해 helper traceback의 줄 번호가 원본 파일과 같게 한다.
+        exec(compile(EGO_RUNTIME_GUARD, "<ego_runtime_guard>", "exec"), namespace)
+        exec(compile(script.read_text(encoding="utf-8"), str(script), "exec"), namespace)
+    finally:
+        transport.close()
+
+
+def run_script(
+    script: Path,
+    *,
+    capture_output: bool = False,
+    timeout: float | None = None,
+    extra_env: dict[str, str] | None = None,
+    check: bool = False,
+) -> subprocess.CompletedProcess[bytes]:
+    """Same contract as edge_browser.run_script: one helper script in one child process."""
+
+    script = script.expanduser().resolve()
+    if not script.is_file():
+        raise FileNotFoundError(f"ego harness script가 없다: {script}")
+    env = dict(os.environ)
+    if extra_env:
+        env.update({str(k): str(v) for k, v in extra_env.items()})
+    env.update({"NEWS_PICK_BROWSER": "ego", "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"})
+    return subprocess.run(
+        [sys.executable, str(Path(__file__).resolve()), str(script)],
+        capture_output=capture_output,
+        env=env,
+        timeout=timeout,
+        check=check,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
+    if len(args) != 1:
+        print("usage: ego_harness.py <helper-script.py>", file=sys.stderr)
+        return 2
+    account = os.environ.get("IG_ACCOUNT", "newspick_studio").strip().lstrip("@") or "newspick_studio"
+    execute(Path(args[0]).resolve(), start_url=f"https://www.instagram.com/{account}/")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

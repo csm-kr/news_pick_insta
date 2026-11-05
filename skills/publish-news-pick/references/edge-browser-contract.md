@@ -47,3 +47,22 @@ python scripts/invoke_edge_browser_harness.py scripts/browser_web_preflight.py
 ```
 
 예약 실행기는 `BU_NAME`, `BU_CDP_URL`, `NEWS_PICK_BROWSER`를 위 값으로 주입한다. 개별 스킬이나 하위 프로세스가 이를 덮어쓸 수 없다.
+
+## ego lite 경로(2026-11-06부터 예약 게시 기본)
+
+ego lite는 원격 디버깅 포트를 열지 않아 Browser Harness가 붙을 수 없다. 대신 `NEWS_PICK_BROWSER=ego`를 주면 같은 `invoke_edge_browser_harness.py` 명령이 helper 스크립트를 수정 없이 ego lite에서 실행한다. 기본값은 계속 `edge`이고, `edge`·`ego` 외의 값은 실패한다.
+
+```powershell
+$env:NEWS_PICK_BROWSER = 'ego'
+python scripts/invoke_edge_browser_harness.py scripts/browser_web_preflight.py
+```
+
+- `scripts/ego_harness.py`: Browser Harness helper(`cdp`, `js`, `click_at_xy`, `switch_tab`, `_send` 등)를 같은 이름으로 제공하고, 전송만 ego로 바꾼다. 실행 전 `Browser.getVersion`이 `ego-lite/`인지 확인한다.
+- `scripts/ego_bridge.mjs`: `ego-browser nodejs` 안에서 TaskSpace `newspick-instagram`을 열고 loopback TCP로 `page.cdp`·`task.cdp`·탭 조작만 중계한다. 10분 동안 요청이 없으면 스스로 종료한다.
+- target·session은 ego Page 라벨(`p1`, `p2` …)로 바뀐다. `Target.getTargets`는 이 TaskSpace의 탭만 돌려주므로, 사용자가 ego에서 따로 연 Instagram 탭은 계산에 들어가지 않는다. `Target.createTarget`은 `task.newPage()`, `Target.closeTarget`은 `page.close()`, `Target.activateTarget`은 `Page.bringToFront`로 바뀐다. 그 밖의 `Target.*`·`Browser.*`(창 위치 조회·변경 제외)는 실패한다.
+- ego 창이 최소화돼 있으면 `Page.captureScreenshot` 앞뒤로 창을 잠깐 복원했다가 다시 최소화한다. `activate=True` 탭 전환은 창을 앞으로 가져온다.
+- 로그인은 ego lite 기본 프로필의 Instagram 세션을 쓴다. 계정 확인은 preflight가 Edge 때와 같은 방식으로 한다.
+- 확인 범위: 2026-11-06 수동 run `20261106-081953-d13439eb`에서 preflight → upload_prepare → 갤러리 확인 → advance_to_caption(4:5, 0.8) → fill_caption_ai(AI 라벨) → share_once → verify_carousel까지 helper 수정 없이 ego로 게시·공개 검증했다([DfYNmPskh8b](https://www.instagram.com/p/DfYNmPskh8b/)). 그래서 `scheduled_runner.py`는 예약 회차에 `NEWS_PICK_BROWSER=ego`를 주입한다.
+- 첫 `upload_prepare`가 클릭 전에 `visible control not found: 만들기`로 끝난 적이 있다(같은 명령 재실행으로 통과). 클릭 전 실패라 재실행해도 이중 업로드가 아니다.
+- `browser_web_dom_probe.py`는 `ego-lite/` product도 허용하고 보고서 `connection`을 `ego-lite`로 적는다.
+- 스토리 게시·검증, 팔로우·언팔 예약은 아직 Edge(`NEWS_PICK_BROWSER` 미설정)로 돈다. 그래서 Edge 전용 프로필 로그인도 유지한다.

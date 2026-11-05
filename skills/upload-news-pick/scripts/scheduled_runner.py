@@ -176,7 +176,6 @@ def build_prompt(root: Path, scheduled_at: datetime, settings: dict[str, Any]) -
     skill_path = root / "skills" / "upload-news-pick" / "SKILL.md"
     publish_gate_path = root / "skills" / "upload-news-pick" / "scripts" / "wait_for_publish_time.py"
     publish_scripts = root / "skills" / "publish-news-pick" / "scripts"
-    edge_launcher_path = publish_scripts / "launch_edge_profile.py"
     edge_invoker_path = publish_scripts / "invoke_edge_browser_harness.py"
     instagram_preflight_path = publish_scripts / "browser_web_preflight.py"
     editorial_lane = editorial_lane_for(scheduled_at)
@@ -215,10 +214,7 @@ def build_prompt(root: Path, scheduled_at: datetime, settings: dict[str, Any]) -
 - timezone: Asia/Seoul
 - account: {settings['account']}
 - public research browser: Aside CLI first (read `aside-browser` skill)
-- Instagram browser: Microsoft Edge only, 기존 뉴스픽 전용 로그인 세션 (Aside Instagram 로그아웃 확인 후 사용자가 승인한 fallback)
-- Browser Harness connection: {settings['browser']['connection_name']}
-- Edge CDP: {settings['browser']['cdp_url']}
-- Edge user data: {settings['browser']['user_data_dir']}
+- Instagram browser: ego lite (`NEWS_PICK_BROWSER=ego`가 주입돼 있다). `invoke_edge_browser_harness.py`가 helper를 ego TaskSpace `newspick-instagram`의 agent 탭으로 중계한다.
 - output root: {settings['output_root']}
 - target editorial lane: {editorial_lane}
 
@@ -262,14 +258,13 @@ python "{publish_gate_path}"
 - 사실적 AI 재구성 게시물은 Instagram의 `AI 콘텐츠` 라벨을 켠다.
 
 실행 안전 규칙:
-- 모든 웹 상호작용은 Microsoft Edge의 `edge9333` named CDP 연결에서만 Browser Harness로 실행한다. Chrome, Chromium, Browser Harness default 연결, 다른 CDP URL은 사용하지 않는다.
+- 모든 Instagram·브라우저 상호작용은 `invoke_edge_browser_harness.py`로만 실행한다(이번 회차는 `NEWS_PICK_BROWSER=ego`라 ego lite로 간다). 이 환경변수를 바꾸지 말고, ego-browser 직접 스크립트·Chrome·다른 CDP URL로 우회하지 않는다.
 - Instagram 변경 동작 직전에 `output/runs/*/run.json`을 다시 읽는다. 자신과 다른 run이 `status=in_progress`이면서 `current_stage=publish-news-pick`이면 작성기를 열거나 기존 draft를 폐기하지 말고 `skipped`(`composer_busy`)로 끝낸다. 수동 run과 예약 run의 산출물·run_id를 절대 공유하거나 덮어쓰지 않는다.
-- Edge가 열려 있지 않을 때만 아래 launcher를 한 번 실행한다. 기존 사용자 탭은 닫거나 탐색하지 않는다. 그다음 Excel Collector fast-path와 같은 exact-byte invoker로 targeted preflight를 Browser Harness 프로세스 하나에서 실행한다. 전체 AX/DOM dump를 사용하지 않는다.
+- ego lite는 따로 띄울 필요가 없다. 기존 사용자 탭은 닫거나 탐색하지 않는다(helper는 `newspick-instagram` agent 탭만 본다). exact-byte invoker로 targeted preflight를 helper 프로세스 하나에서 실행한다. 전체 AX/DOM dump를 사용하지 않는다. `upload_prepare`가 클릭 전에 `visible control not found`로 끝나면 탭이 막 앞으로 온 직후일 수 있으니 같은 명령을 한 번만 다시 실행한다.
 
 ```powershell
 $env:IG_ACCOUNT = "{settings['account']}"
 $env:IG_DUPLICATE_TOKENS = '<첫 카드의 안정적인 고유 토큰 2~3개를 | 로 연결>'
-python "{edge_launcher_path}" --account $env:IG_ACCOUNT
 python "{edge_invoker_path}" "{instagram_preflight_path}"
 ```
 - preflight 한 번에서 설정 계정·소유자 control·로그인/challenge·공개 프로필 최신 게시물 중복을 함께 확인한다. 중복 점검을 별도 Harness 호출로 반복하지 않는다.
@@ -396,7 +391,7 @@ def child_environment(
             "PYTHONIOENCODING": "utf-8",
             "NEWS_PICK_OUTPUT_ROOT": str(settings["output_root"]),
             "IG_ACCOUNT": settings["account"],
-            "NEWS_PICK_BROWSER": "edge",
+            "NEWS_PICK_BROWSER": "ego",
             "NEWS_PICK_BROWSER_HARNESS_NAME": EDGE_CONNECTION_NAME,
             "NEWS_PICK_EDGE_CDP_URL": EDGE_CDP_URL,
             "NEWS_PICK_EDGE_USER_DATA_DIR": settings["browser"]["user_data_dir"],

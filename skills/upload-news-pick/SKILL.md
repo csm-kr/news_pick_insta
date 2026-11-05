@@ -7,7 +7,7 @@ description: 공개 반응이 큰 한국 종합 이슈를 최근 48시간에서 
 
 하나의 `run_id` 아래 네 전문 스킬을 순서대로 연결한다. 이 스킬은 각 단계의 일을 직접 대신하지 않고 입력·출력 계약, hash, 중단·재개와 게시 승인 경계만 관리한다.
 
-실행 전 [references/portable-layout.md](references/portable-layout.md)와 [../publish-news-pick/references/edge-browser-contract.md](../publish-news-pick/references/edge-browser-contract.md)를 읽고 다섯 스킬이 같은 부모 폴더에 설치됐는지 확인한다. skill 폴더는 읽기 전용으로 유지하고 모든 실행물은 별도 `NEWS_PICK_OUTPUT_ROOT` 아래에 쓴다. 뉴스픽의 모든 웹 상호작용은 Microsoft Edge의 Browser Harness named 연결 `edge9333`만 사용하며 Chrome/default/다른 CDP로 대체하지 않는다.
+실행 전 [references/portable-layout.md](references/portable-layout.md)와 [../publish-news-pick/references/edge-browser-contract.md](../publish-news-pick/references/edge-browser-contract.md)를 읽고 다섯 스킬이 같은 부모 폴더에 설치됐는지 확인한다. skill 폴더는 읽기 전용으로 유지하고 모든 실행물은 별도 `NEWS_PICK_OUTPUT_ROOT` 아래에 쓴다. 뉴스픽의 모든 웹 상호작용은 `invoke_edge_browser_harness.py`로만 실행한다. 기본은 Microsoft Edge `edge9333`이고, 예약 게시(07·12·17시)는 실행기가 `NEWS_PICK_BROWSER=ego`를 주입해 ego lite로 간다. Chrome/default/다른 CDP로 대체하지 않는다.
 
 ## 고정 구성
 
@@ -150,7 +150,7 @@ python scripts/scheduled_runner.py --slot 07:00
 
 실행 파일은 `CLAUDE_EXECUTABLE` → PATH의 `claude` → `%USERPROFILE%\.local\bin\claude.exe` 순서로 찾고, `--json-schema`와 `--dangerously-skip-permissions`를 지원하는 버전만 사용한다. 모델과 effort는 기본값(`claude-fable-5-1`, `high`)을 쓰며 `NEWS_PICK_CLAUDE_MODEL`, `NEWS_PICK_CLAUDE_EFFORT`(low·medium·high·xhigh·max)로 바꾼다. `output/workspace.json`에 선택적 `imagegen` 블록(`auth_file`, `model`)을 두면 실행기가 `CODEX_IMAGEGEN_AUTH_FILE`/`CODEX_IMAGEGEN_MODEL`을 주입하고 prompt에 같은 `--imagegen-auth-file`/`--imagegen-model` 값을 명시한다. 이벤트 로그(`output/logs/scheduler/<slot>.jsonl`)는 stream-json이며 `claude_session_id`로 `claude --resume`할 수 있다.
 
-공개 웹 조사는 `aside-browser`와 Aside CLI를 우선한다. 현재 운영 계정은 Aside의 Instagram 로그아웃을 확인하고 사용자에게 알린 뒤 승인된 뉴스픽 전용 Edge `edge9333` 로그인 세션을 게시에 사용한다.
+공개 웹 조사는 `aside-browser`와 Aside CLI를 우선한다. 현재 운영 계정은 Aside의 Instagram 로그아웃을 확인하고 사용자에게 알린 뒤, 예약 게시는 ego lite 기본 프로필의 newspick_studio 세션을, 수동 Edge 경로는 뉴스픽 전용 Edge `edge9333` 로그인 세션을 쓴다.
 
 Windows 예약 작업은 다음으로 관리한다.
 
