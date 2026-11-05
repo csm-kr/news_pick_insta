@@ -59,6 +59,22 @@ class ReferenceDiversityTests(unittest.TestCase):
             self.assertIn("Never postpone a crucial limitation", first_job)
             self.assertIn("LOWER 35-42%", first_job.upper())
 
+    def test_every_prompt_starts_with_role_specific_safe_area_rule(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            board = self.make_board(root)
+            plan = MOD.prepare(board, root / "storyboard.json", root / "work", "1080x1350", seed=12345)
+            prompts = {}
+            for job in plan["jobs"]:
+                prompt = json.loads(Path(job["job"]).read_text(encoding="utf-8"))["prompt"]
+                self.assertTrue(prompt.startswith("SAFE AREA — THE MOST IMPORTANT RULE OF THIS CARD"), prompt[:80])
+                prompts[job["card_index"]] = prompt
+            self.assertIn("No text in the top 160px", prompts[1])
+            for index in (2, 3, 4):
+                self.assertIn("The top 110px of the card is EMPTY background", prompts[index])
+                self.assertIn("about 26% of the card height", prompts[index])
+            self.assertIn("The top 110px and bottom 110px are empty background", prompts[5])
+
     def test_body_card_prompt_locks_article_paragraph_from_copy(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

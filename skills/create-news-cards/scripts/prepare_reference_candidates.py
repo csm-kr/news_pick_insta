@@ -179,6 +179,21 @@ def resolve_references(card: dict, board_dir: Path, direction: dict) -> list[str
     return resolved
 
 
+# 최종 1080x1350의 상·하단 72px 침범이 거의 매 회차 재생성을 불렀다. 2026-11-02~06 실측에서
+# 이 문구를 프롬프트 맨 앞에 둘 때만 1차 생성이 안전영역을 지켰으므로 카드 역할별로 항상 앞에 붙인다.
+SAFE_AREA_COVER = """SAFE AREA — THE MOST IMPORTANT RULE OF THIS CARD (final 1080x1350 canvas):
+- No text in the top 160px. Put 뉴스픽 · 기준시각 · photo credit on ONE line inside the gradient, directly above the title.
+- The last subtitle line ends above y=1190; the bottom 150px is empty gradient. Left and right 90px margins hold no text."""
+SAFE_AREA_BODY = """SAFE AREA — THE MOST IMPORTANT RULE OF THIS CARD (final 1080x1350 canvas):
+- The top 110px of the card is EMPTY background: no text, no line, no logo. The header line (기준시각 · 뉴스픽) begins below that empty band.
+- The bottom 110px of the card is EMPTY background: the table's last border ends well above it.
+- Left and right 90px margins hold no text, no photo edge and no table border.
+- To make room, the photo panel is compact: only about 26% of the card height, wide and short. This overrides the 35-50% image size below.
+- Never drop the paragraph, any table row, or the header line."""
+SAFE_AREA_SOURCES = """SAFE AREA — THE MOST IMPORTANT RULE OF THIS CARD (final 1080x1350 canvas):
+- The top 110px and bottom 110px are empty background. Left and right 90px margins hold no text or divider lines."""
+
+
 def card_prompt(direction: dict, card: dict, card_count: int, target: str, visual_roles: list[str]) -> str:
     required = card.get("required_text") or []
     if not required:
@@ -221,7 +236,10 @@ SOURCE PAGE INVARIANT
 - Use a highly legible single-column or two-column list with generous row spacing. Do not add a new claim, CTA, quote, chart or decorative microtext.
 - Any factual reference image may appear only as a faint restrained background texture; source text is the priority.
 """.strip()
+    safe_area = SAFE_AREA_COVER if index == 1 else SAFE_AREA_BODY if index in (2, 3, 4) else SAFE_AREA_SOURCES
     return f"""
+{safe_area}
+
 Create a FINISHED Instagram news infographic card, card {card['index']} of a coherent {card_count}-card carousel.
 
 VISUAL DIRECTION
