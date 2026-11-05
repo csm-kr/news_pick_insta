@@ -87,7 +87,8 @@ if len(set(story_urls)) != len(story_urls):
 shot_dir = Path(os.environ["IG_STORY_VERIFY_SCREENSHOT_DIR"]).resolve()
 shot_dir.mkdir(parents=True, exist_ok=True)
 previous = current_tab()["targetId"]
-target_id = cdp("Target.createTarget", url="about:blank", background=True)["targetId"]
+# 같은 창의 백그라운드 탭은 hidden이라 영상을 불러오지 않는다. 뒤쪽 새 창은 visible이면서 포커스를 뺏지 않는다.
+target_id = cdp("Target.createTarget", url="about:blank", background=True, newWindow=True)["targetId"]
 stories = []
 try:
     attach_without_focus(target_id)

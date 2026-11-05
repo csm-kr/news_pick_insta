@@ -234,5 +234,29 @@ class CaptionResumeTests(unittest.TestCase):
         self.assertEqual(result["input_method"], "existing_exact_caption")
 
 
+class CaptionSuggestionTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("node"), "Node.js required for DOM fixture")
+    def test_only_the_active_composer_caption_editor_is_blurred(self):
+        expressions = []
+        namespace = load_functions(js=lambda expression: expressions.append(expression))
+        namespace["dismiss_caption_suggestions"]()
+        fixture = """
+const owns=process.argv[1]==='caption';
+let editorBlurred=0,otherBlurred=0;
+const editor={contains:n=>n===editor,blur:()=>{editorBlurred++}};
+const other={blur:()=>{otherBlurred++}};
+globalThis.document={activeElement:owns?editor:other,
+ querySelector:()=>({querySelector:()=>editor})};
+"""
+        for active in ("caption", "other"):
+            with self.subTest(active=active):
+                output = subprocess.check_output(
+                    ["node", "-e", fixture + expressions[0] + "; console.log(JSON.stringify({editorBlurred,otherBlurred}));", active],
+                    text=True, encoding="utf-8", creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+                state = json.loads(output)
+                self.assertEqual(state["editorBlurred"], int(active == "caption"))
+                self.assertEqual(state["otherBlurred"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -48,6 +48,9 @@ def launch_command(edge: Path, account: str, user_data_dir: Path) -> list[str]:
         f"--profile-directory={edge_browser.EDGE_PROFILE_NAME}",
         "--no-first-run",
         "--disable-default-apps",
+        # 다른 창에 덮여도 탭을 hidden으로 돌리지 않아야 Instagram 작성기가 계속 그려진다
+        "--disable-backgrounding-occluded-windows",
+        "--disable-features=CalculateNativeWinOcclusion",
         f"https://www.instagram.com/{account}/",
     ]
 

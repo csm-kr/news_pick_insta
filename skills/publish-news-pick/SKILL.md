@@ -109,7 +109,7 @@ Browser Harness로 설정된 Edge profile의 Instagram 작성 화면을 열고 �
 5. 승인된 caption을 `scripts/browser_web_fill_caption_ai.py`로 입력. Instagram이 `<textarea>` 또는 `[role=textbox][contenteditable=true]` 중 어느 형식으로 렌더링해도 로컬 원문과 글자 수를 대조한다. 일반 입력이 줄바꿈만 남기면 스크립트가 paste event로 한 번 대체한다. 편집기가 끝에 추가하는 개행만 정규화하고 내부 줄바꿈은 그대로 비교하며, `AI로 재구성한 인포그래픽` 계열 문구가 없어야 함
 6. 사실적 AI 재구성 카드에는 `AI 라벨 추가` 또는 `AI 레이블 추가` 활성화. caption helper는 이미 일치하는 본문을 다시 입력하지 않고, dialog 안의 단일 AI switch를 hit-test한 뒤 실제 켜짐을 기다린다. 여전히 꺼져 있고 조작 가능한 경우만 한 번 복구 클릭하며, 확인 불가·가림·실패 시 공유하지 않는다.
 7. 게시 직전 장수·첫 카드·마지막 카드 출처 블록·caption 글자 수·AI 라벨을 재확인
-8. 예약 모드는 `NEWS_PICK_EDITION_AT`까지 대기한 뒤 `scripts/browser_web_share_once.py`로 `공유하기`를 한 번만 클릭. 이 스크립트는 회차 시각 전 클릭과 회차 시각 30분 뒤의 보충 게시를 차단한다.
+8. 예약 모드는 `NEWS_PICK_EDITION_AT`까지 대기한 뒤 `scripts/browser_web_share_once.py`로 `공유하기`를 한 번만 클릭. 이 스크립트는 회차 시각 전 클릭과 회차 시각 30분 뒤의 보충 게시를 차단한다. 미게시가 확정된 예약 run의 복구 공유(`NEWS_PICK_SHARE_RECOVERY=1`, `NEWS_PICK_SHARE_FAILED_AT`, `NEWS_PICK_RUN_DIR`)는 실패 10분 뒤부터 회차 시각+60분까지 run당 한 번만 허용한다.
 9. Instagram의 성공 표시를 확인하고 `scripts/browser_web_find_latest_post.py`로 공개 프로필에서 shortcode를 수집. Instagram이 반환하는 `/<account>/p/<code>/` 형식은 `https://www.instagram.com/p/<code>/`로 정규화한다.
 
 성공 표시와 shortcode가 확인되면 재업로드하지 않고 제출 기록을 연결한다.

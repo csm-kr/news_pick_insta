@@ -184,6 +184,10 @@ def card_prompt(direction: dict, card: dict, card_count: int, target: str, visua
     if not required:
         raise ValueError(f"card {card.get('index')}에 required_text가 없다.")
     exact_copy = "\n".join(f'- "{text}"' for text in required)
+    # 생성 모델은 이 목록만 그리므로 2~4장의 줄글(copy)도 여기에 넣어야 본문 단락이 빠지지 않는다
+    paragraph = " ".join(str(card.get("copy") or "").split())
+    if int(card["index"]) in (2, 3, 4) and paragraph and paragraph not in required:
+        exact_copy += f'\n- Article paragraph (one continuous left-aligned paragraph below the title): "{paragraph}"'
     chart_value = card.get("chart_spec") or "No chart."
     chart_spec = json.dumps(chart_value, ensure_ascii=False) if isinstance(chart_value, dict) else str(chart_value)
     width, height = (int(value) for value in target.split("x"))

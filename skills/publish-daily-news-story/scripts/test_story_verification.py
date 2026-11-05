@@ -24,6 +24,7 @@ class BrowserStoryVerificationTests(unittest.TestCase):
         captures = []
         closed = []
         reads = []
+        created = []
         urls = [
             f"https://www.instagram.com/stories/example/{index}/"
             for index in range(1, story_count + 1)
@@ -34,6 +35,7 @@ class BrowserStoryVerificationTests(unittest.TestCase):
         def fake_cdp(method, **arguments):
             if method == "Target.createTarget":
                 self.assertTrue(arguments["background"])
+                created.append(arguments)
                 return {"targetId": "work"}
             if method == "Target.attachToTarget":
                 return {"sessionId": "attached"}
@@ -99,6 +101,7 @@ class BrowserStoryVerificationTests(unittest.TestCase):
                 "navigations": navigations,
                 "captures": captures,
                 "closed": closed,
+                "created": created,
                 "read_count": len(reads),
                 "screenshot_bytes": screenshot.read_bytes(),
             }
@@ -112,6 +115,13 @@ class BrowserStoryVerificationTests(unittest.TestCase):
         self.assertTrue(all(item["url_match"] for item in outcome["result"]["stories"]))
         self.assertEqual(outcome["screenshot_bytes"], b"fresh-frame")
         self.assertEqual(outcome["closed"], ["work"])
+
+    def test_stories_open_in_separate_background_window_so_video_loads(self):
+        # 같은 창의 백그라운드 탭은 hidden이라 Edge가 영상을 아예 불러오지 않는다
+        outcome = self.run_task()
+        self.assertEqual(len(outcome["created"]), 1)
+        self.assertTrue(outcome["created"][0]["background"])
+        self.assertTrue(outcome["created"][0].get("newWindow"))
 
     def test_two_loaded_stories_verify_when_only_two_were_published(self):
         outcome = self.run_task(story_count=2)

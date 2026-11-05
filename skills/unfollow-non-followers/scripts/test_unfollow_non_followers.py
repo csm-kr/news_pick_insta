@@ -97,6 +97,48 @@ class ScheduleGuardTests(unittest.TestCase):
         self.assertEqual(MOD.next_deadline(at(17, 50)), at(18, 45))
         self.assertEqual(MOD.next_deadline(at(21, 0)).strftime("%m-%d %H:%M"), "09-27 06:15")
 
+    def test_only_instagram_web_app_tabs_are_used(self):
+        def tab(url, kind="page"):
+            return {"type": kind, "url": url}
+        self.assertTrue(MOD.is_instagram_app_tab(tab("https://www.instagram.com/")))
+        self.assertTrue(MOD.is_instagram_app_tab(tab("https://www.instagram.com/newspick_studio/")))
+        # 이미지 CDN·API JSON·빈 탭·서비스워커에는 페이지 모듈(window.require)이 없다
+        self.assertFalse(MOD.is_instagram_app_tab(tab("https://scontent-ssn1-1.cdninstagram.com/v/t51/a.jpg")))
+        self.assertFalse(MOD.is_instagram_app_tab(tab("https://www.instagram.com/api/v1/users/web_profile_info/?username=x")))
+        self.assertFalse(MOD.is_instagram_app_tab(tab("https://www.google.com/search?q=instagram.com")))
+        self.assertFalse(MOD.is_instagram_app_tab(tab("about:blank")))
+        self.assertFalse(MOD.is_instagram_app_tab(tab("https://www.instagram.com/", kind="service_worker")))
+
+    def test_reopens_instagram_home_when_page_modules_are_missing(self):
+        calls, answers = [], iter(["undefined", "undefined", "function"])
+
+        def send(method, params):
+            calls.append(method)
+            if method == "Runtime.evaluate":
+                return {"result": {"value": next(answers)}}
+            return {}
+
+        MOD.wait_for_page_modules(send, attempts=5, sleep=lambda _s: None)
+        self.assertEqual(calls.count("Page.navigate"), 1)
+        self.assertEqual(calls[-1], "Runtime.evaluate")
+
+    def test_ready_page_is_not_navigated(self):
+        calls = []
+
+        def send(method, params):
+            calls.append(method)
+            return {"result": {"value": "function"}}
+
+        MOD.wait_for_page_modules(send, attempts=5, sleep=lambda _s: None)
+        self.assertNotIn("Page.navigate", calls)
+
+    def test_gives_up_when_page_modules_never_load(self):
+        def send(method, params):
+            return {"result": {"value": "undefined"}}
+
+        with self.assertRaises(SystemExit):
+            MOD.wait_for_page_modules(send, attempts=3, sleep=lambda _s: None)
+
 
 if __name__ == "__main__":
     unittest.main()

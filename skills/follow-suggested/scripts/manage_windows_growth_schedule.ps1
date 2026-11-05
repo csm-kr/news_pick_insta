@@ -17,15 +17,20 @@ if (-not (Test-Path $pythonw)) {
 }
 $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 
-# 팔로우는 매일 10:00·21:00(0~20분 무작위 지연), 맞팔 아닌 계정 정리는 매주 월요일 00:30
+# 팔로우는 오전·오후·저녁 구간마다 작업 스케줄러가 시작 시각을 매일 무작위로 정한다(게시 회차 시간대는 피한다).
+# 그날 몇 명을 몇 구간에 나눌지는 follow_suggested.py --session이 정한다. 맞팔 아닌 계정 정리는 매주 월요일 00:30
 $tasks = @(
-    @{ name = 'NewsPickFollow-1000'; target = 'daily 10:00'; arguments = "`"$followScript`" --jitter-minutes 20"
-       trigger = { New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours(10)) }; limit = New-TimeSpan -Hours 2 },
-    @{ name = 'NewsPickFollow-2100'; target = 'daily 21:00'; arguments = "`"$followScript`" --jitter-minutes 20"
-       trigger = { New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours(21)) }; limit = New-TimeSpan -Hours 2 },
+    @{ name = 'NewsPickFollow-Morning'; target = 'daily 08:00-10:50 random'; arguments = "`"$followScript`" --session morning"
+       trigger = { New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours(8)) -RandomDelay (New-TimeSpan -Hours 2 -Minutes 50) }; limit = New-TimeSpan -Hours 2 },
+    @{ name = 'NewsPickFollow-Afternoon'; target = 'daily 13:00-15:30 random'; arguments = "`"$followScript`" --session afternoon"
+       trigger = { New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours(13)) -RandomDelay (New-TimeSpan -Hours 2 -Minutes 30) }; limit = New-TimeSpan -Hours 2 },
+    @{ name = 'NewsPickFollow-Evening'; target = 'daily 20:00-23:00 random'; arguments = "`"$followScript`" --session evening"
+       trigger = { New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours(20)) -RandomDelay (New-TimeSpan -Hours 3) }; limit = New-TimeSpan -Hours 2 },
     @{ name = 'NewsPickUnfollow-Weekly'; target = 'Monday 00:30'; arguments = "`"$unfollowScript`" --auto"
        trigger = { New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday -At ([datetime]::Today.AddMinutes(30)) }; limit = New-TimeSpan -Hours 6 }
 )
+# 예전의 고정 시각 팔로우 작업. install·remove 때 지운다
+$legacyTaskNames = @('NewsPickFollow-1000', 'NewsPickFollow-2100')
 
 function Get-GrowthTaskRecord($spec) {
     $task = Get-ScheduledTask -TaskName $spec.name -ErrorAction SilentlyContinue
@@ -67,7 +72,15 @@ if ($Command -eq 'install') {
             -Description 'News Pick Edge edge9333 only. Follow suggested accounts / unfollow non-followers, avoiding scheduled publish runs.'
         Register-ScheduledTask -TaskName $spec.name -InputObject $task -Force | Out-Null
     }
-} elseif ($Command -eq 'remove') {
+}
+if ($Command -in 'install', 'remove') {
+    foreach ($name in $legacyTaskNames) {
+        if (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue) {
+            Unregister-ScheduledTask -TaskName $name -Confirm:$false
+        }
+    }
+}
+if ($Command -eq 'remove') {
     foreach ($spec in $tasks) {
         if (Get-ScheduledTask -TaskName $spec.name -ErrorAction SilentlyContinue) {
             Unregister-ScheduledTask -TaskName $spec.name -Confirm:$false

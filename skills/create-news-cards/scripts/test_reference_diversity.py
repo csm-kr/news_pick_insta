@@ -72,6 +72,16 @@ class ReferenceDiversityTests(unittest.TestCase):
             self.assertIn('"첫 문장입니다. 두 번째 문장입니다."', body_job["prompt"])
             self.assertNotIn("Article paragraph", cover_job["prompt"])
 
+    def test_article_paragraph_already_in_required_text_is_not_duplicated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            board = self.make_board(root)
+            board["cards"][1]["copy"] = "첫 문장입니다. 두 번째 문장입니다."
+            board["cards"][1]["required_text"] = [*board["cards"][1]["required_text"], "첫 문장입니다. 두 번째 문장입니다."]
+            plan = MOD.prepare(board, root / "storyboard.json", root / "work", "1080x1350", seed=12345)
+            body_job = json.loads(Path(plan["jobs"][1]["job"]).read_text(encoding="utf-8"))
+            self.assertEqual(body_job["prompt"].count("첫 문장입니다. 두 번째 문장입니다."), 1)
+
     def test_duplicate_primary_reference_is_blocked(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

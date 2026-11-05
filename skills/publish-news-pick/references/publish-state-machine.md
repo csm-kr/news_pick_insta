@@ -6,7 +6,7 @@
 - `submitted`: private API가 pk/shortcode를 반환했거나 Browser Harness 웹 UI 성공 표시와 shortcode가 확인됐지만 공개 검증 전
 - `published`: 공개 프로필 검증까지 완료
 - `failed_pre_submit`: `album_upload` 호출 전 실패. 같은 payload 재승인 후 재시도 가능
-- `needs_review`: 호출 뒤 오류·timeout 또는 제출 여부 불명. 자동 재시도 금지
+- `needs_review`: 호출 뒤 오류·timeout 또는 제출 여부 불명. 자동 재시도 금지. 단 예약 run이 미게시를 확정한 경우의 복구 공유는 `upload-news-pick/references/operating-policy.md`의 미게시 복구 조건으로 새 job에서 한 번만 허용한다
 
 모든 attempt에 시작·종료 시각, `submission_started`, redacted 오류, private 응답 식별자만 기록한다. sessionid와 cookie는 기록하지 않는다.
 

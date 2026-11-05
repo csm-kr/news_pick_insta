@@ -92,6 +92,23 @@ def normalize_editor_text(value):
     return str(value or "").replace("\r\n", "\n").rstrip("\n")
 
 
+def dismiss_caption_suggestions():
+    # A focused trailing hashtag opens suggestions over the AI switch. Blur only
+    # this composer's caption; Escape opens the destructive discard dialog.
+    return js(
+        """
+(() => {
+  const dialog=document.querySelector('[role=dialog]');
+  const editor=dialog?.querySelector('textarea,[role=textbox][contenteditable=true],[role=textbox][aria-label]');
+  const active=document.activeElement;
+  if(!editor||!active||(active!==editor&&!editor.contains(active)))return false;
+  active.blur();
+  return true;
+})()
+"""
+    )
+
+
 def read_caption():
     return js(
         """
@@ -156,6 +173,10 @@ if normalize_editor_text(read_caption()) != normalize_editor_text(caption):
 
 if normalize_editor_text(read_caption()) != normalize_editor_text(caption):
     raise RuntimeError("caption mismatch; AI label and Share were not touched")
+dismiss_caption_suggestions()
+time.sleep(random.uniform(0.3, 0.5))
+if normalize_editor_text(read_caption()) != normalize_editor_text(caption):
+    raise RuntimeError("caption changed after closing suggestions; do not share")
 ai_switch = ensure_ai_label()
 
 state = js(

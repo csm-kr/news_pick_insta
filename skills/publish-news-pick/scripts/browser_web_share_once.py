@@ -9,6 +9,7 @@ import time
 from datetime import datetime, timedelta
 
 
+recovery_lock = None
 if os.environ.get("NEWS_PICK_SCHEDULED_MODE") == "1":
     raw_scheduled_at = os.environ.get("NEWS_PICK_EDITION_AT")
     if not raw_scheduled_at:
@@ -27,7 +28,33 @@ if os.environ.get("NEWS_PICK_SCHEDULED_MODE") == "1":
         raise RuntimeError(
             "scheduled publish time has not arrived; run wait_for_publish_time.py first; nothing was clicked"
         )
-    if current_time > scheduled_at + timedelta(minutes=30):
+    if os.environ.get("NEWS_PICK_SHARE_RECOVERY") == "1":
+        # 미게시가 확인된 회차의 복구 공유: 실패 10분 뒤부터 회차+60분까지, run당 한 번만 허용한다.
+        failed_at = datetime.fromisoformat(
+            re.sub(
+                r"(\.\d{6})\d+(?=([+-]\d{2}:\d{2})?$)",
+                r"\1",
+                os.environ["NEWS_PICK_SHARE_FAILED_AT"].replace("Z", "+00:00"),
+            )
+        )
+        if failed_at.tzinfo is None or failed_at < scheduled_at:
+            raise RuntimeError("NEWS_PICK_SHARE_FAILED_AT is invalid; nothing was clicked")
+        if current_time < failed_at + timedelta(minutes=10):
+            raise RuntimeError(
+                "recovery share must wait 10 minutes after the failed share; nothing was clicked"
+            )
+        if current_time > scheduled_at + timedelta(minutes=60):
+            raise RuntimeError(
+                "recovery share window expired 60 minutes after edition; nothing was clicked"
+            )
+        recovery_lock = os.path.join(
+            os.environ["NEWS_PICK_RUN_DIR"], "04-publish", "share-recovery.lock"
+        )
+        if os.path.exists(recovery_lock):
+            raise RuntimeError(
+                "recovery share was already used in this run; nothing was clicked"
+            )
+    elif current_time > scheduled_at + timedelta(minutes=30):
         raise RuntimeError(
             "scheduled publish window expired 30 minutes ago; nothing was clicked"
         )
@@ -119,6 +146,9 @@ if not clicked:
 submission_already_started = not clicked
 reinforced = False
 if clicked:
+    if recovery_lock:
+        with open(recovery_lock, "x", encoding="utf-8") as handle:
+            handle.write(datetime.now().astimezone().isoformat())
     time.sleep(random.uniform(0.22, 0.48))
     click_at_xy(clicked["x"], clicked["y"])
     # 좌표 클릭이 화면에 닿지 않으면 공유 control이 같은 자리에 그대로 남는다.

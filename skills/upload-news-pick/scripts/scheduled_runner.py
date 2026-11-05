@@ -214,7 +214,8 @@ def build_prompt(root: Path, scheduled_at: datetime, settings: dict[str, Any]) -
 - edition_at: {scheduled_at.isoformat()}
 - timezone: Asia/Seoul
 - account: {settings['account']}
-- browser: Microsoft Edge only
+- public research browser: Aside CLI first (read `aside-browser` skill)
+- Instagram browser: Microsoft Edge only, 기존 뉴스픽 전용 로그인 세션 (Aside Instagram 로그아웃 확인 후 사용자가 승인한 fallback)
 - Browser Harness connection: {settings['browser']['connection_name']}
 - Edge CDP: {settings['browser']['cdp_url']}
 - Edge user data: {settings['browser']['user_data_dir']}
@@ -274,7 +275,8 @@ python "{edge_invoker_path}" "{instagram_preflight_path}"
 - preflight 한 번에서 설정 계정·소유자 control·로그인/challenge·공개 프로필 최신 게시물 중복을 함께 확인한다. 중복 점검을 별도 Harness 호출로 반복하지 않는다.
 - 같은 bounded phase 안의 target 탐색·DOM 판독·대기·검증은 한 Browser Harness 프로세스 안에서 묶는다. 조회는 event-driven targeted probe로 빠르게 처리하고, 게시 UI 변경 사이에만 짧은 random jitter를 둔다.
 - 적합한 새 이슈가 없거나 검색·기획·이미지·중복·계정·캐러셀·AI 라벨 QA가 하나라도 실패하면 filler를 만들지 말고 skipped 또는 needs_review로 끝낸다.
-- 공유하기는 한 번만 누른다. 제출 시작 뒤 오류·timeout이면 자동 재시도하지 않고 공개 프로필을 읽기 전용으로 확인한다.
+- 공유하기는 한 번만 누른다. 제출 시작 뒤 오류·timeout이면 자동 재시도하지 않고 공개 프로필을 읽기 전용으로 확인한다. 작성기 dialog에 `게시물 공유됨`·`완료`·`게시물` 링크 중 하나가 보이면 공유 성공이므로 정상 검증으로 간다.
+- 미게시 복구(사용자 사전 승인, 회차당 한 번): 성공 표지가 없고, 작성기 dialog가 사라졌고, background target에서 프로필을 새로 열어 읽은 최신 게시물 href와 게시물 수가 공유 전 preflight 값과 같을 때만 미게시로 판정한다. 그중 하나라도 다르거나 dialog가 남아 있으면 복구하지 말고 needs_review로 끝낸다. 미게시로 판정하면 실패 시각을 timezone 포함 ISO로 `NEWS_PICK_SHARE_FAILED_AT`에 넣고 `NEWS_PICK_SHARE_RECOVERY=1`, `NEWS_PICK_RUN_DIR=<이번 run 디렉터리>`를 함께 설정해 위 시간 게이트를 다시 실행한다(실패 10분 뒤 해제, 회차 시각+60분이 지나면 거부). 게이트가 끝나면 같은 `IG_DUPLICATE_TOKENS`로 preflight를 다시 실행해 `duplicate_match=false`이고 최신 게시물 href가 그대로일 때만 진행한다. 첫 queue job은 needs_review로 둔 채 같은 slides·caption으로 `carousel_queue.py prepare`를 다시 하고, payload hash가 첫 job과 같을 때만 새 job을 예약 승인한다. `browser_web_upload_prepare.py`부터 4:5·caption·AI 라벨·게시 직전 검증을 처음과 똑같이 다시 통과한 뒤, 위 세 환경변수와 `NEWS_PICK_SCHEDULED_MODE=1`, `NEWS_PICK_EDITION_AT`을 유지한 채 `browser_web_share_once.py`를 한 번 실행한다. 이 helper는 run당 한 번만 복구 클릭을 허용한다. 복구 공유도 실패하면 더 시도하지 말고 needs_review로 끝낸다. 복구로 게시했으면 summary에 첫 실패 원인과 복구 시각을 남긴다.
 - 기존 게시물을 삭제하거나 수정하지 않는다. 단, 이번 게시물의 AI 라벨 공개 검증 복구는 publish-news-pick 계약이 허용한 한 번만 수행한다.
 - repository의 소스·스킬·Git 상태를 수정하거나 commit/push하지 않는다. 실행물은 output root에만 저장한다.
 - published는 shortcode, 서로 다른 media source 5개, 모든 주 이미지의 공개 4:5 자연·렌더 비율, 첫·마지막 카드, caption, AI 라벨을 공개 페이지에서 확인하고 result.public_verified=true, result.portrait_4x5=true, result.card_count=5일 때만 보고한다.
@@ -515,8 +517,8 @@ def run_job(
     schema_path = root / "skills" / "upload-news-pick" / "references" / "scheduled-result.schema.json"
     schema = load_json(schema_path)
     result_path = scheduler_root / "results" / f"{slot_id}.json"
-    command = build_command(find_claude(), root, schema, output_root)
     if dry_run:
+        command = build_command(find_claude(), root, schema, output_root)
         return 0, {
             "status": "dry_run",
             "executor": EXECUTOR,
@@ -547,6 +549,7 @@ def run_job(
         atomic_json(state_path, skipped)
         return 0, skipped
 
+    command = build_command(find_claude(), root, schema, output_root)
     log_root = output_root / "logs" / "scheduler"
     event_path = log_root / f"{slot_id}.jsonl"
     error_path = log_root / f"{slot_id}.stderr.log"

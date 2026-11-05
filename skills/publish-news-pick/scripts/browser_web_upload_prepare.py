@@ -26,6 +26,20 @@ def paced_wait(low=0.22, high=0.48):
     time.sleep(random.uniform(low, high))
 
 
+def ensure_window_visible(timeout=5):
+    """최소화된 Edge 창의 탭은 hidden이라 Instagram이 파일을 받아도 자르기 단계를 그리지 않는다."""
+    if js("document.visibilityState==='visible'"):
+        return
+    window = cdp("Browser.getWindowForTarget")
+    if window.get("bounds", {}).get("windowState") == "minimized":
+        cdp("Browser.setWindowBounds", windowId=window["windowId"], bounds={"windowState": "normal"})
+    deadline = time.monotonic() + timeout
+    while not js("document.visibilityState==='visible'"):
+        if time.monotonic() >= deadline:
+            raise RuntimeError("Instagram tab is hidden (minimized or covered Edge window); crop step cannot render")
+        paced_wait(0.2, 0.3)
+
+
 def dispatch_pointer_click(x, y):
     """좌표 클릭이 작성 창을 열지 못했을 때만 쓰는 같은 좌표의 합성 포인터 시퀀스."""
     return js(
@@ -180,6 +194,7 @@ targets = [
 if len(targets) != 1:
     raise RuntimeError("Instagram page target count is " + str(len(targets)))
 attach_writable_target(targets[0]["targetId"])
+ensure_window_visible()
 
 account = os.environ.get("IG_ACCOUNT", "newspick_studio").strip().lstrip("@").lower()
 if not re.fullmatch(r"[a-z0-9._]+", account):

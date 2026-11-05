@@ -98,5 +98,14 @@ class EdgeBrowserTests(unittest.TestCase):
             self.assertEqual(env["NEWS_PICK_BROWSER"], "edge")
 
 
+    def test_launch_keeps_rendering_when_window_is_covered(self):
+        import launch_edge_profile
+        command = launch_edge_profile.launch_command(Path("msedge.exe"), "newspick_studio", Path("profile"))
+        # 다른 창에 덮인 Edge 탭도 hidden이 되면 Instagram 작성기가 멈춘다
+        self.assertIn("--disable-backgrounding-occluded-windows", command)
+        self.assertIn("--disable-features=CalculateNativeWinOcclusion", command)
+        self.assertEqual(command[-1], "https://www.instagram.com/newspick_studio/")
+
+
 if __name__ == "__main__":
     unittest.main()

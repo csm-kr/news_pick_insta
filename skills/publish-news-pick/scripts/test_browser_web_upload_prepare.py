@@ -316,5 +316,63 @@ class UploadPrepareRegressionTests(unittest.TestCase):
         self.assertEqual(result["pointer_calls"], [])
 
 
+    def _run_confirmed_crop_with_visibility(self, visible_after_restore):
+        """이미 확인된 crop session 경로로 돌려 창 가시성 처리만 본다."""
+        calls = []
+        restored = []
+
+        def fake_cdp(method, **kwargs):
+            calls.append(method)
+            if method == "Target.getTargets":
+                return {"targetInfos": [{"type": "page", "url": "https://www.instagram.com/newspick_studio/", "targetId": "instagram-target"}]}
+            if method == "Target.attachToTarget":
+                return {"sessionId": "session"}
+            if method == "Browser.getWindowForTarget":
+                return {"windowId": 7, "bounds": {"windowState": "minimized"}}
+            if method == "Browser.setWindowBounds":
+                restored.append(kwargs)
+            if method == "Page.captureScreenshot":
+                return {"data": base64.b64encode(b"jpeg").decode("ascii")}
+            return {}
+
+        def fake_js(expression):
+            if expression == "document.visibilityState==='visible'":
+                return bool(restored) and visible_after_restore
+            if "const expected=`https://www.instagram.com/${account}/`" in expression:
+                return {"href": "https://www.instagram.com/newspick_studio/", "image_alts": ["newspick_studio님의 프로필 사진"]}
+            if "location.href.split" in expression:
+                return "https://www.instagram.com/newspick_studio"
+            if "file_names:input?" in expression:
+                return {"dialog_present": True, "input_present": False, "file_count": 0, "file_names": [],
+                        "multiple": False, "has_next": True, "has_crop": True, "has_media_gallery": True,
+                        "login_wall": False, "challenge": False}
+            return True
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            media = [root / f"{index:02d}.png" for index in range(1, 6)]
+            for path in media:
+                path.write_bytes(b"png")
+            env = {"IG_ACCOUNT": "newspick_studio", "IG_MEDIA_FILES": "|".join(str(path) for path in media),
+                   "IG_CROP_SCREENSHOT": str(root / "crop.jpg")}
+            with patch.dict(os.environ, env, clear=False), patch("time.sleep", lambda _s: None):
+                runpy.run_path(str(SCRIPT), init_globals={
+                    "cdp": fake_cdp, "js": fake_js, "switch_tab": switch_tab,
+                    "goto_url": lambda _url: None, "wait_for_load": lambda: None,
+                    "click_at_xy": lambda _x, _y: None, "upload_file": lambda selector, files: None,
+                })
+        return calls, restored
+
+    def test_minimized_edge_window_is_restored_before_upload(self):
+        # 2026-10-26 07시: 최소화된 창의 탭은 hidden이라 파일을 넣어도 자르기 단계가 그려지지 않았다
+        calls, restored = self._run_confirmed_crop_with_visibility(visible_after_restore=True)
+        self.assertEqual(restored, [{"windowId": 7, "bounds": {"windowState": "normal"}}])
+        self.assertLess(calls.index("Browser.setWindowBounds"), calls.index("Page.captureScreenshot"))
+
+    def test_tab_that_stays_hidden_fails_fast_with_reason(self):
+        with patch("time.monotonic", side_effect=[0, 0, 10, 10, 10]), self.assertRaisesRegex(RuntimeError, "hidden"):
+            self._run_confirmed_crop_with_visibility(visible_after_restore=False)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -9,6 +9,7 @@ import random
 import subprocess
 import sys
 import time as time_module
+import urllib.parse
 import urllib.request
 from datetime import datetime, time, timedelta
 from pathlib import Path
@@ -132,12 +133,19 @@ def next_deadline(now: datetime) -> datetime:
     raise AssertionError("다음 예약 run 시각을 찾지 못했다")
 
 
+def is_instagram_app_tab(tab: dict) -> bool:
+    """window.require가 있는 Instagram 웹앱 탭만 쓴다. 이미지 CDN·API JSON 탭이 고르면 'R is not a function'이 난다."""
+    url = urllib.parse.urlsplit(tab.get("url", ""))
+    return (tab.get("type") == "page" and url.hostname in {"www.instagram.com", "instagram.com"}
+            and not url.path.startswith("/api/"))
+
+
 def _has_instagram_tab() -> bool:
     try:
         tabs = json.load(urllib.request.urlopen(f"{CDP_URL}/json/list", timeout=10))
     except OSError:
         return False
-    return any(t["type"] == "page" and "instagram.com" in t["url"] for t in tabs)
+    return any(is_instagram_app_tab(t) for t in tabs)
 
 
 def ensure_edge() -> None:
@@ -160,22 +168,41 @@ def log_to_file_if_windowless(path: Path) -> None:
         sys.stdout = sys.stderr = path.open("a", encoding="utf-8", buffering=1)
 
 
+def wait_for_page_modules(send, attempts: int = 30, sleep=time_module.sleep) -> None:
+    """페이지 모듈(window.require)이 없으면 탭을 Instagram 홈으로 다시 열고 로드될 때까지 기다린다."""
+    check = {"expression": "typeof window.require", "returnByValue": True}
+    navigated = False
+    for _ in range(attempts):
+        if send("Runtime.evaluate", check).get("result", {}).get("value") == "function":
+            return
+        if not navigated:
+            send("Page.navigate", {"url": "https://www.instagram.com/"})
+            navigated = True
+        sleep(1)
+    raise SystemExit("Instagram 탭에 페이지 모듈(window.require)이 로드되지 않는다.")
+
+
 def evaluate(expression: str, timeout: int = 600):
     tabs = json.load(urllib.request.urlopen(f"{CDP_URL}/json/list", timeout=10))
-    page = next((t for t in tabs if t["type"] == "page" and "instagram.com" in t["url"]), None)
+    page = next((t for t in tabs if is_instagram_app_tab(t)), None)
     if page is None:
         raise SystemExit("Edge(9333)에 열린 instagram.com 탭이 없다. launch_edge_profile.py로 먼저 연다.")
     ws = websocket.create_connection(page["webSocketDebuggerUrl"], timeout=timeout, suppress_origin=True)
-    try:
-        ws.send(json.dumps({"id": 1, "method": "Runtime.evaluate",
-                            "params": {"expression": expression, "awaitPromise": True, "returnByValue": True}}))
+    ids = iter(range(1, 1_000_000))
+
+    def send(method: str, params: dict) -> dict:
+        call_id = next(ids)
+        ws.send(json.dumps({"id": call_id, "method": method, "params": params}))
         while True:
             message = json.loads(ws.recv())
-            if message.get("id") == 1:
-                break
+            if message.get("id") == call_id:
+                return message.get("result", {})
+
+    try:
+        wait_for_page_modules(send)
+        result = send("Runtime.evaluate", {"expression": expression, "awaitPromise": True, "returnByValue": True})
     finally:
         ws.close()
-    result = message["result"]
     if "exceptionDetails" in result:
         raise SystemExit("브라우저 스크립트 실패: " + json.dumps(result["exceptionDetails"], ensure_ascii=False)[:500])
     return result["result"].get("value")

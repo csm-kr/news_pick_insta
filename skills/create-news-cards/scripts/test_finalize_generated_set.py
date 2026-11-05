@@ -98,6 +98,42 @@ class FinalizeGeneratedSetTests(unittest.TestCase):
             self.assertTrue((work / "duplicate-qa.json").is_file())
             self.assertFalse((work / "slides").exists())
 
+    def test_shared_layout_reference_does_not_merge_distinct_factual_scenes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            work = self.setup_work(root)
+            folder = work / "candidates" / "direction-01"
+            self.write_distinct_candidates(folder)
+            layout = SUPPORT.save(root / "references" / "style" / "generated-layout.png", SUPPORT.synthetic_photo(99))
+            for index, primary in enumerate(self.reference_paths, 1):
+                self.write_job(work, index, [primary, layout])
+            reused = Image.open(layout).convert("RGB")
+            for index, (size, position) in ((2, ((800, 600), (140, 120))), (4, ((640, 480), (220, 700)))):
+                card = Image.open(folder / f"card-{index:02d}.png").convert("RGB")
+                card.paste(reused.resize(size, Image.Resampling.LANCZOS), position)
+                card.save(folder / f"card-{index:02d}.png")
+            qa = MOD.finalize(work, {"story_id": "s", "card_count": 5}, "direction-01", True)
+            scene = qa["duplicate_qa"]["scene_qa"]
+            self.assertTrue(scene["passed"])
+            self.assertNotIn(str(layout), scene["reference_pool"])
+            self.assertEqual(scene["excluded_style_references"], [str(layout)])
+            self.assertEqual(len(scene["reference_pool"]), 5)
+
+    def test_primary_in_style_folder_is_still_checked_for_reuse(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            work = self.setup_work(root)
+            folder = work / "candidates" / "direction-01"
+            self.write_distinct_candidates(folder)
+            primary = SUPPORT.save(root / "references" / "style" / "misplaced-primary.png", SUPPORT.synthetic_photo(99))
+            self.write_job(work, 2, [primary])
+            self.write_job(work, 4, [primary])
+            with self.assertRaisesRegex(ValueError, "같은 장면"):
+                MOD.finalize(work, {"story_id": "s", "card_count": 5}, "direction-01", True)
+            report = json.loads((work / "duplicate-qa.json").read_text(encoding="utf-8"))
+            self.assertFalse(report["scene_qa"]["passed"])
+            self.assertIn(str(primary), report["scene_qa"]["reference_pool"])
+
     def test_distinct_candidates_include_duplicate_qa_in_report(self):
         with tempfile.TemporaryDirectory() as tmp:
             work = self.setup_work(Path(tmp))

@@ -56,5 +56,27 @@ class WaitForPublishTimeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             MOD.validate_window(target, target + timedelta(minutes=31), offset)
 
+    def test_recovery_requires_flag_and_timezone_aware_failed_at(self):
+        self.assertIsNone(MOD.recovery_failed_at({}))
+        failed = MOD.recovery_failed_at(
+            {"NEWS_PICK_SHARE_RECOVERY": "1", "NEWS_PICK_SHARE_FAILED_AT": "2026-10-21T07:13:00+09:00"}
+        )
+        self.assertEqual(failed.isoformat(), "2026-10-21T07:13:00+09:00")
+        with self.assertRaises(ValueError):
+            MOD.recovery_failed_at({"NEWS_PICK_SHARE_RECOVERY": "1"})
+        with self.assertRaises(ValueError):
+            MOD.recovery_failed_at({"NEWS_PICK_SHARE_RECOVERY": "1", "NEWS_PICK_SHARE_FAILED_AT": "2026-10-21T07:13:00"})
+
+    def test_recovery_waits_ten_minutes_after_failure_within_sixty_minute_window(self):
+        target = datetime(2026, 10, 21, 7, 0, tzinfo=timezone(timedelta(hours=9)))
+        failed = target + timedelta(minutes=13)
+        self.assertEqual(MOD.validate_recovery_window(target, failed, failed), 600)
+        self.assertEqual(MOD.validate_recovery_window(target, target + timedelta(minutes=35), failed), -720)
+        self.assertEqual(MOD.validate_recovery_window(target, target + timedelta(minutes=60), failed), -2220)
+        with self.assertRaises(ValueError):
+            MOD.validate_recovery_window(target, target + timedelta(minutes=61), failed)
+        with self.assertRaises(ValueError):
+            MOD.validate_recovery_window(target, failed, target - timedelta(minutes=1))
+
 if __name__ == "__main__":
     unittest.main()

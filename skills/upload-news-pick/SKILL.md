@@ -107,7 +107,7 @@ Tibo 작업은 `backend_size=1024x1536`, `resize_fit=cover`, `preserve_backend_r
 
 공개 프로필 preflight에는 첫 카드의 안정적인 고유 토큰 2~3개를 `IG_DUPLICATE_TOKENS`에 `|`로 연결해 전달한다. `browser_web_preflight.py` 한 번에서 Edge 계정·소유자 control·로그인/challenge·최신 게시물 중복을 함께 확인한다. 별도 중복 확인용 Harness 프로세스를 다시 만들지 않는다. 업로드는 설치된 `browser_web_upload_prepare.py`를 사용하며, link wrapper 이름이 비어 있으면 자식 SVG의 exact create label을 쓴다. helper가 이미 열린 crop session을 확인한 뒤에는 React가 file input을 제거했어도 run-local helper를 만들거나 create·파일 선택을 반복하지 않는다.
 
-제출 후 오류나 timeout은 자동 재시도하지 않는다. `needs_review`에서 프로필을 읽기 전용으로 확인한다. private API 응답만으로 완료하지 말고 공개 permalink의 `?img_index=1..5`에서 shortcode, 서로 다른 media source 5개, 각 주 이미지의 공개 4:5 자연·렌더 비율, 첫·마지막 장, caption, AI 라벨을 검증한다. 페이지 아래 추천 게시물 thumbnail은 본문 카드로 세지 않는다.
+제출 후 오류나 timeout은 자동 재시도하지 않는다. `needs_review`에서 프로필을 읽기 전용으로 확인한다. 예약 run에서 미게시가 확정되면 [operating-policy.md](references/operating-policy.md)의 미게시 복구 조건으로 회차당 한 번만 다시 공유한다. private API 응답만으로 완료하지 말고 공개 permalink의 `?img_index=1..5`에서 shortcode, 서로 다른 media source 5개, 각 주 이미지의 공개 4:5 자연·렌더 비율, 첫·마지막 장, caption, AI 라벨을 검증한다. 페이지 아래 추천 게시물 thumbnail은 본문 카드로 세지 않는다.
 
 공개 검증 뒤 `publish-news-pick`의 `verify-published`에 `--run-dir <run-directory>`를 전달한다. 이 명령이 queue 결과와 `04-publish/result.json`을 같은 내용으로 기록하므로 수동 복사본을 만들지 않는다.
 
@@ -149,6 +149,8 @@ python scripts/scheduled_runner.py --slot 07:00
 ```
 
 실행 파일은 `CLAUDE_EXECUTABLE` → PATH의 `claude` → `%USERPROFILE%\.local\bin\claude.exe` 순서로 찾고, `--json-schema`와 `--dangerously-skip-permissions`를 지원하는 버전만 사용한다. 모델과 effort는 기본값(`claude-fable-5-1`, `high`)을 쓰며 `NEWS_PICK_CLAUDE_MODEL`, `NEWS_PICK_CLAUDE_EFFORT`(low·medium·high·xhigh·max)로 바꾼다. `output/workspace.json`에 선택적 `imagegen` 블록(`auth_file`, `model`)을 두면 실행기가 `CODEX_IMAGEGEN_AUTH_FILE`/`CODEX_IMAGEGEN_MODEL`을 주입하고 prompt에 같은 `--imagegen-auth-file`/`--imagegen-model` 값을 명시한다. 이벤트 로그(`output/logs/scheduler/<slot>.jsonl`)는 stream-json이며 `claude_session_id`로 `claude --resume`할 수 있다.
+
+공개 웹 조사는 `aside-browser`와 Aside CLI를 우선한다. 현재 운영 계정은 Aside의 Instagram 로그아웃을 확인하고 사용자에게 알린 뒤 승인된 뉴스픽 전용 Edge `edge9333` 로그인 세션을 게시에 사용한다.
 
 Windows 예약 작업은 다음으로 관리한다.
 

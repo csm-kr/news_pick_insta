@@ -111,11 +111,26 @@ class ScheduledRunnerTests(unittest.TestCase):
         self.assertIn("existing_confirmed_crop_session", prompt)
         self.assertIn("새 run-local helper를 만들거나", prompt)
 
+    def test_prompt_allows_one_recovery_share_only_after_confirmed_no_post(self):
+        settings = self.settings("C:/work/output")
+        prompt = MOD.build_prompt(Path("C:/work"), MOD.edition_at("07:00", date(2026, 10, 21)), settings)
+        self.assertIn("미게시 복구", prompt)
+        self.assertIn("NEWS_PICK_SHARE_RECOVERY=1", prompt)
+        self.assertIn("NEWS_PICK_SHARE_FAILED_AT", prompt)
+        self.assertIn("NEWS_PICK_RUN_DIR", prompt)
+        self.assertIn("작성기 dialog가 사라졌고", prompt)
+        self.assertIn("게시물 수", prompt)
+        self.assertIn("duplicate_match=false", prompt)
+        self.assertIn("payload hash가 첫 job과 같을 때만", prompt)
+        self.assertIn("회차당 한 번", prompt)
+        self.assertIn("복구 공유도 실패하면", prompt)
+
     def test_prompt_declares_unattended_claude_code_run(self):
         settings = self.settings("C:/work/output")
         prompt = MOD.build_prompt(Path("C:/work"), MOD.edition_at("12:00", date(2026, 8, 18)), settings)
         self.assertNotIn("$upload-news-pick", prompt)
         self.assertIn("Claude Code 비대화형", prompt)
+        self.assertNotIn("codex", prompt.replace("CODEX_IMAGEGEN", "").replace(".codex", "").lower())
         self.assertIn("질문하거나 확인을 기다리지 말고", prompt)
         self.assertIn("skipped 또는 needs_review", prompt)
         self.assertIn("게시물을 삭제하시겠어요", prompt)
@@ -287,17 +302,19 @@ class ScheduledRunnerTests(unittest.TestCase):
             scheduled = MOD.edition_at("12:00", date(2026, 8, 18))
             state = settings["output_root"] / "scheduler" / "editions" / "2026-08-18-1200.json"
             MOD.atomic_json(state, {"status": "published"})
-            with patch.object(MOD, "find_claude", return_value=Path(__file__)):
+            with patch.object(MOD, "find_claude") as find:
                 code, result = MOD.run_job(root, scheduled, settings, scheduled)
             self.assertEqual(code, 0)
             self.assertEqual(result["status"], "duplicate_suppressed")
+            find.assert_not_called()
 
     def test_dry_run_command_uses_claude_print_mode_with_schema_and_bypass(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = self.make_root(tmp)
             settings = self.settings(root / "output")
             scheduled = MOD.edition_at("17:00", date(2026, 8, 18))
-            with patch.object(MOD, "find_claude", return_value=Path(__file__)):
+            environ = {k: v for k, v in MOD.os.environ.items() if k not in {"NEWS_PICK_CLAUDE_MODEL", "NEWS_PICK_CLAUDE_EFFORT"}}
+            with patch.object(MOD, "find_claude", return_value=Path(__file__)), patch.dict(MOD.os.environ, environ, clear=True):
                 code, result = MOD.run_job(root, scheduled, settings, scheduled - timedelta(minutes=30), dry_run=True)
             self.assertEqual(code, 0)
             command = result["command"]
@@ -437,11 +454,12 @@ class ScheduledRunnerTests(unittest.TestCase):
             root = self.make_root(tmp)
             settings = self.settings(root / "output")
             scheduled = MOD.edition_at("07:00", date(2026, 8, 18))
-            with patch.object(MOD, "find_claude", return_value=Path(__file__)), patch.object(MOD.subprocess, "run") as run:
+            with patch.object(MOD, "find_claude") as find, patch.object(MOD.subprocess, "run") as run:
                 code, result = MOD.run_job(root, scheduled, settings, scheduled + timedelta(hours=2))
             self.assertEqual(code, 0)
             self.assertEqual(result["reason"], "outside_start_window")
             run.assert_not_called()
+            find.assert_not_called()
             state = settings["output_root"] / "scheduler" / "editions" / "2026-08-18-0700.json"
             self.assertEqual(json.loads(state.read_text(encoding="utf-8"))["status"], "skipped")
 

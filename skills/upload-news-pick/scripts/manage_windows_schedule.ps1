@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Position = 0)]
     [ValidateSet('install', 'status', 'remove')]
@@ -64,6 +64,14 @@ if ($Command -eq 'install') {
     if ($LASTEXITCODE -ne 0 -or $null -eq $auth -or -not $auth.loggedIn) {
         throw 'Claude Code CLI 로그인이 필요하다(claude auth login).'
     }
+    $backupRoot = Join-Path $projectRoot ("output\scheduler\task-backups\" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+    New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
+    foreach ($slot in $slots) {
+        $backupName = "$taskPrefix-$($slot.Replace(':', ''))"
+        if (Get-ScheduledTask -TaskName $backupName -ErrorAction SilentlyContinue) {
+            Export-ScheduledTask -TaskName $backupName | Set-Content -LiteralPath (Join-Path $backupRoot "$backupName.xml") -Encoding UTF8
+        }
+    }
     foreach ($legacyName in $legacyTaskNames) {
         if (Get-ScheduledTask -TaskName $legacyName -ErrorAction SilentlyContinue) {
             Unregister-ScheduledTask -TaskName $legacyName -Confirm:$false
@@ -92,7 +100,7 @@ if ($Command -eq 'install') {
             -Trigger $trigger `
             -Principal $principal `
             -Settings $settings `
-            -Description "News Pick Edge edge9333 only. Claude Code print-mode executor. Start 30 minutes early for $slot KST. 07 and 12 entertainment, 17 hottest issue."
+            -Description "News Pick Claude Code print-mode executor. Aside research; dedicated Edge edge9333 Instagram session. Start 30 minutes early for $slot KST. 07 entertainment, 12 hot news over 7 days, 17 hot news over 3 days."
         Register-ScheduledTask -TaskName $name -InputObject $task -Force | Out-Null
     }
 } elseif ($Command -eq 'remove') {

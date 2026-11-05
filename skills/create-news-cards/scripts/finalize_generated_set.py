@@ -50,18 +50,30 @@ def job_references(work: Path, direction: str, card_count: int) -> list[list[Pat
 
 
 def scene_qa(candidate_paths: list[Path], references: list[list[Path]]) -> dict:
-    """같은 장면 대표 reference 반복과 여러 카드의 같은 reference 재현을 검사한다."""
+    """사실 reference의 장면 반복을 검사하고 보조 스타일·레이아웃은 구분한다."""
     scene = load_scene_similarity()
     primaries = [paths[0] for paths in references]
+    primary_keys = {str(path.resolve()).casefold() for path in primaries}
     same_scene_pairs = scene.find_same_scene_pairs(primaries)
     unique: list[Path] = []
     seen: set[str] = set()
+    excluded_styles: list[str] = []
     for paths in references:
         for path in paths:
             key = str(path.resolve()).casefold()
-            if path.is_file() and key not in seen:
-                seen.add(key)
-                unique.append(path)
+            if not path.is_file() or key in seen:
+                continue
+            seen.add(key)
+            parts = [part.casefold() for part in path.resolve().parts]
+            is_style = any(left == "references" and right == "style" for left, right in zip(parts, parts[1:]))
+            # Crop-safe regeneration can reuse a generated page as a layout
+            # reference. Its repeated typography must not connect unrelated
+            # factual scenes. A first/primary reference remains checked even
+            # when it has been placed in the style folder.
+            if is_style and key not in primary_keys:
+                excluded_styles.append(str(path))
+                continue
+            unique.append(path)
     groups = scene.scene_groups(unique)
     card_matches = scene.match_cards_to_references(candidate_paths, unique)
     card_groups = [sorted({groups[index - 1] for index in matched}) for matched in card_matches]
@@ -80,6 +92,7 @@ def scene_qa(candidate_paths: list[Path], references: list[list[Path]]) -> dict:
         "primary_references": [str(path) for path in primaries],
         "same_scene_reference_pairs": same_scene_pairs,
         "reference_pool": [str(path) for path in unique],
+        "excluded_style_references": excluded_styles,
         "card_reference_matches": card_matches,
         "cards_sharing_reference": sharing,
     }
