@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Edge CDP로 붙은 Instagram 탭에서 '회원님을 위한 추천(모두 보기)' 계정을 천천히 팔로우한다."""
+"""ego lite(기본) 또는 비상용 Edge의 Instagram 탭에서 '회원님을 위한 추천(모두 보기)' 계정을 천천히 팔로우한다."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "unfollow-non-followers" / "scripts"))
 from unfollow_non_followers import (  # noqa: E402
-    KST, ensure_edge, evaluate, in_busy_window, log_to_file_if_windowless, next_deadline, recent_follow_ids,
+    KST, ensure_browser, evaluate, in_busy_window, log_to_file_if_windowless, next_deadline, recent_follow_ids,
 )
 
 
@@ -208,9 +208,9 @@ def main() -> int:
         if limit == 0:
             return 0
     if in_busy_window(datetime.now(KST)):
-        print("예약 run 시간대(시작 15분 전~종료)라 Edge를 건드리지 않는다.")
+        print("예약 run 시간대(시작 15분 전~종료)라 Instagram을 건드리지 않는다.")
         return 3
-    ensure_edge()
+    ensure_browser()
     return run(limit)
 
 

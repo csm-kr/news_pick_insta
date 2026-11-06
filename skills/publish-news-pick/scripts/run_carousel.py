@@ -52,8 +52,10 @@ def main() -> int:
     parser.add_argument("--config", type=Path, required=True)
     args = parser.parse_args()
     try:
-        config = carousel_queue.read_config(args.config)
-        carousel_queue.probe_endpoint(config["endpoint"])
+        if edge_browser.selected_browser() == "edge":
+            # 비상용 Edge 경로만 고정 Edge 설정·9333 포트를 확인한다. 기본 ego 경로에는 포트가 없다.
+            config = carousel_queue.read_config(args.config)
+            carousel_queue.probe_endpoint(config["endpoint"])
         packages = site_packages()
         if args.job:
             job_path = args.job.resolve()

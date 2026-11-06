@@ -30,7 +30,7 @@ $env:IG_ACCOUNT = 'newspick_studio'
 python scripts/run_daily_story.py --date <YYYY-MM-DD> --account $env:IG_ACCOUNT --publish
 ```
 
-이 명령은 후보 선택, Story MP4 3개 렌더, `ffprobe` 검증, proof 3개 생성, 한 번의 Edge 세션 확인, Story 3개 배치 업로드, Edge background 공개 확인을 수행한다. 출력은 `<NEWS_PICK_OUTPUT_ROOT>/daily-story/<YYYY-MM-DD>/` 아래의 `story-01.mp4`~`story-03.mp4`, `manifest.json`, `proof-01.jpg`~`proof-03.jpg`, `result.json`, `verified-stories/verified-01.jpg`~`verified-03.jpg`다.
+이 명령은 후보 선택, Story MP4 3개 렌더, `ffprobe` 검증, proof 3개 생성, 한 번의 브라우저 세션 확인, Story 3개 배치 업로드, ego 별도 탭 공개 확인을 수행한다. 출력은 `<NEWS_PICK_OUTPUT_ROOT>/daily-story/<YYYY-MM-DD>/` 아래의 `story-01.mp4`~`story-03.mp4`, `manifest.json`, `proof-01.jpg`~`proof-03.jpg`, `result.json`, `verified-stories/verified-01.jpg`~`verified-03.jpg`다.
 
 사용자가 게시를 요청하지 않았다면 미리보기까지만 만든다.
 
@@ -60,16 +60,16 @@ Windows 작업은 매일 `19:00` KST에 시작한다. 같은 날짜의 상태 �
 - 게시라는 외부 변경에는 현재 대화의 명시적 승인이 필요하다. 단순 제작·미리보기 요청은 게시 권한이 아니다.
 - 지정된 `IG_ACCOUNT`와 현재 표시형 Instagram profile 계정이 일치해야 한다.
 - Browser Harness로 현재 로그인 세션을 메모리 안에서만 전달한다. cookie, `sessionid`, password, MFA 정보를 출력하거나 저장하지 않는다.
-- 한 Edge Browser Harness 프로세스에서 계정·private client를 한 번 확인한 뒤 승인된 영상마다 `video_upload_to_story()`를 정확히 한 번씩, 총 3번 호출한다. 호출 사이에는 1.8~3.2초 random jitter를 둔다.
+- 한 helper 프로세스(기본 ego lite)에서 계정·private client를 한 번 확인한 뒤 승인된 영상마다 `video_upload_to_story()`를 정확히 한 번씩, 총 3번 호출한다. 호출 사이에는 1.8~3.2초 random jitter를 둔다.
 - 업로드 시작 뒤 timeout·오류·공개 확인 실패가 나면 `needs_review`로 끝내고 자동 재시도하지 않는다.
 - 기존 `result.json`이 `needs_review`이고 `submission_started=true`면 공개 Story를 사람이 확인하기 전에는 다시 올리지 않는다.
-- 세 Story URL과 영상 metadata를 모두 확인해야 성공이다. 공개 확인은 Microsoft Edge `edge9333`의 background target 하나에서 순서대로 수행하고 기존 Edge tab과 focus를 보존한다. Chrome/default/다른 CDP 연결은 사용하지 않는다.
+- 세 Story URL과 영상 metadata를 모두 확인해야 성공이다. 공개 확인은 ego lite `newspick-instagram`의 새 탭 하나에서 순서대로 수행하고 포커스를 보존한다(ego 새 탭은 앞으로 가져오지 않아도 visible이라 영상이 재생된다). Chrome/default/다른 CDP 연결은 사용하지 않는다.
 
 ## 개발과 검증
 
 업로드 후 검은 화면·캡처 timeout·focus 변경이 발생했거나 MoviePy 설치 여부가 불분명하면 [references/story-recovery.md](references/story-recovery.md)를 먼저 읽는다. **업로드 성공과 공개 검증 성공은 별개**이며, Edge 전면 활성화는 별도 승인 없이 시도하지 않는다. 복구는 기록된 Story ID를 확인하는 작업이지 재업로드가 아니다.
 
-FFmpeg·ffprobe·Pillow·Browser Harness, Microsoft Edge `edge9333`, `publish-news-pick`이 준비한 project-local `instagrapi` venv가 필요하다.
+FFmpeg·ffprobe·Pillow, `ego-browser` CLI(ego lite), `publish-news-pick`이 준비한 project-local `instagrapi` venv가 필요하다. ego 경로의 helper는 그 venv의 python(3.12)으로 돈다.
 
 ```powershell
 python -m unittest discover -s scripts -p 'test_*.py'

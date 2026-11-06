@@ -100,7 +100,7 @@ if ($Command -eq 'install') {
             -Trigger $trigger `
             -Principal $principal `
             -Settings $settings `
-            -Description "News Pick Claude Code print-mode executor. Aside research; dedicated Edge edge9333 Instagram session. Start 30 minutes early for $slot KST. 07 entertainment, 12 hot news over 7 days, 17 hot news over 3 days."
+            -Description "News Pick Claude Code print-mode executor. Aside research; ego lite Instagram session. Start 30 minutes early for $slot KST. 07 entertainment, 12 hot news over 7 days, 17 hot news over 3 days."
         Register-ScheduledTask -TaskName $name -InputObject $task -Force | Out-Null
     }
 } elseif ($Command -eq 'remove') {

@@ -277,6 +277,8 @@ class ScheduledRunnerTests(unittest.TestCase):
             self.assertEqual(environment["CODEX_IMAGEGEN_AUTH_FILE"], str((root / "auth.json").resolve()))
             self.assertEqual(environment["NEWS_PICK_SCHEDULED_MODE"], "1")
             self.assertEqual(environment["NEWS_PICK_BROWSER"], "ego")
+            for edge_key in ("BU_NAME", "BU_CDP_URL", "NEWS_PICK_BROWSER_HARNESS_NAME", "NEWS_PICK_EDGE_CDP_URL", "NEWS_PICK_EDGE_USER_DATA_DIR"):
+                self.assertNotIn(edge_key, environment)
 
     def test_child_environment_without_imagegen_block_leaves_backend_defaults(self):
         environment = MOD.child_environment(self.settings("C:/work/output"), MOD.edition_at("07:00", date(2026, 8, 18)), base={})

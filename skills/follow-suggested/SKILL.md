@@ -5,7 +5,7 @@ description: newspick_studio Instagram 계정에서 '회원님을 위한 추천(
 
 # Follow Suggested
 
-Edge 디버그 프로필(CDP `127.0.0.1:9333`)에 로그인된 Instagram 탭에서 `/explore/people/`('모두 보기')과 같은 추천 쿼리로 계정을 받아 팔로우한다. 목적은 맞팔로 팔로워 수를 늘리는 것이고, 맞팔하지 않은 계정은 매주 `unfollow-non-followers`가 정리한다. 스크립트: `scripts/follow_suggested.py`
+ego lite 기본 프로필에 로그인된 Instagram 탭(TaskSpace `newspick-growth`, 게시용 `newspick-instagram`과 분리)에서 `/explore/people/`('모두 보기')과 같은 추천 쿼리로 계정을 받아 팔로우한다. 목적은 맞팔로 팔로워 수를 늘리는 것이고, 맞팔하지 않은 계정은 매주 `unfollow-non-followers`가 정리한다. 스크립트: `scripts/follow_suggested.py`
 
 ## 절차
 
@@ -13,7 +13,7 @@ Edge 디버그 프로필(CDP `127.0.0.1:9333`)에 로그인된 Instagram 탭에�
    ```powershell
    $env:PYTHONIOENCODING='utf-8'; python skills/follow-suggested/scripts/follow_suggested.py --limit 30
    ```
-   Edge(9333)에 Instagram 탭이 없으면 스크립트가 `launch_edge_profile.py`로 연다. 30개면 30~40분 걸리므로 백그라운드로 돌린다.
+   ego TaskSpace에 Instagram 탭이 없으면 스크립트가 홈을 연다(`ego-browser` CLI 필요). 30개면 30~40분 걸리므로 백그라운드로 돌린다.
 2. **진행 보고**: `output/follow/follow_log.jsonl`의 오늘 날짜 줄 수로 보고한다. 예약 실행 출력은 `output/follow/run-YYYYMMDD-HHMM.log`에 남는다.
 
 ## 자동 예약

@@ -91,6 +91,20 @@ class EgoSessionTests(unittest.TestCase):
         # 새 탭은 만들기만 하고 현재 세션은 바꾸지 않는다(harness 동작과 같음).
         self.assertEqual(session.send({"meta": "current_tab"})["targetId"], "p1")
 
+    def test_new_window_request_restores_window_without_stealing_focus(self):
+        # 스토리 검증은 화면에 보이는 탭이 필요해 newWindow를 쓴다. ego 새 탭은 앞으로 가져오지 않아도
+        # visible·unfocused로 영상을 재생하므로(11-06 실측) 최소화된 창만 복원하고 bringToFront는 하지 않는다.
+        session, transport = self.session(window_state="minimized")
+        session.send({"method": "Target.createTarget", "params": {"url": "about:blank", "background": True, "newWindow": True}, "session_id": None})
+        self.assertEqual([c for c in transport.ops("page_cdp") if c["method"] == "Page.bringToFront"], [])
+        self.assertEqual(transport.window_state, "normal")
+
+    def test_background_tab_request_does_not_touch_window(self):
+        session, transport = self.session(window_state="minimized")
+        session.send({"method": "Target.createTarget", "params": {"url": "about:blank", "background": True}, "session_id": None})
+        self.assertEqual([c for c in transport.ops("page_cdp") if c["method"] == "Page.bringToFront"], [])
+        self.assertEqual(transport.window_state, "minimized")
+
     def test_attach_returns_session_that_routes_cdp_to_that_page(self):
         session, transport = self.session()
         target = session.send({"method": "Target.createTarget", "params": {"url": "about:blank"}, "session_id": None})["result"]["targetId"]
@@ -147,7 +161,14 @@ class EgoSessionTests(unittest.TestCase):
     def test_window_lookup_maps_target_to_page(self):
         session, transport = self.session()
         session.send({"method": "Browser.getWindowForTarget", "params": {"targetId": "p1"}, "session_id": None})
-        self.assertEqual(transport.ops("page_cdp")[-1], {"op": "page_cdp", "page": "p1", "method": "Browser.getWindowForTarget", "params": {}})
+        self.assertEqual(transport.ops("page_cdp")[-1], {"op": "page_cdp", "page": "p1", "method": "Browser.getWindowForTarget", "params": {}, "timeout": 110000})
+
+    def test_page_cdp_carries_timeout_for_long_scripts(self):
+        # ego page.cdp 기본 제한 시간은 짧아서, 몇 분 걸리는 팔로잉 목록 수집이 19초에 끊겼다(11-06).
+        transport = FakeTransport()
+        session = ego_harness.EgoSession(transport, start_url="https://www.instagram.com/newspick_studio/", cdp_timeout_ms=600000)
+        session.send({"method": "Runtime.evaluate", "params": {"expression": "1"}, "session_id": None})
+        self.assertEqual(transport.ops("page_cdp")[-1]["timeout"], 600000)
 
     def test_unsupported_target_and_browser_methods_fail_closed(self):
         session, _ = self.session()
@@ -204,6 +225,36 @@ class HelperNamespaceTests(unittest.TestCase):
         namespace["click_at_xy"](10, 20)
         types = [c["params"]["type"] for c in transport.ops("page_cdp") if c["method"] == "Input.dispatchMouseEvent"]
         self.assertEqual(types, ["mousePressed", "mouseReleased"])
+
+
+class HelperPythonTests(unittest.TestCase):
+    """Edge 경로는 browser-harness(3.12)로 helper를 돌렸다. ego 경로도 instagrapi private-venv(3.12)와 같은 python을 쓴다."""
+
+    def test_prefers_private_venv_python_under_output_root(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            python = Path(tmp) / "publish-news-pick" / "private-venv" / "Scripts" / "python.exe"
+            python.parent.mkdir(parents=True)
+            python.write_bytes(b"")
+            self.assertEqual(ego_harness.helper_python({"NEWS_PICK_OUTPUT_ROOT": tmp}), str(python))
+
+    def test_explicit_override_wins(self):
+        self.assertEqual(ego_harness.helper_python({"NEWS_PICK_HELPER_PYTHON": "C:/py312/python.exe", "NEWS_PICK_OUTPUT_ROOT": "C:/nowhere"}), "C:/py312/python.exe")
+
+    def test_falls_back_to_current_python_without_private_venv(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(ego_harness.helper_python({"NEWS_PICK_OUTPUT_ROOT": tmp}), sys.executable)
+
+    def test_run_script_uses_selected_python(self):
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "task.py"
+            script.write_text("print(1)\n", encoding="utf-8")
+            with patch.object(ego_harness, "helper_python", return_value="C:/py312/python.exe"), patch.object(ego_harness.subprocess, "run") as run:
+                ego_harness.run_script(script)
+            self.assertEqual(run.call_args.args[0][0], "C:/py312/python.exe")
 
 
 class RuntimeGuardTests(unittest.TestCase):

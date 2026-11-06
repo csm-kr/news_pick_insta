@@ -33,15 +33,18 @@ EGO_RUNTIME_GUARD = (
     'if not _news_pick_product.lower().startswith("ego-lite/"):\n'
     '    raise RuntimeError("News Pick ego harness target is not ego lite: " + _news_pick_product)\n'
 )
+# ego page.cdp 기본 제한 시간은 짧다. 소켓 대기(120초)보다 조금 짧게 잡아 오류가 브리지에서 먼저 돌아오게 한다.
+DEFAULT_CDP_TIMEOUT_MS = 110_000
 WINDOW_METHODS = {"Browser.getWindowForTarget", "Browser.setWindowBounds", "Browser.getWindowBounds"}
 
 
 class EgoSession:
     """Browser Harness `_send` semantics implemented over an ego bridge transport."""
 
-    def __init__(self, transport: Any, start_url: str = DEFAULT_START_URL):
+    def __init__(self, transport: Any, start_url: str = DEFAULT_START_URL, cdp_timeout_ms: int = DEFAULT_CDP_TIMEOUT_MS):
         self.transport = transport
         self.start_url = start_url
+        self.cdp_timeout_ms = int(cdp_timeout_ms)
         self.current = self._initial_page()
 
     # --- page bookkeeping -------------------------------------------------
@@ -70,7 +73,7 @@ class EgoSession:
         return label
 
     def _page_cdp(self, page: str, method: str, params: dict[str, Any]) -> Any:
-        return self.transport.call({"op": "page_cdp", "page": page, "method": method, "params": params})
+        return self.transport.call({"op": "page_cdp", "page": page, "method": method, "params": params, "timeout": self.cdp_timeout_ms})
 
     # --- Browser Harness protocol -----------------------------------------
     def send(self, req: dict[str, Any]) -> dict[str, Any]:
@@ -126,6 +129,10 @@ class EgoSession:
             }
         if method == "Target.createTarget":
             label = self.transport.call({"op": "new_page"})["label"]
+            if params.get("newWindow"):
+                # Edge의 '뒤쪽 새 창'처럼 보이는 탭이 필요할 때다. ego 새 탭은 창만 최소화가 아니면
+                # 앞으로 가져오지 않아도 visible이라 포커스를 뺏지 않는다.
+                self._restore_window(label)
             url = str(params.get("url") or "about:blank")
             if url != "about:blank":
                 self.transport.call({"op": "goto", "page": label, "url": url})
@@ -144,6 +151,12 @@ class EgoSession:
                 self.current = self._initial_page()
             return {"success": True}
         raise RuntimeError(f"ego harness does not allow {method}")
+
+    def _restore_window(self, page: str) -> None:
+        window = self._page_cdp(page, "Browser.getWindowForTarget", {})
+        if (window.get("bounds") or {}).get("windowState") == "minimized":
+            self.transport.call({"op": "task_cdp", "method": "Browser.setWindowBounds",
+                                 "params": {"windowId": window["windowId"], "bounds": {"windowState": "normal"}}})
 
     def _screenshot(self, page: str, params: dict[str, Any]) -> Any:
         window = self._page_cdp(page, "Browser.getWindowForTarget", {})
@@ -460,6 +473,19 @@ def execute(script: Path, start_url: str = DEFAULT_START_URL) -> None:
         transport.close()
 
 
+def helper_python(environment: dict[str, str] | None = None) -> str:
+    """helper를 돌릴 python. private API helper가 쓰는 instagrapi private-venv(3.12)와 버전을 맞춘다."""
+
+    source = os.environ if environment is None else environment
+    override = str(source.get("NEWS_PICK_HELPER_PYTHON") or "").strip()
+    if override:
+        return override
+    output_root = Path(source.get("NEWS_PICK_OUTPUT_ROOT") or Path(__file__).resolve().parents[3] / "output")
+    scripts = "Scripts" if os.name == "nt" else "bin"
+    candidate = output_root / "publish-news-pick" / "private-venv" / scripts / ("python.exe" if os.name == "nt" else "python")
+    return str(candidate) if candidate.is_file() else sys.executable
+
+
 def run_script(
     script: Path,
     *,
@@ -478,7 +504,7 @@ def run_script(
         env.update({str(k): str(v) for k, v in extra_env.items()})
     env.update({"NEWS_PICK_BROWSER": "ego", "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"})
     return subprocess.run(
-        [sys.executable, str(Path(__file__).resolve()), str(script)],
+        [helper_python(env), str(Path(__file__).resolve()), str(script)],
         capture_output=capture_output,
         env=env,
         timeout=timeout,

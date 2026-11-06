@@ -68,7 +68,7 @@ if ($Command -eq 'install') {
         -Trigger $trigger `
         -Principal $principal `
         -Settings $settings `
-        -Description 'News Pick Edge edge9333 only. Publish and verify three separate 07/12/17 edition Stories at 19:00 KST.'
+        -Description 'News Pick ego lite. Publish and verify three separate 07/12/17 edition Stories at 19:00 KST.'
     Register-ScheduledTask -TaskName $taskName -InputObject $task -Force | Out-Null
     foreach ($legacyName in $legacyTaskNames) {
         if (Get-ScheduledTask -TaskName $legacyName -ErrorAction SilentlyContinue) {

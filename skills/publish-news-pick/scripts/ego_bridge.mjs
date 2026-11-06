@@ -27,7 +27,7 @@ export async function serve(config) {
         await page(req.page).close();
         return {};
       case "page_cdp":
-        return await page(req.page).cdp(req.method, req.params || {});
+        return await page(req.page).cdp(req.method, req.params || {}, req.timeout ? { timeout: req.timeout } : undefined);
       case "task_cdp":
         return await task.cdp(req.method, req.params || {});
       default:

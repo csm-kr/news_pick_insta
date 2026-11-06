@@ -69,7 +69,7 @@ if ($Command -eq 'install') {
             -Trigger (& $spec.trigger) `
             -Principal $principal `
             -Settings $settings `
-            -Description 'News Pick Edge edge9333 only. Follow suggested accounts / unfollow non-followers, avoiding scheduled publish runs.'
+            -Description 'News Pick ego lite (newspick-growth). Follow suggested accounts / unfollow non-followers, avoiding scheduled publish runs.'
         Register-ScheduledTask -TaskName $spec.name -InputObject $task -Force | Out-Null
     }
 }

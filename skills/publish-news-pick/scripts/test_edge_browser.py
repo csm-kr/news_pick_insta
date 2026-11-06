@@ -68,6 +68,18 @@ class EdgeBrowserTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "edge"):
                 edge_browser.connection_settings()
 
+    def test_run_script_uses_ego_without_any_browser_setting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "task.py"
+            script.write_bytes(b"print('ego')\n")
+            with patch.dict("os.environ", {}, clear=True), patch.object(
+                edge_browser, "probe_edge_endpoint"
+            ) as probe, patch("ego_harness.run_script") as ego_run:
+                ego_run.return_value.returncode = 0
+                edge_browser.run_script(script)
+            probe.assert_not_called()
+            ego_run.assert_called_once()
+
     def test_run_script_routes_to_ego_when_selected(self):
         with tempfile.TemporaryDirectory() as tmp:
             script = Path(tmp) / "task.py"
@@ -92,9 +104,11 @@ class EdgeBrowserTests(unittest.TestCase):
             {"name": "edge9333", "endpoint": "http://127.0.0.1:9333"},
         )
 
-    def test_ego_is_the_only_other_allowed_browser(self):
-        self.assertEqual(edge_browser.selected_browser({}), "edge")
+    def test_ego_is_default_and_edge_is_explicit_fallback_only(self):
+        # 2026-11-06부터 Edge는 쓰지 않는다: 기본은 ego, Edge는 명시할 때만 비상용으로 남는다.
+        self.assertEqual(edge_browser.selected_browser({}), "ego")
         self.assertEqual(edge_browser.selected_browser({"NEWS_PICK_BROWSER": "ego"}), "ego")
+        self.assertEqual(edge_browser.selected_browser({"NEWS_PICK_BROWSER": "edge"}), "edge")
         with self.assertRaisesRegex(ValueError, "edge"):
             edge_browser.selected_browser({"NEWS_PICK_BROWSER": "chrome"})
 
@@ -112,7 +126,9 @@ class EdgeBrowserTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             script = Path(tmp) / "task.py"
             script.write_bytes(source)
-            with patch.object(edge_browser, "probe_edge_endpoint"), patch.object(
+            with patch.dict("os.environ", {"NEWS_PICK_BROWSER": "edge"}, clear=True), patch.object(
+                edge_browser, "probe_edge_endpoint"
+            ), patch.object(
                 edge_browser.shutil, "which", return_value="browser-harness"
             ), patch.object(edge_browser.subprocess, "run") as run:
                 run.return_value.returncode = 0

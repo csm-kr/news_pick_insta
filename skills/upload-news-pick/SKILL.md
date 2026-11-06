@@ -7,7 +7,7 @@ description: 공개 반응이 큰 한국 종합 이슈를 최근 48시간에서 
 
 하나의 `run_id` 아래 네 전문 스킬을 순서대로 연결한다. 이 스킬은 각 단계의 일을 직접 대신하지 않고 입력·출력 계약, hash, 중단·재개와 게시 승인 경계만 관리한다.
 
-실행 전 [references/portable-layout.md](references/portable-layout.md)와 [../publish-news-pick/references/edge-browser-contract.md](../publish-news-pick/references/edge-browser-contract.md)를 읽고 다섯 스킬이 같은 부모 폴더에 설치됐는지 확인한다. skill 폴더는 읽기 전용으로 유지하고 모든 실행물은 별도 `NEWS_PICK_OUTPUT_ROOT` 아래에 쓴다. 뉴스픽의 모든 웹 상호작용은 `invoke_edge_browser_harness.py`로만 실행한다. 기본은 Microsoft Edge `edge9333`이고, 예약 게시(07·12·17시)는 실행기가 `NEWS_PICK_BROWSER=ego`를 주입해 ego lite로 간다. Chrome/default/다른 CDP로 대체하지 않는다.
+실행 전 [references/portable-layout.md](references/portable-layout.md)와 [../publish-news-pick/references/edge-browser-contract.md](../publish-news-pick/references/edge-browser-contract.md)를 읽고 다섯 스킬이 같은 부모 폴더에 설치됐는지 확인한다. skill 폴더는 읽기 전용으로 유지하고 모든 실행물은 별도 `NEWS_PICK_OUTPUT_ROOT` 아래에 쓴다. 뉴스픽의 모든 웹 상호작용은 `invoke_edge_browser_harness.py`로만 실행한다. 기본은 ego lite이고(예약 실행기도 `NEWS_PICK_BROWSER=ego`를 주입), Microsoft Edge `edge9333`은 `NEWS_PICK_BROWSER=edge`를 명시할 때만 쓰는 비상용이다. Chrome/default/다른 CDP로 대체하지 않는다.
 
 ## 고정 구성
 
@@ -77,7 +77,7 @@ python scripts/orchestrate.py complete-stage --run <run-directory> --stage searc
 
 Tibo 작업은 `backend_size=1024x1536`, `resize_fit=cover`, `preserve_backend_raw=true`를 명시한다. 크기 선택은 요청값일 뿐 실제 backend 원본 크기를 잠그지 않으므로 raw와 최종 4:5 결과를 함께 검수한다. 패딩으로 글자와 사진이 작아지는 `contain`은 기본 제작에 쓰지 않는다. 중앙 crop으로 제목·본문·표·로고·핵심 사진이 손실되면 해당 카드만 탈락시키고, 통과한 같은 세트의 4:5 카드를 마지막 레이아웃 reference로 추가해 재생성한다. 그래도 같은 crop 손실만 반복되고 backend raw는 내용 QA를 모두 통과했을 때만 1장에 한해 배경색 매칭 좌우 contain 폴백을 검수할 수 있다. 띠 경계가 보이거나 360px 가독성·세트 리듬이 낮아지면 실패이며, manifest에 raw·최종 sha256, 패딩 색, `fallback_reason=repeated_cover_crop_loss`를 남긴다.
 
-- 원문 기사 대표 사진과 공식 발표·공시 화면을 고정 Edge Browser Harness 연결로 확보하고 URL·로컬 경로·SHA-256을 기록
+- 원문 기사 대표 사진과 공식 발표·공시 화면을 `invoke_edge_browser_harness.py`(기본 ego lite)로 확보하고 URL·로컬 경로·SHA-256을 기록
 - 10개 디렉터 풀에서 3개를 시드 기반 무작위 선택: 3개 × 5장 = 완성 후보 15장
 - 1장은 실제 사진 전면+하단 그라데이션 표지, 2~4장은 줄글+실제 이미지+표, 5장은 출처 전용
 - 프로젝트 어댑터 한 명령에서 단일 이미지 job 15개를 동시에 실행
@@ -105,7 +105,7 @@ Tibo 작업은 `backend_size=1024x1536`, `resize_fit=cover`, `preserve_backend_r
 
 `publish-news-pick`에 최종 slides, caption, run의 설정 계정, 게시 시각을 전달한다. run의 `account`, `IG_ACCOUNT`, 실제 로그인 계정이 모두 같아야 한다. caption에 `AI로 재구성한 인포그래픽` 계열 문구가 없어야 하며, AI 공개 표시는 Instagram `AI 콘텐츠` 라벨로 처리한다. 업로드 자르기 단계에서는 입력이 1080×1350이어도 Instagram의 실제 `자르기 선택` control을 열어 exact `4:5`를 직접 선택하고, 첫 카드 상·하단 전체가 보이는 screenshot과 자연·렌더 비율 `0.78~0.82`를 확인해야 한다. 이 증거 없이 정방형 기본 crop 상태에서 `다음`으로 진행하면 hard fail이다. 수동 모드는 payload hash를 사람에게 보여주고 건별 승인받는다. 예약 모드는 아래 standing approval 범위 안에서 모든 QA를 통과한 exact payload hash를 잠근 뒤 회차당 한 번 승인한다.
 
-공개 프로필 preflight에는 첫 카드의 안정적인 고유 토큰 2~3개를 `IG_DUPLICATE_TOKENS`에 `|`로 연결해 전달한다. `browser_web_preflight.py` 한 번에서 Edge 계정·소유자 control·로그인/challenge·최신 게시물 중복을 함께 확인한다. 별도 중복 확인용 Harness 프로세스를 다시 만들지 않는다. 업로드는 설치된 `browser_web_upload_prepare.py`를 사용하며, link wrapper 이름이 비어 있으면 자식 SVG의 exact create label을 쓴다. helper가 이미 열린 crop session을 확인한 뒤에는 React가 file input을 제거했어도 run-local helper를 만들거나 create·파일 선택을 반복하지 않는다.
+공개 프로필 preflight에는 첫 카드의 안정적인 고유 토큰 2~3개를 `IG_DUPLICATE_TOKENS`에 `|`로 연결해 전달한다. `browser_web_preflight.py` 한 번에서 계정·소유자 control·로그인/challenge·최신 게시물 중복을 함께 확인한다. 별도 중복 확인용 Harness 프로세스를 다시 만들지 않는다. 업로드는 설치된 `browser_web_upload_prepare.py`를 사용하며, link wrapper 이름이 비어 있으면 자식 SVG의 exact create label을 쓴다. helper가 이미 열린 crop session을 확인한 뒤에는 React가 file input을 제거했어도 run-local helper를 만들거나 create·파일 선택을 반복하지 않는다.
 
 제출 후 오류나 timeout은 자동 재시도하지 않는다. `needs_review`에서 프로필을 읽기 전용으로 확인한다. 예약 run에서 미게시가 확정되면 [operating-policy.md](references/operating-policy.md)의 미게시 복구 조건으로 회차당 한 번만 다시 공유한다. private API 응답만으로 완료하지 말고 공개 permalink의 `?img_index=1..5`에서 shortcode, 서로 다른 media source 5개, 각 주 이미지의 공개 4:5 자연·렌더 비율, 첫·마지막 장, caption, AI 라벨을 검증한다. 페이지 아래 추천 게시물 thumbnail은 본문 카드로 세지 않는다.
 
@@ -150,7 +150,7 @@ python scripts/scheduled_runner.py --slot 07:00
 
 실행 파일은 `CLAUDE_EXECUTABLE` → PATH의 `claude` → `%USERPROFILE%\.local\bin\claude.exe` 순서로 찾고, `--json-schema`와 `--dangerously-skip-permissions`를 지원하는 버전만 사용한다. 모델과 effort는 기본값(`claude-fable-5-1`, `high`)을 쓰며 `NEWS_PICK_CLAUDE_MODEL`, `NEWS_PICK_CLAUDE_EFFORT`(low·medium·high·xhigh·max)로 바꾼다. `output/workspace.json`에 선택적 `imagegen` 블록(`auth_file`, `model`)을 두면 실행기가 `CODEX_IMAGEGEN_AUTH_FILE`/`CODEX_IMAGEGEN_MODEL`을 주입하고 prompt에 같은 `--imagegen-auth-file`/`--imagegen-model` 값을 명시한다. 이벤트 로그(`output/logs/scheduler/<slot>.jsonl`)는 stream-json이며 `claude_session_id`로 `claude --resume`할 수 있다.
 
-공개 웹 조사는 `aside-browser`와 Aside CLI를 우선한다. 현재 운영 계정은 Aside의 Instagram 로그아웃을 확인하고 사용자에게 알린 뒤, 예약 게시는 ego lite 기본 프로필의 newspick_studio 세션을, 수동 Edge 경로는 뉴스픽 전용 Edge `edge9333` 로그인 세션을 쓴다.
+공개 웹 조사는 `aside-browser`와 Aside CLI를 우선한다. 현재 운영 계정은 Aside의 Instagram 로그아웃을 확인하고 사용자에게 알린 뒤, 게시는 ego lite 기본 프로필의 newspick_studio 세션을 쓴다.
 
 Windows 예약 작업은 다음으로 관리한다.
 

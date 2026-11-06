@@ -9,7 +9,9 @@
 - `submission_started=true` 또는 `needs_review`이면 기존 출력·제출 기록을 삭제하거나 날짜 폴더를 바꿔 새 배치를 올리지 않는다. ID가 일부만 있거나 제출 결과가 모호해도 자동 재시도하지 않는다.
 - 세 ID가 모두 있고 입력 해시가 같을 때 `publish_story_batch.py`는 기존 결과의 검증 경로만 실행한다. 다만 focus 실패 후에는 같은 명령을 반복하지 말고 사용자에게 확인한다. 수동 복구는 업로드 helper 없이 기록된 세 URL만 대상으로 한다.
 
-## Edge 재생 증거
+## Edge 재생 증거(비상용 Edge 경로 기록)
+
+2026-11-06부터 스토리 공개 검증은 ego lite `newspick-instagram`의 새 탭에서 한다. ego 새 탭은 앞으로 가져오지 않아도 visible이라 영상이 재생되고 포커스도 보존된다. 아래 절차는 `NEWS_PICK_BROWSER=edge`로 비상용 Edge를 쓸 때만 해당한다.
 
 1. 고정 Microsoft Edge `edge9333`만 사용한다. 공개 검증 helper는 기본 background를 유지하고, polling 및 캡처 전후의 focus·정확한 Story URL·계정·영상 상태를 확인한다.
 2. `readyState>=2`, 세로 영상 크기, 약 6초 duration과 `currentTime>0`을 확인한다. 다른 Story로 자동 이동했거나 login/challenge가 나타나면 성공으로 처리하지 않는다.

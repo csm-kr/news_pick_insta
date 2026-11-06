@@ -97,21 +97,12 @@ def dependency_paths(root: Path, output_root: Path) -> dict[str, str]:
         / "Lib"
         / "site-packages"
     )
-    edge_launcher = (
-        root
-        / "skills"
-        / "publish-news-pick"
-        / "scripts"
-        / "launch_edge_profile.py"
-    )
     dependencies = {
         "story_runner": str(runner.resolve()) if runner.is_file() else "",
-        "edge_launcher": (
-            str(edge_launcher.resolve()) if edge_launcher.is_file() else ""
-        ),
         "ffmpeg": shutil.which("ffmpeg") or "",
         "ffprobe": shutil.which("ffprobe") or "",
-        "browser_harness": shutil.which("browser-harness") or "",
+        # 2026-11-06부터 Edge 대신 ego lite로 게시·검증한다(NEWS_PICK_BROWSER=ego).
+        "ego_browser": shutil.which("ego-browser") or "",
         "private_site_packages": (
             str(private_site_packages.resolve()) if private_site_packages.is_dir() else ""
         ),
@@ -248,43 +239,12 @@ def run_job(
             "PYTHONIOENCODING": "utf-8",
             "NEWS_PICK_OUTPUT_ROOT": str(output_root),
             "IG_ACCOUNT": settings["account"],
-            "NEWS_PICK_BROWSER": "edge",
-            "NEWS_PICK_BROWSER_HARNESS_NAME": "edge9333",
-            "NEWS_PICK_EDGE_CDP_URL": "http://127.0.0.1:9333",
-            "BU_NAME": "edge9333",
-            "BU_CDP_URL": "http://127.0.0.1:9333",
+            "NEWS_PICK_BROWSER": "ego",
             "NEWS_PICK_DAILY_STORY_SCHEDULED_MODE": "1",
         }
     )
     with exclusive_lock(scheduler_root / "daily-story.lock", now):
         atomic_json(state_path, started)
-        launched = subprocess.run(
-            [
-                sys.executable,
-                dependencies["edge_launcher"],
-                "--account",
-                settings["account"],
-            ],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=environment,
-            check=False,
-            creationflags=NO_WINDOW_FLAGS,
-        )
-        if launched.returncode != 0:
-            stdout_path.write_text(launched.stdout or "", encoding="utf-8")
-            stderr_path.write_text(launched.stderr or "", encoding="utf-8")
-            ended = {
-                **started,
-                "completed_at": datetime.now(KST).isoformat(),
-                "status": "failed_pre_submit",
-                "exit_code": launched.returncode,
-                "reason": "edge_launch_failed",
-            }
-            atomic_json(state_path, ended)
-            return 2, ended
         completed = subprocess.run(
             command,
             capture_output=True,

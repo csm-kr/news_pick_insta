@@ -52,10 +52,10 @@ def _require_fixed(value: str | None, expected: str, label: str) -> str:
 
 
 def selected_browser(environment: Mapping[str, str] | None = None) -> str:
-    """`edge`(기본, CDP 9333) 또는 `ego`(ego lite TaskSpace 중계)만 허용한다."""
+    """`ego`(기본, ego lite TaskSpace 중계) 또는 비상용 `edge`(CDP 9333, 명시할 때만)만 허용한다."""
 
     source = os.environ if environment is None else environment
-    value = str(source.get("NEWS_PICK_BROWSER") or "edge").strip()
+    value = str(source.get("NEWS_PICK_BROWSER") or "ego").strip()
     if value == "ego":
         return "ego"
     return _require_fixed(value, "edge", "NEWS_PICK_BROWSER")

@@ -140,5 +140,68 @@ class ScheduleGuardTests(unittest.TestCase):
             MOD.wait_for_page_modules(send, attempts=3, sleep=lambda _s: None)
 
 
+class FakeEgoTransport:
+    """ego_bridge 대신 탭·goto·page_cdp만 흉내 낸다."""
+
+    instances = []
+
+    def __init__(self, space, call_timeout=120.0):
+        self.space = space
+        self.call_timeout = call_timeout
+        self.tabs = [{"label": "p1", "url": "about:blank", "title": ""}]
+        self.calls = []
+        self.closed = False
+        FakeEgoTransport.instances.append(self)
+
+    def call(self, op):
+        self.calls.append(op)
+        if op["op"] == "tabs":
+            return [dict(t) for t in self.tabs]
+        if op["op"] == "goto":
+            self.tabs[0]["url"] = op["url"]
+            return {}
+        if op["op"] == "page_cdp" and op["method"] == "Runtime.evaluate":
+            if op["params"]["expression"] == "typeof window.require":
+                return {"result": {"type": "string", "value": "function"}}
+            return {"result": {"type": "object", "value": {"answer": 42}}}
+        raise AssertionError(op)
+
+    def close(self):
+        self.closed = True
+
+
+class EgoBrowserTests(unittest.TestCase):
+    """2026-11-06부터 팔로우·언팔도 Edge 대신 ego lite를 쓴다(게시 탭과 분리된 newspick-growth)."""
+
+    def setUp(self):
+        FakeEgoTransport.instances = []
+
+    def test_evaluate_runs_on_ego_growth_space_by_default(self):
+        from unittest.mock import patch
+        with patch.dict("os.environ", {}, clear=True), patch.object(MOD.ego_harness, "BridgeTransport", FakeEgoTransport):
+            value = MOD.evaluate("doWork()", timeout=60)
+        self.assertEqual(value, {"answer": 42})
+        transport = FakeEgoTransport.instances[-1]
+        self.assertEqual(transport.space, "newspick-growth")
+        self.assertTrue(transport.closed)
+        self.assertIn({"op": "goto", "page": "p1", "url": "https://www.instagram.com/"}, transport.calls)
+        expressions = [c["params"]["expression"] for c in transport.calls if c["op"] == "page_cdp"]
+        self.assertEqual(expressions[-1], "doWork()")
+
+    def test_ensure_browser_does_not_launch_edge_on_ego(self):
+        from unittest.mock import patch
+        with patch.dict("os.environ", {}, clear=True), patch.object(MOD.subprocess, "run") as run, patch.object(
+            MOD.shutil, "which", return_value="C:/bin/ego-browser.exe"
+        ):
+            MOD.ensure_browser()
+        run.assert_not_called()
+
+    def test_ensure_browser_requires_ego_cli(self):
+        from unittest.mock import patch
+        with patch.dict("os.environ", {}, clear=True), patch.object(MOD.shutil, "which", return_value=None):
+            with self.assertRaises(SystemExit):
+                MOD.ensure_browser()
+
+
 if __name__ == "__main__":
     unittest.main()
