@@ -23,7 +23,7 @@ class ScheduledStoryRunnerTests(unittest.TestCase):
 
     def test_story_time_uses_korean_time(self):
         value = MOD.story_at(date(2026, 8, 20))
-        self.assertEqual(value.isoformat(), "2026-08-20T21:00:00+09:00")
+        self.assertEqual(value.isoformat(), "2026-08-20T19:00:00+09:00")
 
     def test_start_window_rejects_early_and_catch_up_runs(self):
         target = MOD.story_at(date(2026, 8, 20))
@@ -58,7 +58,7 @@ class ScheduledStoryRunnerTests(unittest.TestCase):
                 / "scheduler"
                 / "daily-story"
                 / "editions"
-                / "2026-08-20-2100.json"
+                / "2026-08-20-1900.json"
             )
             MOD.atomic_json(state, {"status": "published"})
             with patch.object(MOD, "dependency_paths", return_value={"ok": "yes"}):
@@ -89,20 +89,53 @@ class ScheduledStoryRunnerTests(unittest.TestCase):
             completed = subprocess.CompletedProcess(
                 args=[], returncode=0, stdout=json.dumps(response), stderr=""
             )
-            launched = subprocess.CompletedProcess(
-                args=[], returncode=0, stdout='{"ok": true}', stderr=""
-            )
             with patch.object(
                 MOD,
                 "dependency_paths",
-                return_value={"edge_launcher": "launch_edge_profile.py"},
+                return_value={"ego_browser": "ego-browser.exe"},
             ), patch.object(
-                MOD.subprocess, "run", side_effect=[launched, completed]
-            ):
+                MOD.subprocess, "run", side_effect=[completed]
+            ) as run:
                 code, result = MOD.run_job(root, target, settings, target)
             self.assertEqual(code, 0)
             self.assertEqual(result["status"], "published")
+            # Edge launcher 없이 스토리 실행기 하나만 돌고, 브라우저는 ego다.
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual(run.call_args.kwargs["env"]["NEWS_PICK_BROWSER"], "ego")
+            self.assertNotIn("BU_CDP_URL", run.call_args.kwargs["env"])
 
+
+    def test_run_job_starts_children_without_console_window(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            settings = self.settings(root)
+            target = MOD.story_at(date(2026, 8, 20))
+            completed = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="")
+            with patch.object(
+                MOD, "dependency_paths", return_value={"ego_browser": "ego-browser.exe"}
+            ), patch.object(MOD.subprocess, "run", side_effect=[completed]) as run:
+                MOD.run_job(root, target, settings, target)
+            for call in run.call_args_list:
+                self.assertEqual(call.kwargs.get("creationflags", 0), MOD.NO_WINDOW_FLAGS)
+            if MOD.sys.platform == "win32":
+                self.assertEqual(MOD.NO_WINDOW_FLAGS, subprocess.CREATE_NO_WINDOW)
+
+    def test_dependencies_require_ego_browser_not_edge(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "skills" / "publish-daily-news-story" / "scripts").mkdir(parents=True)
+            (root / "skills" / "publish-daily-news-story" / "scripts" / "run_daily_story.py").write_text("", encoding="utf-8")
+            output_root = root / "output"
+            (output_root / "publish-news-pick" / "private-venv" / "Lib" / "site-packages").mkdir(parents=True)
+            with patch.object(MOD.shutil, "which", side_effect=lambda name: f"C:/bin/{name}.exe"):
+                dependencies = MOD.dependency_paths(root, output_root)
+        self.assertEqual(dependencies["ego_browser"], "C:/bin/ego-browser.exe")
+        self.assertNotIn("edge_launcher", dependencies)
+        self.assertNotIn("browser_harness", dependencies)
+
+    def test_windows_task_uses_pythonw_so_no_console_opens(self):
+        script = Path(__file__).with_name("manage_windows_story_schedule.ps1").read_text(encoding="utf-8")
+        self.assertIn("pythonw.exe", script)
 
 if __name__ == "__main__":
     unittest.main()

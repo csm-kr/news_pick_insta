@@ -74,14 +74,16 @@ def validate_stage(run: Path, stage: str) -> None:
         story = load_json(folder / "selected-story.json")
         if story.get("verification_status") != "verified":
             raise ValueError("selected story가 verified가 아니다.")
+        if len(story.get("reaction_signals", [])) < 2:
+            raise ValueError("서로 다른 공개 반응 신호가 최소 2개 필요하다.")
         press = {s.get("publisher") for s in story.get("sources", []) if s.get("source_type") == "press_article"}
         if len({x for x in press if x}) < 2:
             raise ValueError("서로 독립적인 언론사 원문 두 곳이 필요하다.")
     elif stage == "plan-news-pick":
         board = load_json(folder / "storyboard.json")
         count = board.get("card_count")
-        if count not in (3, 4) or len(board.get("cards", [])) != count:
-            raise ValueError("storyboard는 정확히 3장 또는 4장이어야 한다.")
+        if count != 5 or len(board.get("cards", [])) != count:
+            raise ValueError("storyboard는 정확히 5장이어야 한다.")
         if not board.get("qa", {}).get("hard_fail_passed") or board.get("qa", {}).get("editorial_score", 0) < 16:
             raise ValueError("기획 QA가 통과되지 않았다.")
         for card in board["cards"]:
@@ -93,9 +95,9 @@ def validate_stage(run: Path, stage: str) -> None:
         duplicate_qa = load_json(folder / "duplicate-qa.json")
         candidates = [p for p in (folder / "candidates").rglob("*.png")]
         slides = [p for p in (folder / "slides").glob("*.png")]
-        if len(candidates) != 12:
-            raise ValueError("후보 이미지는 정확히 12장이어야 한다.")
-        if len(slides) not in (3, 4) or selection.get("card_count") != len(slides):
+        if len(candidates) != 15:
+            raise ValueError("후보 이미지는 정확히 15장이어야 한다.")
+        if len(slides) != 5 or selection.get("card_count") != len(slides):
             raise ValueError("선택된 최종 slides 장수가 올바르지 않다.")
         if qa.get("passed") is not True:
             raise ValueError("이미지 QA가 통과되지 않았다.")
@@ -103,7 +105,12 @@ def validate_stage(run: Path, stage: str) -> None:
             raise ValueError("이미지 중복 QA가 통과되지 않았다.")
     else:
         result = load_json(folder / "result.json")
-        if result.get("status") != "published" or result.get("public_verified") is not True:
+        if (
+            result.get("status") != "published"
+            or result.get("public_verified") is not True
+            or result.get("portrait_4x5") is not True
+            or result.get("card_count") != 5
+        ):
             raise ValueError("Instagram 공개 검증이 완료되지 않았다.")
 
 

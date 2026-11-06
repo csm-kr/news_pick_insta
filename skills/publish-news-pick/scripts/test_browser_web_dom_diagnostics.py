@@ -80,7 +80,7 @@ class ComposerWaitTests(unittest.TestCase):
 
 
 class DomProbeTests(unittest.TestCase):
-    def run_probe(self, root, product='Edg/152.0', targets=None, destination=None):
+    def run_probe(self, root, product='ego-lite/bridge', targets=None, destination=None):
         calls = []
         if targets is None:
             targets = [{'type': 'page', 'url': 'https://www.instagram.com/newspick_studio/', 'targetId': 'instagram'}]
@@ -111,11 +111,23 @@ class DomProbeTests(unittest.TestCase):
             calls = self.run_probe(root)
             report = json.loads((root / 'diagnostic.json').read_text(encoding='utf-8'))
             self.assertTrue(report['read_only'])
-            self.assertEqual(report['connection'], 'edge9333')
+            self.assertEqual(report['connection'], 'ego-lite')
             self.assertEqual(calls, ['Browser.getVersion', 'Target.getTargets', 'Target.attachToTarget'])
 
+    def test_ego_lite_is_accepted_and_reported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.run_probe(root, product='ego-lite/bridge')
+            report = json.loads((root / 'diagnostic.json').read_text(encoding='utf-8'))
+            self.assertEqual(report['browser'], 'ego-lite/bridge')
+            self.assertEqual(report['connection'], 'ego-lite')
+
+    def test_edge_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(RuntimeError, 'ego lite'):
+            self.run_probe(Path(directory), product='Edg/152.0')
+
     def test_chrome_is_rejected(self):
-        with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(RuntimeError, 'Microsoft Edge'):
+        with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(RuntimeError, 'ego lite'):
             self.run_probe(Path(directory), product='Chrome/152.0')
 
     def test_multiple_targets_and_lookalike_host_are_rejected(self):

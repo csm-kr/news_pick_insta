@@ -103,17 +103,28 @@ class AiSwitchDomTests(unittest.TestCase):
         load_functions(js=lambda expression: expressions.append(expression))["read_ai_switch"]()
         fixture = """
 const settings=JSON.parse(process.argv[1]);
+const sibling={};
+const outside={};
 const element={checked:settings.checked,disabled:false,contains:()=>false,
  getAttribute:name=>name==='aria-checked'?'true':null,
  getBoundingClientRect:()=>({x:980,y:500,width:40,height:24})};
+element.parentElement={contains:node=>node===element||node===sibling};
 globalThis.innerWidth=1302;globalThis.innerHeight=698;
 globalThis.getComputedStyle=()=>({display:'block',visibility:'visible'});
 globalThis.document={
  querySelector:()=>({innerText:['계정',settings.label,'설명'].join(String.fromCharCode(10)),querySelectorAll:()=>Array(settings.count).fill(element)}),
- elementFromPoint:()=>settings.hit?element:{}
+ elementFromPoint:()=>settings.hit==='self'?element:(settings.hit==='sibling'?sibling:outside)
 };
 """
-        for label, count, hit in (("AI 레이블 추가", 1, True), ("AI 라벨 추가", 1, False), ("다른 설정", 1, True), ("AI 레이블 추가", 2, True)):
+        cases = (
+            ("AI 레이블 추가", 1, "self", True),
+            ("AI 라벨 추가", 1, "outside", False),
+            ("다른 설정", 1, "self", True),
+            ("AI 레이블 추가", 2, "self", True),
+            # 숨은 input 위에 렌더 요소가 덮인 관측 구조: 같은 toggle 래퍼 안이면 누를 수 있다
+            ("AI 레이블 추가", 1, "sibling", True),
+        )
+        for label, count, hit, expected in cases:
             with self.subTest(label=label, count=count, hit=hit):
                 settings = json.dumps({"label": label, "count": count, "hit": hit, "checked": False})
                 output = subprocess.check_output(["node", "-e", fixture + "console.log(JSON.stringify(" + expressions[0] + "));", settings], text=True, encoding="utf-8")
@@ -122,7 +133,68 @@ globalThis.document={
                     self.assertIsNone(state)
                 else:
                     self.assertFalse(state["checked"])
-                    self.assertEqual(state["hit_matches"], hit)
+                    self.assertEqual(state["hit_matches"], expected)
+
+
+class AiSwitchAmongSiblingTogglesTests(unittest.TestCase):
+    """작성창에 '콘텐츠 예약' toggle이 함께 생긴 뒤(2026-09-23 관측) AI 스위치를 라벨로 특정한다."""
+
+    FIXTURE = """
+const settings=JSON.parse(process.argv[1]);
+const makeToggle=(caption,checked,y)=>{
+  const input={checked:checked,disabled:false,contains:()=>false,
+    getAttribute:name=>name==='aria-checked'?String(checked):null,
+    getBoundingClientRect:()=>({x:1115,y:y,width:40,height:24})};
+  const block={innerText:caption};
+  block.contains=node=>node===input;
+  input.parentElement=block;
+  block.parentElement=null;
+  return input;
+};
+const aiInput=makeToggle(settings.aiCaption,false,504);
+const scheduleInput=makeToggle('콘텐츠 예약',false,599);
+const order=settings.aiFirst?[aiInput,scheduleInput]:[scheduleInput,aiInput];
+globalThis.innerWidth=1302;globalThis.innerHeight=698;
+globalThis.getComputedStyle=()=>({display:'block',visibility:'visible'});
+globalThis.document={
+ querySelector:()=>({innerText:['새 게시물 만들기',settings.dialogLabel,'콘텐츠 예약','접근성','고급 설정'].join(String.fromCharCode(10)),
+   querySelectorAll:()=>order}),
+ elementFromPoint:(x,y)=>y<550?aiInput:scheduleInput
+};
+"""
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js required for DOM fixture")
+    def test_ai_switch_is_selected_when_a_schedule_toggle_is_present(self):
+        expressions = []
+        load_functions(js=lambda expression: expressions.append(expression))["read_ai_switch"]()
+        cases = (
+            # (대화상자 라벨, AI 블록 문구, AI toggle이 먼저인지, 기대 y)
+            ("AI 레이블 추가", "AI 레이블 추가", True, 516.0),
+            ("AI 레이블 추가", "AI 레이블 추가", False, 516.0),
+            ("AI 라벨 추가", "AI 라벨 추가", True, 516.0),
+        )
+        for dialog_label, ai_caption, ai_first, expected_y in cases:
+            with self.subTest(dialog_label=dialog_label, ai_first=ai_first):
+                settings = json.dumps({"dialogLabel": dialog_label, "aiCaption": ai_caption, "aiFirst": ai_first})
+                output = subprocess.check_output(
+                    ["node", "-e", self.FIXTURE + "console.log(JSON.stringify(" + expressions[0] + "));", settings],
+                    text=True, encoding="utf-8")
+                state = json.loads(output)
+                self.assertIsNotNone(state, "AI 스위치를 찾지 못했다")
+                self.assertEqual(state["label"], dialog_label)
+                self.assertEqual(state["y"], expected_y)
+                self.assertFalse(state["checked"])
+                self.assertTrue(state["hit_matches"])
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js required for DOM fixture")
+    def test_two_toggles_without_an_ai_labelled_block_stay_ambiguous(self):
+        expressions = []
+        load_functions(js=lambda expression: expressions.append(expression))["read_ai_switch"]()
+        settings = json.dumps({"dialogLabel": "AI 레이블 추가", "aiCaption": "접근성", "aiFirst": True})
+        output = subprocess.check_output(
+            ["node", "-e", self.FIXTURE + "console.log(JSON.stringify(" + expressions[0] + "));", settings],
+            text=True, encoding="utf-8")
+        self.assertIsNone(json.loads(output))
 
 
 class CaptionResumeTests(unittest.TestCase):
@@ -160,6 +232,30 @@ class CaptionResumeTests(unittest.TestCase):
         self.assertTrue(result["caption_matches"])
         self.assertTrue(result["ai_checked"])
         self.assertEqual(result["input_method"], "existing_exact_caption")
+
+
+class CaptionSuggestionTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("node"), "Node.js required for DOM fixture")
+    def test_only_the_active_composer_caption_editor_is_blurred(self):
+        expressions = []
+        namespace = load_functions(js=lambda expression: expressions.append(expression))
+        namespace["dismiss_caption_suggestions"]()
+        fixture = """
+const owns=process.argv[1]==='caption';
+let editorBlurred=0,otherBlurred=0;
+const editor={contains:n=>n===editor,blur:()=>{editorBlurred++}};
+const other={blur:()=>{otherBlurred++}};
+globalThis.document={activeElement:owns?editor:other,
+ querySelector:()=>({querySelector:()=>editor})};
+"""
+        for active in ("caption", "other"):
+            with self.subTest(active=active):
+                output = subprocess.check_output(
+                    ["node", "-e", fixture + expressions[0] + "; console.log(JSON.stringify({editorBlurred,otherBlurred}));", active],
+                    text=True, encoding="utf-8", creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+                state = json.loads(output)
+                self.assertEqual(state["editorBlurred"], int(active == "caption"))
+                self.assertEqual(state["otherBlurred"], 0)
 
 
 if __name__ == "__main__":

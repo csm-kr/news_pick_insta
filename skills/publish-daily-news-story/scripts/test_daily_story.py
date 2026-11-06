@@ -39,7 +39,7 @@ class DiscoveryTests(unittest.TestCase):
         )
         cover = run / "03-create" / "slides" / "01.png"
         cover.parent.mkdir(parents=True)
-        Image.new("RGB", (1024, 1024), color).save(cover)
+        Image.new("RGB", (1080, 1350), color).save(cover)
         result = run / "04-publish" / "result.json"
         result.parent.mkdir(parents=True)
         result.write_text(
@@ -86,11 +86,11 @@ class DiscoveryTests(unittest.TestCase):
     def test_batch_requires_one_source_from_each_fixed_edition(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            self.make_run(root, "run-a", 5, (210, 40, 40))
+            self.make_run(root, "run-a", 7, (210, 40, 40))
             self.make_run(root, "run-b", 12, (40, 160, 70))
             self.make_run(root, "run-c", 13, (40, 80, 210))
             sources = render_story_video.discover_sources(root, date(2026, 8, 19))
-            with self.assertRaisesRegex(ValueError, "05:00, 12:00, or 17:00"):
+            with self.assertRaisesRegex(ValueError, "07:00, 12:00, or 17:00"):
                 render_story_batch.ordered_slot_sources(sources, date(2026, 8, 19))
 
     @unittest.skipUnless(
@@ -126,7 +126,7 @@ class DiscoveryTests(unittest.TestCase):
     def test_renders_exactly_three_separate_story_videos(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            self.make_run(root, "run-a", 5, (210, 40, 40))
+            self.make_run(root, "run-a", 7, (210, 40, 40))
             self.make_run(root, "run-b", 12, (40, 160, 70))
             self.make_run(root, "run-c", 17, (40, 80, 210))
             rendered = render_story_batch.render(root, date(2026, 8, 19))
@@ -137,6 +137,8 @@ class DiscoveryTests(unittest.TestCase):
                 ["run-a", "run-b", "run-c"],
             )
             self.assertEqual(len({item["path"] for item in rendered["stories"]}), 3)
+            self.assertEqual(rendered["layout"]["foreground"], [1080, 1350])
+            self.assertEqual(rendered["layout"]["foreground_xy"], [0, 285])
             self.assertTrue(
                 all(
                     item["technical"]["width"] == 1080
@@ -152,7 +154,41 @@ class DiscoveryTests(unittest.TestCase):
             self.assertTrue(reused["reused"])
 
 
+    @unittest.skipUnless(
+        shutil.which("ffmpeg") and shutil.which("ffprobe"),
+        "ffmpeg and ffprobe are required",
+    )
+    def test_renders_requested_two_story_batch_when_one_edition_is_missing(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_run(root, "run-a", 7, (210, 40, 40))
+            self.make_run(root, "run-b", 12, (40, 160, 70))
+            rendered = render_story_batch.render(root, date(2026, 8, 19), story_count=2)
+            self.assertEqual(rendered["story_count"], 2)
+            self.assertEqual(rendered["source_count"], 2)
+            self.assertEqual(
+                [item["source"]["run_id"] for item in rendered["stories"]],
+                ["run-a", "run-b"],
+            )
+            manifest = root / "daily-story" / "2026-08-19" / "manifest.json"
+            _, entries, _ = publish_story_batch.load_manifest(manifest)
+            self.assertEqual(len(entries), 2)
+
+    def test_default_batch_still_requires_all_three_editions(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_run(root, "run-a", 7, (210, 40, 40))
+            self.make_run(root, "run-b", 12, (40, 160, 70))
+            with self.assertRaisesRegex(ValueError, "exactly 3"):
+                render_story_batch.render(root, date(2026, 8, 19))
+
+
 class PublishContractTests(unittest.TestCase):
+    def test_browser_task_sources_compile(self):
+        # ego_harness는 guard와 helper를 따로 compile·실행하므로 helper 단독으로 compile돼야 한다.
+        for name in ("private_video_story_task.py", "private_video_story_batch_task.py"):
+            compile((SCRIPTS / name).read_bytes(), str(SCRIPTS / name), "exec")
+
     def test_private_video_requires_matching_mp4_hash(self):
         with tempfile.TemporaryDirectory() as temporary:
             media = Path(temporary) / "story.mp4"

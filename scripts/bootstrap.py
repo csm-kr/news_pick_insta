@@ -26,8 +26,6 @@ SKILL_NAMES = (
     "upload-news-pick",
 )
 OUTPUT_DIRS = ("runs", "publish-news-pick", "daily-story", "profile-candidates", "cache", "logs")
-EDGE_CONNECTION_NAME = "edge9333"
-EDGE_CDP_URL = "http://127.0.0.1:9333"
 
 
 def default_skills_dir() -> Path:
@@ -40,25 +38,6 @@ def validate_account(value: str) -> str:
     if not re.fullmatch(r"[a-z0-9._]+", account):
         raise ValueError("Instagram account 형식이 올바르지 않다.")
     return account
-
-
-def default_edge_user_data_dir() -> Path:
-    if sys.platform == "win32" and os.environ.get("LOCALAPPDATA"):
-        return Path(os.environ["LOCALAPPDATA"]) / "NewsPick" / "EdgeProfile"
-    return Path.home() / ".newspick" / "edge-profile"
-
-
-def edge_executable() -> Path | None:
-    configured = os.environ.get("EDGE_EXECUTABLE")
-    candidates = [Path(configured).expanduser()] if configured else []
-    discovered = shutil.which("msedge") or shutil.which("msedge.exe") or shutil.which("microsoft-edge")
-    if discovered:
-        candidates.append(Path(discovered))
-    if sys.platform == "win32":
-        for base in (os.environ.get("PROGRAMFILES(X86)"), os.environ.get("PROGRAMFILES"), os.environ.get("LOCALAPPDATA")):
-            if base:
-                candidates.append(Path(base) / "Microsoft" / "Edge" / "Application" / "msedge.exe")
-    return next((path.resolve() for path in candidates if path.is_file()), None)
 
 
 def initialize(workspace: Path, output_dir: str, account: str) -> dict:
@@ -74,7 +53,6 @@ def initialize(workspace: Path, output_dir: str, account: str) -> dict:
     else:
         raise ValueError("output은 skills 폴더 밖에 있어야 한다.")
     account = validate_account(account)
-    edge_profile = default_edge_user_data_dir().resolve()
     output_root.mkdir(parents=True, exist_ok=True)
     for name in OUTPUT_DIRS:
         (output_root / name).mkdir(exist_ok=True)
@@ -83,13 +61,8 @@ def initialize(workspace: Path, output_dir: str, account: str) -> dict:
         "workspace": str(workspace),
         "output_root": str(output_root),
         "account": account,
-        "browser": {
-            "engine": "edge",
-            "connection_name": EDGE_CONNECTION_NAME,
-            "cdp_url": EDGE_CDP_URL,
-            "user_data_dir": str(edge_profile),
-            "profile_directory": "Default",
-        },
+        # 2026-11-06부터 뉴스픽 브라우저는 ego lite 하나다(Edge 미사용).
+        "browser": {"engine": "ego"},
         "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "contains_secrets": False,
     }
@@ -101,12 +74,7 @@ def initialize(workspace: Path, output_dir: str, account: str) -> dict:
         "environment": {
             "NEWS_PICK_OUTPUT_ROOT": str(output_root),
             "IG_ACCOUNT": account,
-            "NEWS_PICK_BROWSER": "edge",
-            "NEWS_PICK_BROWSER_HARNESS_NAME": EDGE_CONNECTION_NAME,
-            "NEWS_PICK_EDGE_CDP_URL": EDGE_CDP_URL,
-            "NEWS_PICK_EDGE_USER_DATA_DIR": str(edge_profile),
-            "BU_NAME": EDGE_CONNECTION_NAME,
-            "BU_CDP_URL": EDGE_CDP_URL,
+            "NEWS_PICK_BROWSER": "ego",
         },
     }
 
@@ -174,15 +142,13 @@ def dependency_status() -> dict:
         Path.home() / ".agents" / "skills" / "god-tibo-gpt-image2-skill",
     ]
     tibo = next((path for path in tibo_names if path and (path / "scripts" / "tibo-batch.mjs").is_file()), None)
-    edge = edge_executable()
     status = {
         "python": {"ok": sys.version_info >= (3, 10), "version": ".".join(map(str, sys.version_info[:3]))},
         "pillow": {"ok": importlib.util.find_spec("PIL") is not None},
         "node": {"ok": shutil.which("node") is not None, "path": shutil.which("node")},
         "ffmpeg": {"ok": shutil.which("ffmpeg") is not None, "path": shutil.which("ffmpeg")},
         "ffprobe": {"ok": shutil.which("ffprobe") is not None, "path": shutil.which("ffprobe")},
-        "browser_harness": {"ok": shutil.which("browser-harness") is not None, "path": shutil.which("browser-harness")},
-        "microsoft_edge": {"ok": edge is not None, "path": str(edge) if edge else None},
+        "ego_browser": {"ok": shutil.which("ego-browser") is not None, "path": shutil.which("ego-browser")},
         "god_tibo": {"ok": tibo is not None, "path": str(tibo.resolve()) if tibo else None},
     }
     return {"ready": all(record["ok"] for record in status.values()), "dependencies": status}

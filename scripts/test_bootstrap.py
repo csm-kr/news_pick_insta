@@ -25,9 +25,10 @@ class BootstrapTests(unittest.TestCase):
             self.assertTrue((output / "daily-story").is_dir())
             self.assertTrue((output / "workspace.json").is_file())
             self.assertFalse((workspace / "skills").exists())
-            self.assertEqual(result["browser"]["engine"], "edge")
-            self.assertEqual(result["browser"]["connection_name"], "edge9333")
-            self.assertEqual(result["environment"]["BU_CDP_URL"], "http://127.0.0.1:9333")
+            # 2026-11-06부터 Edge를 쓰지 않는다. 브라우저는 ego lite 하나다.
+            self.assertEqual(result["browser"], {"engine": "ego"})
+            self.assertEqual(result["environment"]["NEWS_PICK_BROWSER"], "ego")
+            self.assertNotIn("BU_CDP_URL", result["environment"])
 
     def test_install_copies_all_skills_without_runtime_state(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -49,21 +50,29 @@ class BootstrapTests(unittest.TestCase):
             self.assertFalse(marker.exists())
             backup = Path(result["backup_root"])
             self.assertEqual((backup / "publish-news-pick" / "old-marker.txt").read_text(encoding="utf-8"), "old")
-            self.assertTrue((target / "publish-news-pick" / "scripts" / "launch_edge_profile.py").is_file())
+            self.assertTrue((target / "publish-news-pick" / "scripts" / "ego_harness.py").is_file())
 
     def test_dependency_status_has_aggregate_ready_flag(self):
         result = MOD.dependency_status()
         self.assertIn("ready", result)
         self.assertEqual(result["ready"], all(item["ok"] for item in result["dependencies"].values()))
 
-    def test_publish_skill_has_only_edge_launcher(self):
+    def test_publish_skill_uses_only_ego(self):
         scripts = MOD.SOURCE_SKILLS / "publish-news-pick" / "scripts"
-        self.assertTrue((scripts / "launch_edge_profile.py").is_file())
+        self.assertTrue((scripts / "ego_harness.py").is_file())
+        self.assertTrue((scripts / "ego_bridge.mjs").is_file())
         self.assertTrue((scripts / "invoke_edge_browser_harness.py").is_file())
+        self.assertFalse((scripts / "launch_edge_profile.py").exists())
         self.assertFalse((scripts / "launch_chrome_profile.py").exists())
         skill = (MOD.SOURCE_SKILLS / "publish-news-pick" / "SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("edge9333", skill)
+        self.assertNotIn("edge9333", skill)
         self.assertIn("Chrome/default/다른 endpoint는 fail closed", skill)
+
+    def test_dependency_status_checks_ego_not_edge(self):
+        dependencies = MOD.dependency_status()["dependencies"]
+        self.assertIn("ego_browser", dependencies)
+        self.assertNotIn("microsoft_edge", dependencies)
+        self.assertNotIn("browser_harness", dependencies)
 
     def test_output_cannot_be_initialized_inside_skills_source(self):
         with self.assertRaisesRegex(ValueError, "skills"):

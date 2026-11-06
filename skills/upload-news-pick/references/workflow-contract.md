@@ -6,8 +6,8 @@
 |---|---|---|---|---|
 | 1 | `search-news` | edition/checkpoint | verified story | 증거 부족·충돌 |
 | 2 | `plan-news-pick` | verified story | editorial plan/storyboard | 선정성·근거 누락 |
-| 3 | `create-news-cards` | locked storyboard | selected slides/QA | 12장 미완성·시각 QA 실패·이미지 중복 |
-| 4 | `publish-news-pick` | locked slides/caption | public verified result | hash 불일치·계정 불일치 |
+| 3 | `create-news-cards` | locked 5-card storyboard | selected 5 slides/QA | 15장 미완성·360px 가독성 실패·이미지 중복 |
+| 4 | `publish-news-pick` | locked slides/caption | `public_verified=true`, `portrait_4x5=true`, `card_count=5` result | hash·계정 불일치, 정방형 crop, 공개 5장 불일치 |
 
 각 단계는 앞 단계 내용을 수정하지 않는다. 오류가 있으면 앞 단계로 반환하고 새 산출물 hash를 만든다.
 

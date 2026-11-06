@@ -95,7 +95,7 @@ for index in range(1, expected + 1):
     active_index:dots.length?dots.findIndex(x=>x.active):(media?queryIndex:-1),
     caption_match:text.includes(captionPrefix),
     account_visible:text.toLocaleLowerCase().includes(account),
-    ai_label:text.includes('AI 콘텐츠')||text.includes('AI 크리에이터')||text.includes('Made with AI'),
+    ai_label:text.includes('AI 콘텐츠')||text.includes('AI 크리에이터')||text.includes('Made with AI')||text.includes('AI로 생성한 프로필'),
     login_wall:location.href.includes('/accounts/login')||!!document.querySelector('input[type=password]'),
     challenge:/(challenge|checkpoint)/.test(location.href),
     media_ready:!!media,

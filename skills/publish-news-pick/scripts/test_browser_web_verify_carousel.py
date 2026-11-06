@@ -15,7 +15,7 @@ SCRIPT = Path(__file__).with_name("browser_web_verify_carousel.py")
 
 
 class PublicCarouselTests(unittest.TestCase):
-    def exercise(self, root, capture_all=False, overrides=None):
+    def exercise(self, root, capture_all=False, overrides=None, expressions=None):
         clock = SimpleNamespace(seconds=0, index=0)
         navigations = []
         activations = []
@@ -34,7 +34,9 @@ class PublicCarouselTests(unittest.TestCase):
                 return {"data": base64.b64encode(f"jpeg-{clock.index}".encode()).decode()}
             raise AssertionError("unexpected browser mutation: " + method)
 
-        def fake_js(_expression):
+        def fake_js(expression):
+            if expressions is not None:
+                expressions.append(expression)
             return {
                 "dot_count": 0, "active_index": clock.index - 1,
                 "caption_match": True, "account_visible": True, "ai_label": True,
@@ -89,6 +91,17 @@ class PublicCarouselTests(unittest.TestCase):
                 result, _navigations, _activations, failure = self.exercise(Path(directory), capture_all=True, overrides=overrides)
                 self.assertIsInstance(failure, RuntimeError)
                 self.assertFalse(result["verified"])
+
+    def test_public_ai_profile_marker_counts_as_ai_label(self):
+        # 2026-09-08부터 Instagram 공개 헤더가 'AI 콘텐츠' 대신 'AI로 생성한 프로필'로 렌더링된다.
+        expressions = []
+        with tempfile.TemporaryDirectory() as directory:
+            _result, _navigations, _activations, failure = self.exercise(Path(directory), expressions=expressions)
+        self.assertIsNone(failure)
+        ai_checks = [line for line in expressions[0].splitlines() if "ai_label:" in line]
+        self.assertEqual(len(ai_checks), 1)
+        for marker in ("AI 콘텐츠", "AI 크리에이터", "Made with AI", "AI로 생성한 프로필"):
+            self.assertIn(f"text.includes('{marker}')", ai_checks[0])
 
 
 if __name__ == "__main__":

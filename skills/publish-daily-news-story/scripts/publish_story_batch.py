@@ -26,15 +26,17 @@ def load_manifest(path: Path) -> tuple[dict, list[dict], Path]:
     if not manifest_path.is_file():
         raise FileNotFoundError(f"manifest does not exist: {manifest_path}")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+    declared = manifest.get("story_count")
     if (
         manifest.get("status") != "rendered"
         or manifest.get("mode") != "three_separate_stories"
-        or manifest.get("story_count") != STORY_COUNT
+        or not isinstance(declared, int)
+        or not 1 <= declared <= STORY_COUNT
     ):
-        raise ValueError("Story manifest is not a rendered three-Story batch")
+        raise ValueError("Story manifest is not a rendered Story batch")
     stories = manifest.get("stories", [])
-    if len(stories) != STORY_COUNT:
-        raise ValueError("Story manifest must contain exactly three videos")
+    if len(stories) != declared:
+        raise ValueError(f"Story manifest must contain exactly {declared} videos")
     required = {
         "codec": "h264",
         "width": 1080,
@@ -74,8 +76,9 @@ def verify_existing(result: dict, result_path: Path, account: str, entries: list
     stories = result.get("stories", [])
     urls = [str(item.get("story_url") or "") for item in stories]
     pks = [str(item.get("story_pk") or "") for item in stories]
-    if len(urls) != STORY_COUNT or not all(urls) or len(pks) != STORY_COUNT or not all(pks):
-        raise RuntimeError("existing Story batch has no complete three-item identity")
+    expected = len(entries) or STORY_COUNT
+    if len(urls) != expected or not all(urls) or len(pks) != expected or not all(pks):
+        raise RuntimeError(f"existing Story batch has no complete {expected}-item identity")
     screenshot_dir = result_path.parent / "verified-stories"
     verify_code, verification, verify_diagnostic = legacy.harness_call(
         VERIFY_TASK,
@@ -115,13 +118,13 @@ def verify_existing(result: dict, result_path: Path, account: str, entries: list
     public_ok = bool(
         verify_code == 0
         and verification.get("ok")
-        and verification.get("story_count") == STORY_COUNT
+        and verification.get("story_count") == expected
     )
     metadata_ok = bool(
         metadata_code == 0
         and metadata.get("ok")
         and metadata.get("confirmed")
-        and len(metadata.get("stories", [])) == STORY_COUNT
+        and len(metadata.get("stories", [])) == expected
         and all(
             item.get("media_type") == 2
             and item.get("video_url_present") is True
@@ -135,7 +138,7 @@ def verify_existing(result: dict, result_path: Path, account: str, entries: list
                 "status": "published",
                 "public_verified": True,
                 "verified_at": datetime.now(KST).isoformat(),
-                "story_count": STORY_COUNT,
+                "story_count": expected,
                 "verification_mode": "edge_background_batch_plus_private_metadata",
             }
         )
@@ -165,7 +168,7 @@ def publish(manifest_path: Path, account: str, expected_input_sha256: str | None
             existing["reused"] = True
             return existing
         if existing.get("submission_started") is True or existing.get("status") == "needs_review":
-            if existing.get("input_set_sha256") == input_hash and len(existing.get("stories", [])) == STORY_COUNT:
+            if existing.get("input_set_sha256") == input_hash and len(existing.get("stories", [])) == (len(entries) or STORY_COUNT):
                 return verify_existing(existing, result_path, account, entries)
             raise RuntimeError("a previous Story batch may have started; inspect Instagram before retry")
 
@@ -193,7 +196,7 @@ def publish(manifest_path: Path, account: str, expected_input_sha256: str | None
         "manifest": str(manifest_path.resolve()),
         "input_set_sha256": input_hash,
         "source_runs": [entry["source_run_id"] for entry in entries],
-        "story_count": STORY_COUNT,
+        "story_count": len(entries),
         "stories": submitted.get("stories", []),
         "submission": submitted,
         "updated_at": datetime.now(KST).isoformat(),
@@ -203,7 +206,7 @@ def publish(manifest_path: Path, account: str, expected_input_sha256: str | None
         publish_code != 0
         or not submitted.get("ok")
         or not submitted.get("confirmed")
-        or len(result["stories"]) != STORY_COUNT
+        or len(result["stories"]) != len(entries)
     ):
         result["diagnostic"] = diagnostic
         legacy.atomic_json(result_path, result)

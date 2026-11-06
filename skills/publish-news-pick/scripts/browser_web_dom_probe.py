@@ -52,8 +52,9 @@ def inspect_dom():
 
 
 product = str(cdp('Browser.getVersion').get('product') or '')
-if not product.lower().startswith(('edg/', 'microsoftedge/')):
-    raise RuntimeError('DOM diagnostics require Microsoft Edge')
+if not product.lower().startswith('ego-lite/'):
+    raise RuntimeError('DOM diagnostics require ego lite')
+connection = 'ego-lite'
 targets = [target for target in cdp('Target.getTargets').get('targetInfos', [])
            if target.get('type') == 'page'
            and urlsplit(target.get('url') or '').hostname in {'instagram.com', 'www.instagram.com'}]
@@ -67,7 +68,7 @@ session_id = cdp('Target.attachToTarget', targetId=target_id, flatten=True)['ses
 private['_send']({'meta': 'set_session', 'session_id': session_id, 'target_id': target_id})
 private['_mark_tab']()
 report = {'schema_version': '1.0', 'observed_at': datetime.now(timezone.utc).isoformat(),
-          'browser': product, 'connection': 'edge9333', 'target_id': target_id,
+          'browser': product, 'connection': connection, 'target_id': target_id,
           'read_only': True, 'snapshot': inspect_dom()}
 destination = os.environ.get('IG_DOM_DIAGNOSTIC_PATH')
 if destination:

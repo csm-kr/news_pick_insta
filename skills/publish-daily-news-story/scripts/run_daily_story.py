@@ -23,6 +23,7 @@ def main() -> int:
     parser.add_argument("--account", default=os.environ.get("IG_ACCOUNT"))
     parser.add_argument("--force-render", action="store_true")
     parser.add_argument("--include-manual-editions", action="store_true")
+    parser.add_argument("--story-count", type=int, default=render_story_batch.STORY_COUNT)
     parser.add_argument(
         "--publish",
         action="store_true",
@@ -42,6 +43,7 @@ def main() -> int:
             explicit_runs=args.runs,
             force=args.force_render,
             include_manual_editions=args.include_manual_editions,
+            story_count=args.story_count,
         )
         response = {"render": rendered, "publish_requested": args.publish}
         if args.publish:

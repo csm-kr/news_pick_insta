@@ -25,6 +25,10 @@ FPS = 30
 FRAME_COUNT = 180
 DURATION = 6.0
 FADE = 0.4
+COVER_WIDTH = 1080
+COVER_HEIGHT = 1350
+COVER_X = 0
+COVER_Y = (HEIGHT - COVER_HEIGHT) // 2
 
 
 @dataclass(frozen=True)
@@ -102,8 +106,10 @@ def validate_cover(path: Path) -> None:
     with Image.open(path) as image:
         if image.format != "PNG":
             raise ValueError(f"cover must be PNG: {path}")
-        if image.size != (1024, 1024):
-            raise ValueError(f"cover must be 1024x1024: {path} is {image.size}")
+        if image.size != (COVER_WIDTH, COVER_HEIGHT):
+            raise ValueError(
+                f"cover must be {COVER_WIDTH}x{COVER_HEIGHT}: {path} is {image.size}"
+            )
 
 
 def source_from_run(run_dir: Path) -> Source:
@@ -180,6 +186,8 @@ def input_set_sha256(sources: list[Source], target_date: date) -> str:
             "fps": FPS,
             "frames": FRAME_COUNT,
             "fade_seconds": FADE,
+            "foreground": [COVER_WIDTH, COVER_HEIGHT],
+            "foreground_xy": [COVER_X, COVER_Y],
         },
     }
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
@@ -211,10 +219,10 @@ def ffmpeg_filter(source_count: int) -> str:
                     f"eq=brightness=-0.34:saturation=0.78[back{index}]"
                 ),
                 (
-                    f"[fg{index}]scale=1024:1024:flags=lanczos,setsar=1[front{index}]"
+                    f"[fg{index}]scale={COVER_WIDTH}:{COVER_HEIGHT}:flags=lanczos,setsar=1[front{index}]"
                 ),
                 (
-                    f"[back{index}][front{index}]overlay=28:448,"
+                    f"[back{index}][front{index}]overlay={COVER_X}:{COVER_Y},"
                     f"fps={FPS},format=yuv420p,setsar=1[v{index}]"
                 ),
             ]
@@ -432,8 +440,8 @@ def render(
         },
         "layout": {
             "canvas": [WIDTH, HEIGHT],
-            "foreground": [1024, 1024],
-            "foreground_xy": [28, 448],
+            "foreground": [COVER_WIDTH, COVER_HEIGHT],
+            "foreground_xy": [COVER_X, COVER_Y],
             "background": "same cover, aspect-fill, blur 60, darkened",
             "transition": "crossfade",
             "transition_seconds": FADE,

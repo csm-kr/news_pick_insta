@@ -1,0 +1,4 @@
+interface:
+  display_name: "추천 계정 팔로우"
+  short_description: "회원님을 위한 추천 계정을 천천히 팔로우해 맞팔로 팔로워 늘리기"
+  default_prompt: "Use $follow-suggested to follow suggested accounts for newspick_studio."

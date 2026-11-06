@@ -18,10 +18,8 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
-import edge_browser
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -39,7 +37,6 @@ def default_output_root() -> Path:
 
 LOCAL_ROOT = Path(os.environ.get("NEWS_PICK_PUBLISH_ROOT") or (default_output_root() / "publish-news-pick")).expanduser().resolve()
 JOBS_ROOT = LOCAL_ROOT / "jobs"
-CONFIG_PATH = LOCAL_ROOT / "config.json"
 LOCK_PATH = LOCAL_ROOT / "queue.lock"
 RUNNER = Path(__file__).with_name("run_carousel.py")
 PREFIX = "INSTAGRAM_PRIVATE_CAROUSEL_RESULT="
@@ -89,57 +86,6 @@ def schedule(value: str, timezone_name: str | None) -> tuple[str, str]:
             raise ValueError("timezone 없는 시각에는 --timezone이 필요하다.")
         parsed = parsed.replace(tzinfo=ZoneInfo(timezone_name))
     return parsed.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"), timezone_name or str(parsed.tzinfo)
-
-
-def normalize_endpoint(value: str) -> str:
-    parsed = urlsplit(value)
-    if parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost", "::1"} or parsed.username or parsed.password or parsed.query or parsed.fragment:
-        raise ValueError("CDP endpoint는 credential 없는 loopback http 주소여야 한다.")
-    port = parsed.port
-    if port is None or not 1024 <= port <= 65535:
-        raise ValueError("CDP port는 1024~65535다.")
-    host = "127.0.0.1" if parsed.hostname in {"127.0.0.1", "localhost"} else "[::1]"
-    normalized = urlunsplit(("http", f"{host}:{port}", "", "", ""))
-    if normalized != edge_browser.EDGE_CDP_URL:
-        raise ValueError(f"뉴스픽은 Microsoft Edge CDP {edge_browser.EDGE_CDP_URL}만 허용한다.")
-    return normalized
-
-
-def probe_endpoint(endpoint: str) -> dict[str, Any]:
-    value = edge_browser.probe_edge_endpoint(normalize_endpoint(endpoint))
-    return {"browser": value["browser"], "protocol_version": value["protocol_version"]}
-
-
-def configure(endpoint: str | None, connection: str | None, expected_profile: str | None, dedicated: bool, path: Path = CONFIG_PATH) -> dict[str, Any]:
-    if not dedicated:
-        raise ValueError("뉴스픽 전용 Edge profile 확인이 필요하다.")
-    if connection or expected_profile:
-        raise ValueError("Chrome/default Browser Harness 연결은 지원하지 않는다. 고정 Edge --endpoint만 사용한다.")
-    endpoint = normalize_endpoint(endpoint or "")
-    value = {
-        "schema_version": "2.0",
-        "connection_mode": "edge_cdp",
-        "browser_engine": "edge",
-        "browser_harness_connection": edge_browser.EDGE_CONNECTION_NAME,
-        "endpoint": endpoint,
-        "dedicated_profile_confirmed": True,
-        "configured_at": now(),
-        **probe_endpoint(endpoint),
-    }
-    atomic_json(path, value)
-    return value
-
-
-def read_config(path: Path = CONFIG_PATH) -> dict[str, Any]:
-    value = read_json(path)
-    if value.get("dedicated_profile_confirmed") is not True:
-        raise ValueError("뉴스픽 전용 Edge profile 확인이 없다.")
-    if value.get("connection_mode") != "edge_cdp" or value.get("browser_engine") != "edge":
-        raise ValueError("뉴스픽 게시 설정은 Microsoft Edge 전용이어야 한다.")
-    value["endpoint"] = normalize_endpoint(value["endpoint"])
-    if value.get("browser_harness_connection") != edge_browser.EDGE_CONNECTION_NAME:
-        raise ValueError("뉴스픽 Browser Harness 연결 이름이 edge9333이 아니다.")
-    return value
 
 
 def payload_core(job: dict[str, Any]) -> dict[str, Any]:
@@ -218,7 +164,7 @@ def parse_result(stdout: str) -> dict[str, Any] | None:
     return None
 
 
-def execute(path: Path, config: Path = CONFIG_PATH) -> dict[str, Any]:
+def execute(path: Path) -> dict[str, Any]:
     job = read_json(path)
     validate_job(job, path)
     if job["status"] != "approved":
@@ -227,7 +173,7 @@ def execute(path: Path, config: Path = CONFIG_PATH) -> dict[str, Any]:
     attempt = {"started_at": now(), "submission_started": False}
     job["attempts"].append(attempt)
     atomic_json(path, job)
-    completed = subprocess.run([sys.executable, str(RUNNER), "--job", str(path), "--config", str(config)], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
+    completed = subprocess.run([sys.executable, str(RUNNER), "--job", str(path)], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
     result = parse_result(completed.stdout) or {"ok": False, "submission_started": None, "error": "publisher result가 없다."}
     attempt.update({"finished_at": now(), "submission_started": result.get("submission_started"), "returncode": completed.returncode, "error": result.get("error")})
     if result.get("ok") and result.get("confirmed") and result.get("shortcode"):
@@ -241,8 +187,8 @@ def execute(path: Path, config: Path = CONFIG_PATH) -> dict[str, Any]:
     return job
 
 
-def probe(account: str, config: Path = CONFIG_PATH) -> dict[str, Any]:
-    completed = subprocess.run([sys.executable, str(RUNNER), "--probe-account", normalize_account(account), "--config", str(config)], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+def probe(account: str) -> dict[str, Any]:
+    completed = subprocess.run([sys.executable, str(RUNNER), "--probe-account", normalize_account(account)], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
     result = parse_result(completed.stdout)
     if not result or not result.get("ok"):
         raise RuntimeError((result or {}).get("error") or "probe가 실패했다.")
@@ -356,7 +302,6 @@ def summary(job: dict[str, Any]) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    conf = commands.add_parser("configure"); conf.add_argument("--endpoint", required=True); conf.add_argument("--dedicated-profile", action="store_true")
     pro = commands.add_parser("probe"); pro.add_argument("--account", required=True)
     prep = commands.add_parser("prepare"); prep.add_argument("--account", required=True); prep.add_argument("--scheduled-at", required=True); prep.add_argument("--timezone"); prep.add_argument("--media", type=Path, action="append", required=True); group = prep.add_mutually_exclusive_group(required=True); group.add_argument("--caption"); group.add_argument("--caption-file", type=Path)
     app = commands.add_parser("approve"); app.add_argument("job_id"); app.add_argument("--sha256", required=True)
@@ -366,8 +311,7 @@ def main() -> int:
     web = commands.add_parser("record-web-submitted"); web.add_argument("job_id"); web.add_argument("--shortcode", required=True); web.add_argument("--card-count", type=int, required=True)
     args = parser.parse_args()
     try:
-        if args.command == "configure": result = configure(args.endpoint, None, None, args.dedicated_profile)
-        elif args.command == "probe": result = probe(args.account)
+        if args.command == "probe": result = probe(args.account)
         elif args.command == "prepare": result = summary(prepare(args.account, args.scheduled_at, args.timezone, args.media, args.caption if args.caption is not None else args.caption_file.read_text(encoding="utf-8")))
         elif args.command == "approve": result = summary(approve(args.job_id, args.sha256))
         elif args.command == "status": result = summary(load_job(args.job_id)[1]) if args.job_id else [summary(read_json(x)) for x in sorted(JOBS_ROOT.glob("*/job.json"))]

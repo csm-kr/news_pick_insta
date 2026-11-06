@@ -13,7 +13,7 @@ try:
 except ImportError as exc:  # pragma: no cover
     raise SystemExit("Pillow가 필요하다: python -m pip install Pillow") from exc
 
-SIZE = (1024, 1024)
+SIZE = (1080, 1350)
 
 
 def font(size: int):
@@ -62,7 +62,7 @@ def render(work: Path, board: dict) -> dict:
         with Image.open(background_path) as raw:
             image = raw.convert("RGB")
         if image.size != SIZE:
-            raise ValueError(f"background {index} 크기가 1024x1024가 아니다: {image.size}")
+            raise ValueError(f"background {index} 크기가 1080x1350이 아니다: {image.size}")
         canvas = image.convert("RGBA")
         overlay = Image.new("RGBA", SIZE, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
@@ -95,7 +95,7 @@ def render(work: Path, board: dict) -> dict:
         target = output / f"{index:02d}.png"
         canvas.save(target, format="PNG")
         rendered.append({"index": index, "path": str(target.resolve()), "copy": copy, "size": list(canvas.size), "ai_disclosure": True})
-    qa = {"schema_version": "1.0", "passed": len(rendered) in (3, 4) and all(tuple(x["size"]) == SIZE for x in rendered), "candidate_count": len(list((work / "candidates").rglob("card-*.png"))), "slide_count": len(rendered), "target_size": "1024x1024", "checks": {"source_and_time": True, "ai_disclosure": True, "copy_matches_storyboard": True, "contrast_overlay": "dark-panel"}, "manual_checks_required": ["360px readability", "actual-photo confusion", "semantic fit"]}
+    qa = {"schema_version": "1.0", "passed": len(rendered) == 5 and all(tuple(x["size"]) == SIZE for x in rendered), "candidate_count": len(list((work / "candidates").rglob("card-*.png"))), "slide_count": len(rendered), "target_size": "1080x1350", "checks": {"source_and_time": True, "ai_disclosure": True, "copy_matches_storyboard": True, "contrast_overlay": "dark-panel"}, "manual_checks_required": ["360px readability", "actual-photo confusion", "semantic fit"]}
     (work / "qa-report.json").write_text(json.dumps(qa, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return qa
 
