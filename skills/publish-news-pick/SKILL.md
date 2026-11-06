@@ -15,16 +15,16 @@ description: 승인된 1080×1350 PNG 다섯 장을 설정된 Instagram 계정�
 - 2200자 이하 caption과 게시 시각
 - `IG_ACCOUNT`의 계정에 로그인된 ego lite 기본 프로필과 `ego-browser` CLI
 - skill 폴더 밖의 절대 `NEWS_PICK_OUTPUT_ROOT`
-- helper 실행기 `scripts/invoke_edge_browser_harness.py`(기본 ego, `NEWS_PICK_BROWSER=edge`일 때만 비상용 Edge `edge9333`)
+- helper 실행기 `scripts/invoke_edge_browser_harness.py`(ego lite로 중계)
 - 첫 카드 중복 확인용 안정적 고유 토큰 2~3개를 `|`로 연결한 `IG_DUPLICATE_TOKENS`
 - exact payload에 대한 사용자 건별 승인 또는 `NEWS_PICK_SCHEDULED_MODE=1` 회차의 정책 standing approval
 
-계정 기본값은 `IG_ACCOUNT=newspick_studio`다. 브라우저는 ego(기본)와 비상용 edge 둘만 허용한다. 웹 UI 경로에는 password, cookie export, `sessionid`, 앱 비밀번호가 필요 없고 ego lite 프로필의 기존 로그인 세션을 그대로 사용한다.
+계정 기본값은 `IG_ACCOUNT=newspick_studio`다. 브라우저는 ego lite 하나다. 웹 UI 경로에는 password, cookie export, `sessionid`, 앱 비밀번호가 필요 없고 ego lite 프로필의 기존 로그인 세션을 그대로 사용한다.
 
 ## 불변조건
 
 - 대상 계정은 승인 payload의 계정 및 `IG_ACCOUNT`와 일치해야 한다.
-- 브라우저는 두 가지만 허용한다: 기본 ego lite TaskSpace `newspick-instagram`(2026-11-06부터 게시·스토리·팔로우·언팔 모두), 또는 `NEWS_PICK_BROWSER=edge`를 명시할 때만 비상용 Microsoft Edge(`edge9333`, `http://127.0.0.1:9333`). 두 경로 모두 같은 `invoke_edge_browser_harness.py`와 helper를 쓴다. Chrome/default/다른 endpoint는 fail closed다.
+- 브라우저는 ego lite TaskSpace `newspick-instagram` 하나다(2026-11-06부터 게시·스토리·팔로우·언팔 모두, Edge 코드는 삭제). 모든 helper는 `invoke_edge_browser_harness.py`로 실행한다. Chrome/default/다른 endpoint는 fail closed다.
 - 설정된 브라우저의 Instagram 탭 하나만 제어한다(ego는 `newspick-instagram` agent 탭). 다른 탭을 닫거나 탐색하지 않는다.
 - 웹 UI 게시 경로에서는 해당 Instagram 탭의 활성화·탐색·파일 선택을 허용한다. 공유 성공 직후 같은 승인 거래의 공개 검증만 동일한 전용 Instagram target 하나에서 읽기 전용으로 수행하며 다른 탭을 만들거나 닫지 않는다. 독립 조회는 background target 원칙을 유지한다.
 - 현재 URL은 다른 공개 프로필일 수 있으므로 계정 판정에 쓰지 않는다. 작성기를 열기 직전 왼쪽 rail의 정확한 `https://www.instagram.com/<IG_ACCOUNT>/` 링크와 그 안의 계정명 profile image alt를 확인하고 설정 계정 프로필로 이동한다.
@@ -41,25 +41,13 @@ description: 승인된 1080×1350 PNG 다섯 장을 설정된 Instagram 계정�
 
 ## DOM 오류와 스킬 갱신
 
-작성창·file input·exact control 오류가 나면 [references/dom-diagnostics-and-update.md](references/dom-diagnostics-and-update.md)를 따른다. 먼저 고정 Edge `edge9333`의 읽기 전용 `browser_web_dom_probe.py`로 현재 단계·가시 control·다중 input을 기록한다. 로딩 지연과 실제 구조 변경을 구분한 뒤 저장소 helper·회귀 테스트를 수정하고, 테스트 → 백업을 포함한 설치본 갱신 → SHA-256 일치 → 설치본 재진단 순서로 검증한다. 공유 여부가 모호한 job이나 이미 열린 crop은 재업로드하지 않는다.
+작성창·file input·exact control 오류가 나면 [references/dom-diagnostics-and-update.md](references/dom-diagnostics-and-update.md)를 따른다. 먼저 ego lite에서 읽기 전용 `browser_web_dom_probe.py`로 현재 단계·가시 control·다중 input을 기록한다. 로딩 지연과 실제 구조 변경을 구분한 뒤 저장소 helper·회귀 테스트를 수정하고, 테스트 → 백업을 포함한 설치본 갱신 → SHA-256 일치 → 설치본 재진단 순서로 검증한다. 공유 여부가 모호한 job이나 이미 열린 crop은 재업로드하지 않는다.
 
 ## 최초 설정
 
-기본 ego lite는 따로 설정할 것이 없다(`ego-browser` CLI와 ego 프로필의 Instagram 로그인만 필요). 아래는 비상용 Edge 경로를 쓸 때만 한다.
+ego lite는 따로 설정할 것이 없다. `ego-browser` CLI와 ego 프로필의 Instagram 로그인만 있으면 되고, ego가 꺼져 있으면 실행기가 켠다.
 
-```powershell
-$env:NEWS_PICK_OUTPUT_ROOT = '<workspace>/output'
-$env:IG_ACCOUNT = 'newspick_studio'
-$env:NEWS_PICK_BROWSER = 'edge'
-$env:NEWS_PICK_BROWSER_HARNESS_NAME = 'edge9333'
-$env:NEWS_PICK_EDGE_CDP_URL = 'http://127.0.0.1:9333'
-python scripts/launch_edge_profile.py --account $env:IG_ACCOUNT
-python scripts/carousel_queue.py configure --endpoint http://127.0.0.1:9333 --dedicated-profile
-```
-
-다른 browser·port·connection name으로 바꾸지 않는다. `/json/version`이 Edge product를 반환하지 않으면 설정하지 않는다.
-
-설정된 브라우저(기본 ego)의 Instagram 로그인을 targeted DOM 한 번의 bounded probe로 읽기 전용 확인한다.
+ego lite의 Instagram 로그인을 targeted DOM 한 번의 bounded probe로 읽기 전용 확인한다.
 
 ```powershell
 $env:IG_DUPLICATE_TOKENS = '<고유 토큰1>|<고유 토큰2>|<고유 토큰3>'
@@ -100,7 +88,7 @@ python scripts/carousel_queue.py approve <job_id> --sha256 <payload_sha256>
 
 ## 제출 — 기본 웹 UI 경로
 
-helper로 설정된 브라우저(기본 ego `newspick-instagram`)의 Instagram 작성 화면을 열고 다음 순서를 지킨다. 각 번호를 모델-브라우저 왕복으로 잘게 쪼개지 말고, helper script 하나가 담당하는 bounded phase는 Browser Harness 프로세스 하나에서 끝낸다.
+helper로 ego lite `newspick-instagram`의 Instagram 작성 화면을 열고 다음 순서를 지킨다. 각 번호를 모델-브라우저 왕복으로 잘게 쪼개지 말고, helper script 하나가 담당하는 bounded phase는 Browser Harness 프로세스 하나에서 끝낸다.
 
 1. `새로운 게시물` → `컴퓨터에서 선택`
 2. `scripts/browser_web_upload_prepare.py`로 `input[type=file][multiple]`에 승인된 PNG 5장을 번호 순서로 한 번에 전달. 좌측 create link의 wrapper 이름이 비어 있으면 자식 SVG의 exact `aria-label="새로운 게시물"` 또는 `aria-label="만들기"`를 사용한다.

@@ -53,7 +53,7 @@ powershell -ExecutionPolicy Bypass -File scripts/manage_windows_story_schedule.p
 powershell -ExecutionPolicy Bypass -File scripts/manage_windows_story_schedule.ps1 remove
 ```
 
-Windows 작업은 매일 `19:00` KST에 시작한다. 같은 날짜의 상태 파일이 이미 있으면 중복 실행하지 않고, `19:30`을 넘긴 missed run은 보충 게시하지 않는다. 예약 executor는 게시 전에 고정 `%LOCALAPPDATA%\NewsPick\EdgeProfile`을 `edge9333`으로 재사용하고, Edge가 닫혀 있을 때만 같은 프로필로 실행한다. 상태는 `<NEWS_PICK_OUTPUT_ROOT>/scheduler/daily-story/editions/`, 로그는 `<NEWS_PICK_OUTPUT_ROOT>/logs/scheduler/daily-story/`에 기록한다. 업로드 시작 뒤 오류나 공개 검증 실패는 `needs_review`로 끝내며 자동 재시도하지 않는다.
+Windows 작업은 매일 `19:00` KST에 시작한다. 같은 날짜의 상태 파일이 이미 있으면 중복 실행하지 않고, `19:30`을 넘긴 missed run은 보충 게시하지 않는다. 예약 executor는 ego lite(`NEWS_PICK_BROWSER=ego`)로 게시·검증하고, ego가 꺼져 있으면 helper 실행기가 켠다. 상태는 `<NEWS_PICK_OUTPUT_ROOT>/scheduler/daily-story/editions/`, 로그는 `<NEWS_PICK_OUTPUT_ROOT>/logs/scheduler/daily-story/`에 기록한다. 업로드 시작 뒤 오류나 공개 검증 실패는 `needs_review`로 끝내며 자동 재시도하지 않는다.
 
 ## 게시 불변 조건
 
@@ -67,7 +67,7 @@ Windows 작업은 매일 `19:00` KST에 시작한다. 같은 날짜의 상태 �
 
 ## 개발과 검증
 
-업로드 후 검은 화면·캡처 timeout·focus 변경이 발생했거나 MoviePy 설치 여부가 불분명하면 [references/story-recovery.md](references/story-recovery.md)를 먼저 읽는다. **업로드 성공과 공개 검증 성공은 별개**이며, Edge 전면 활성화는 별도 승인 없이 시도하지 않는다. 복구는 기록된 Story ID를 확인하는 작업이지 재업로드가 아니다.
+업로드 후 검은 화면·캡처 timeout·focus 변경이 발생했거나 MoviePy 설치 여부가 불분명하면 [references/story-recovery.md](references/story-recovery.md)를 먼저 읽는다. **업로드 성공과 공개 검증 성공은 별개**이며, 검증 탭을 앞으로 가져오는 전면 활성화는 별도 승인 없이 시도하지 않는다. 복구는 기록된 Story ID를 확인하는 작업이지 재업로드가 아니다.
 
 FFmpeg·ffprobe·Pillow, `ego-browser` CLI(ego lite), `publish-news-pick`이 준비한 project-local `instagrapi` venv가 필요하다. ego 경로의 helper는 그 venv의 python(3.12)으로 돈다.
 

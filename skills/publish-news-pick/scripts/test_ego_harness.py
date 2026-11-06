@@ -73,6 +73,16 @@ class EgoSessionTests(unittest.TestCase):
         self.assertEqual(session.send({"meta": "current_tab"})["targetId"], "p2")
         self.assertEqual(transport.ops("goto"), [])
 
+    def test_cdn_and_api_tabs_are_not_instagram_app_pages(self):
+        # window.require가 없는 CDN 이미지·API JSON 탭을 고르면 'R is not a function'이 난다(10-25).
+        session, transport = self.session(tabs=[
+            {"label": "p1", "url": "https://scontent-ssn1-1.cdninstagram.com/v/t51/a.jpg", "title": ""},
+            {"label": "p2", "url": "https://www.instagram.com/api/v1/users/web_profile_info/?username=x", "title": ""},
+            {"label": "p3", "url": "https://www.google.com/search?q=instagram.com", "title": ""},
+        ])
+        self.assertEqual(session.send({"meta": "current_tab"})["targetId"], "p1")
+        self.assertEqual(transport.ops("goto"), [{"op": "goto", "page": "p1", "url": "https://www.instagram.com/newspick_studio/"}])
+
     def test_navigates_first_page_to_start_url_when_no_instagram_page(self):
         session, transport = self.session(tabs=[{"label": "p1", "url": "about:blank", "title": ""}])
         self.assertEqual(transport.ops("goto"), [{"op": "goto", "page": "p1", "url": "https://www.instagram.com/newspick_studio/"}])
@@ -255,6 +265,61 @@ class HelperPythonTests(unittest.TestCase):
             with patch.object(ego_harness, "helper_python", return_value="C:/py312/python.exe"), patch.object(ego_harness.subprocess, "run") as run:
                 ego_harness.run_script(script)
             self.assertEqual(run.call_args.args[0][0], "C:/py312/python.exe")
+
+
+class EgoAutostartTests(unittest.TestCase):
+    """ego lite가 꺼져 있으면 실행기가 직접 켠다(사용자 요청 11-06)."""
+
+    def test_running_ego_is_left_alone(self):
+        from unittest.mock import patch
+        with patch.object(ego_harness, "ego_process_running", return_value=True), patch.object(ego_harness.subprocess, "Popen") as popen:
+            self.assertFalse(ego_harness.ensure_ego_running())
+        popen.assert_not_called()
+
+    def test_stopped_ego_is_started_with_service_flag_and_waited_for(self):
+        from unittest.mock import patch
+        ready = iter([False, False, True])
+        with patch.object(ego_harness, "ego_process_running", return_value=False), patch.object(
+            ego_harness, "ego_executable", return_value=Path("C:/ego/ego.exe")
+        ), patch.object(ego_harness, "ego_ready", side_effect=lambda: next(ready)), patch.object(
+            ego_harness.subprocess, "Popen"
+        ) as popen, patch.object(ego_harness.time, "sleep"):
+            self.assertTrue(ego_harness.ensure_ego_running(timeout=30))
+        args = popen.call_args.args[0]
+        self.assertEqual(args, [str(Path("C:/ego/ego.exe")), "--startup-ego-browser-service"])
+
+    def test_start_that_never_becomes_ready_fails_clearly(self):
+        from unittest.mock import patch
+        clock = iter(range(0, 1000, 10))
+        with patch.object(ego_harness, "ego_process_running", return_value=False), patch.object(
+            ego_harness, "ego_executable", return_value=Path("C:/ego/ego.exe")
+        ), patch.object(ego_harness, "ego_ready", return_value=False), patch.object(ego_harness.subprocess, "Popen"), patch.object(
+            ego_harness.time, "sleep"
+        ), patch.object(ego_harness.time, "monotonic", side_effect=lambda: next(clock)):
+            with self.assertRaisesRegex(RuntimeError, "ego lite"):
+                ego_harness.ensure_ego_running(timeout=30)
+
+    def test_missing_executable_fails_clearly(self):
+        from unittest.mock import patch
+        with patch.object(ego_harness, "ego_process_running", return_value=False), patch.object(ego_harness, "ego_executable", return_value=None):
+            with self.assertRaisesRegex(RuntimeError, "ego.exe"):
+                ego_harness.ensure_ego_running()
+
+    def test_executable_override_and_default_location(self):
+        self.assertEqual(ego_harness.ego_executable({"NEWS_PICK_EGO_EXE": "D:/ego/ego.exe"}, exists=lambda p: True), Path("D:/ego/ego.exe"))
+        default = ego_harness.ego_executable({"LOCALAPPDATA": "C:/Users/x/AppData/Local"}, exists=lambda p: True)
+        self.assertEqual(default, Path("C:/Users/x/AppData/Local/Citro Labs/ego lite/Application/ego.exe"))
+        self.assertIsNone(ego_harness.ego_executable({"LOCALAPPDATA": "C:/none"}, exists=lambda p: False))
+
+    def test_bridge_start_ensures_ego_first(self):
+        from unittest.mock import patch
+        with patch.object(ego_harness, "ensure_ego_running", side_effect=RuntimeError("ego lite stopped")) as ensure, patch.object(
+            ego_harness.shutil, "which", return_value="C:/bin/ego-browser.exe"
+        ), patch.object(ego_harness.subprocess, "Popen") as popen:
+            with self.assertRaises(RuntimeError):
+                ego_harness.BridgeTransport()
+        ensure.assert_called_once()
+        popen.assert_not_called()
 
 
 class RuntimeGuardTests(unittest.TestCase):

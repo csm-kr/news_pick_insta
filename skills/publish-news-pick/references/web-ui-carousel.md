@@ -87,11 +87,11 @@ caption과 이미지에는 손대지 않는다. 한 번의 저장 뒤에도 표�
 
 ## 실제 실패에서 확정한 규칙
 
-- visible Edge 로그인과 private API 로그인은 별개다. private API의 `login_required` 뒤에도 웹 UI는 정상 게시될 수 있다.
+- ego lite 웹 로그인과 private API 로그인은 별개다. private API의 `login_required` 뒤에도 웹 UI는 정상 게시될 수 있다.
 - private API가 제출 경계 뒤 실패했으면 공개 프로필에 중복이 없는지 확인한 후에만 웹 UI로 전환한다.
 - Instagram 성공 문구와 공개 permalink를 둘 다 확인해야 한다.
 - 성공한 웹 게시를 queue job에 연결해야 `failed_pre_submit` 또는 `needs_review`가 다음 실행에서 재게시되지 않는다.
 - 공개 permalink 직후 마지막 장은 지연 로딩될 수 있다. 회색 placeholder와 pagination dot만으로 마지막 카드 일치를 판정하지 않는다.
 - 다른 수동·예약 run이 작성기를 사용 중이면 그 draft를 stale로 간주해 닫지 않는다. 작성기 소유자가 하나인지 먼저 확인하고, 예약 실행은 `composer_busy`로 건너뛴다.
-- `switch_tab` attach만으로 writable Edge target이 전면 활성화됐다고 가정하지 않는다. 변경 helper는 target을 명시적으로 활성화한다.
+- `switch_tab` attach만으로 writable target이 전면 활성화됐다고 가정하지 않는다. 변경 helper는 target을 명시적으로 활성화한다.
 - 활성 작성 화면의 일반 PNG screenshot이 timeout이면 같은 화면을 저용량 JPEG CDP 캡처로 한 번 남긴다. 이 timeout 때문에 업로드를 반복하지 않는다.

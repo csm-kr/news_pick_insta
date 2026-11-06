@@ -33,9 +33,7 @@ PowerShell 예시:
 ```powershell
 $env:NEWS_PICK_OUTPUT_ROOT = (Resolve-Path ./output)
 $env:IG_ACCOUNT = 'newspick_studio'
-$env:NEWS_PICK_BROWSER = 'edge'
-$env:NEWS_PICK_BROWSER_HARNESS_NAME = 'edge9333'
-$env:NEWS_PICK_EDGE_CDP_URL = 'http://127.0.0.1:9333'
+$env:NEWS_PICK_BROWSER = 'ego'  # 생략해도 ego다
 ```
 
 ## 설치 단위
@@ -46,7 +44,7 @@ $env:NEWS_PICK_EDGE_CDP_URL = 'http://127.0.0.1:9333'
 
 - Python 3.10 이상과 Pillow
 - Node.js
-- Browser Harness CLI와 `%LOCALAPPDATA%\NewsPick\EdgeProfile`에 로그인한 표시형 Microsoft Edge
+- ego lite와 `ego-browser` CLI, ego 프로필에 로그인한 Instagram 계정
 - `god-tibo-gpt-image2-skill`; 필요하면 `GOD_TIBO_SKILL_ROOT`로 위치 지정
 
-외부 실행기의 설치 폴더와 Edge user data dir은 output이 아니다. workspace 설정에는 Edge profile 경로와 loopback CDP 주소만 기록하며 로그인 비밀번호·cookie·session 문자열은 기록하지 않는다. Chrome/default Browser Harness 연결은 이 pack에서 지원하지 않는다.
+외부 실행기의 설치 폴더와 ego user data는 output이 아니다. workspace 설정에는 브라우저 종류(`ego`)만 기록하며 로그인 비밀번호·cookie·session 문자열은 기록하지 않는다. Chrome/default Browser Harness 연결은 이 pack에서 지원하지 않는다.

@@ -9,7 +9,7 @@ ego lite 기본 프로필에 로그인된 Instagram 탭(TaskSpace `newspick-grow
 
 ## 절차
 
-1. **브라우저 확인**: 기본 ego lite는 `ego-browser` CLI만 확인하고, `newspick-growth`에 Instagram 탭이 없으면 홈을 연다. 사용자 탭과 게시용 탭은 건드리지 않는다. `NEWS_PICK_BROWSER=edge`일 때만 비상용 Edge를 연다.
+1. **브라우저 확인**: `ego-browser` CLI를 확인하고 ego lite가 꺼져 있으면 켠다. `newspick-growth`에 Instagram 탭이 없으면 홈을 연다. 사용자 탭과 게시용 탭은 건드리지 않는다.
 2. **목록 추출(읽기 전용)**:
    ```powershell
    $env:PYTHONIOENCODING='utf-8'; python skills/unfollow-non-followers/scripts/unfollow_non_followers.py --out-dir output/unfollow/<YYYYMMDD>

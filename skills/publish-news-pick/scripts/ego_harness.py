@@ -22,7 +22,8 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
+from urllib.parse import urlsplit
 
 SPACE_NAME = "newspick-instagram"
 DEFAULT_START_URL = "https://www.instagram.com/newspick_studio/"
@@ -36,6 +37,66 @@ EGO_RUNTIME_GUARD = (
 # ego page.cdp 기본 제한 시간은 짧다. 소켓 대기(120초)보다 조금 짧게 잡아 오류가 브리지에서 먼저 돌아오게 한다.
 DEFAULT_CDP_TIMEOUT_MS = 110_000
 WINDOW_METHODS = {"Browser.getWindowForTarget", "Browser.setWindowBounds", "Browser.getWindowBounds"}
+EGO_START_TIMEOUT_SECONDS = 90.0
+
+
+def is_instagram_app_url(url: str) -> bool:
+    """window.require가 있는 Instagram 웹앱 페이지만 고른다. CDN 이미지·API JSON 탭은 'R is not a function'을 낸다."""
+
+    parsed = urlsplit(str(url or ""))
+    return parsed.hostname in {"www.instagram.com", "instagram.com"} and not parsed.path.startswith("/api/")
+
+
+# --- ego lite process -------------------------------------------------------
+def ego_executable(environment: Mapping[str, str] | None = None, exists: Callable[[Path], bool] = Path.is_file) -> Path | None:
+    source = os.environ if environment is None else environment
+    override = str(source.get("NEWS_PICK_EGO_EXE") or "").strip()
+    if override:
+        return Path(override)
+    local = str(source.get("LOCALAPPDATA") or "").strip()
+    if not local:
+        return None
+    candidate = Path(local) / "Citro Labs" / "ego lite" / "Application" / "ego.exe"
+    return candidate if exists(candidate) else None
+
+
+def ego_process_running() -> bool:
+    if os.name != "nt":
+        return True
+    listed = subprocess.run(["tasklist", "/FI", "IMAGENAME eq ego.exe", "/NH"], capture_output=True, text=True, errors="replace",
+                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    return "ego.exe" in (listed.stdout or "").lower()
+
+
+def ego_ready() -> bool:
+    executable = shutil.which("ego-browser")
+    if not executable:
+        return False
+    try:
+        probe = subprocess.run([executable, "nodejs", "-e", "console.log('ego-ready')"], capture_output=True, text=True,
+                               errors="replace", timeout=20, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except subprocess.TimeoutExpired:
+        return False
+    return probe.returncode == 0 and "ego-ready" in (probe.stdout or "")
+
+
+def ensure_ego_running(timeout: float = EGO_START_TIMEOUT_SECONDS) -> bool:
+    """ego lite가 꺼져 있으면 로그온 때와 같은 방식으로 켜고 응답할 때까지 기다린다. 켰으면 True."""
+
+    if ego_process_running():
+        return False
+    executable = ego_executable()
+    if executable is None:
+        raise RuntimeError("ego lite가 꺼져 있는데 ego.exe를 찾지 못했다(NEWS_PICK_EGO_EXE로 지정할 수 있다).")
+    flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    subprocess.Popen([str(executable), "--startup-ego-browser-service"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, creationflags=flags, close_fds=True)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if ego_ready():
+            return True
+        time.sleep(2)
+    raise RuntimeError(f"ego lite를 켰지만 {int(timeout)}초 안에 ego-browser가 응답하지 않는다.")
 
 
 class EgoSession:
@@ -57,7 +118,7 @@ class EgoSession:
     def _initial_page(self) -> str:
         tabs = self._tabs()
         for tab in tabs:
-            if "instagram.com" in str(tab.get("url") or ""):
+            if is_instagram_app_url(tab.get("url")):
                 return tab["label"]
         if not tabs:
             label = self.transport.call({"op": "new_page"})["label"]
@@ -401,6 +462,7 @@ class BridgeTransport:
         executable = shutil.which("ego-browser")
         if not executable:
             raise FileNotFoundError("ego-browser CLI가 없다.")
+        ensure_ego_running()
         self.workdir = Path(tempfile.mkdtemp(prefix="newspick-ego-"))
         port_file = self.workdir / "bridge.port"
         entry = self.workdir / "entry.mjs"

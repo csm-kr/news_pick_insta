@@ -1,4 +1,4 @@
 interface:
   display_name: "뉴스픽 전체 자동화"
   short_description: "반응형 뉴스 탐색부터 4:5 다섯 장 게시까지 연결"
-  default_prompt: "Use $upload-news-pick to create and publish a verified five-card portrait news carousel through the fixed Edge workflow."
+  default_prompt: "Use $upload-news-pick to create and publish a verified five-card portrait news carousel through the ego lite workflow."

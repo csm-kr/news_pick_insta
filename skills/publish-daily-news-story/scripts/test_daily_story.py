@@ -184,10 +184,10 @@ class DiscoveryTests(unittest.TestCase):
 
 
 class PublishContractTests(unittest.TestCase):
-    def test_browser_task_sources_compile_after_edge_guard(self):
+    def test_browser_task_sources_compile(self):
+        # ego_harness는 guard와 helper를 따로 compile·실행하므로 helper 단독으로 compile돼야 한다.
         for name in ("private_video_story_task.py", "private_video_story_batch_task.py"):
-            source = publish_story_video.edge_browser.EDGE_RUNTIME_GUARD + (SCRIPTS / name).read_bytes()
-            compile(source, str(SCRIPTS / name), "exec")
+            compile((SCRIPTS / name).read_bytes(), str(SCRIPTS / name), "exec")
 
     def test_private_video_requires_matching_mp4_hash(self):
         with tempfile.TemporaryDirectory() as temporary:

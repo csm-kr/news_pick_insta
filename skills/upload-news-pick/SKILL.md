@@ -7,7 +7,7 @@ description: 공개 반응이 큰 한국 종합 이슈를 최근 48시간에서 
 
 하나의 `run_id` 아래 네 전문 스킬을 순서대로 연결한다. 이 스킬은 각 단계의 일을 직접 대신하지 않고 입력·출력 계약, hash, 중단·재개와 게시 승인 경계만 관리한다.
 
-실행 전 [references/portable-layout.md](references/portable-layout.md)와 [../publish-news-pick/references/edge-browser-contract.md](../publish-news-pick/references/edge-browser-contract.md)를 읽고 다섯 스킬이 같은 부모 폴더에 설치됐는지 확인한다. skill 폴더는 읽기 전용으로 유지하고 모든 실행물은 별도 `NEWS_PICK_OUTPUT_ROOT` 아래에 쓴다. 뉴스픽의 모든 웹 상호작용은 `invoke_edge_browser_harness.py`로만 실행한다. 기본은 ego lite이고(예약 실행기도 `NEWS_PICK_BROWSER=ego`를 주입), Microsoft Edge `edge9333`은 `NEWS_PICK_BROWSER=edge`를 명시할 때만 쓰는 비상용이다. Chrome/default/다른 CDP로 대체하지 않는다.
+실행 전 [references/portable-layout.md](references/portable-layout.md)와 [../publish-news-pick/references/edge-browser-contract.md](../publish-news-pick/references/edge-browser-contract.md)를 읽고 다섯 스킬이 같은 부모 폴더에 설치됐는지 확인한다. skill 폴더는 읽기 전용으로 유지하고 모든 실행물은 별도 `NEWS_PICK_OUTPUT_ROOT` 아래에 쓴다. 뉴스픽의 모든 웹 상호작용은 `invoke_edge_browser_harness.py`로만 실행한다. 브라우저는 ego lite 하나다(예약 실행기도 `NEWS_PICK_BROWSER=ego`를 주입한다). Chrome/default/다른 CDP로 대체하지 않는다.
 
 ## 고정 구성
 
@@ -121,7 +121,7 @@ Tibo 작업은 `backend_size=1024x1536`, `resize_fit=cover`, `preserve_backend_r
 
 ## 자동 게시 차단
 
-DOM/control 오류나 이전 게시 실패 점검을 요청받으면 `publish-news-pick`의 [DOM 점검·업데이트 절차](../publish-news-pick/references/dom-diagnostics-and-update.md)를 먼저 적용한다. 모든 진단도 Edge `edge9333`에 고정하며, 라이브 관찰 없이 selector 변경으로 단정하거나 run-local 우회 업로더를 만들지 않는다. 저장소와 실제 설치본을 함께 갱신·검증한 다음 정상 단계로 돌아온다.
+DOM/control 오류나 이전 게시 실패 점검을 요청받으면 `publish-news-pick`의 [DOM 점검·업데이트 절차](../publish-news-pick/references/dom-diagnostics-and-update.md)를 먼저 적용한다. 모든 진단도 ego lite에서 하며, 라이브 관찰 없이 selector 변경으로 단정하거나 run-local 우회 업로더를 만들지 않는다. 저장소와 실제 설치본을 함께 갱신·검증한 다음 정상 단계로 돌아온다.
 
 다음 중 하나면 즉시 멈춘다.
 
@@ -162,7 +162,7 @@ powershell -ExecutionPolicy Bypass -File scripts/manage_windows_schedule.ps1 rem
 
 Windows 작업은 각 회차 30분 전인 `06:30`, `11:30`, `16:30` KST에 준비를 시작한다. 검색·기획·이미지 생성·QA와 게시 직전 검증을 미리 끝내고, `scripts/wait_for_publish_time.py`가 목표 회차 시각까지 대기한 뒤에만 Instagram `공유하기`를 누른다. 매일 같은 초에 올라가 자동화로 보이지 않도록 `scheduled_runner.py`가 회차마다 1~15분 무작위 편차를 골라 `NEWS_PICK_PUBLISH_OFFSET_SECONDS`로 넘기고 게이트는 그만큼 더 기다린다. 카드의 기준시각과 30분 게시 창은 edition_at 기준 그대로다. 웹 UI 공유 스크립트도 목표 시각 전 클릭과 목표 시각 30분 뒤의 보충 게시를 코드로 차단한다.
 
-예약 실행은 `output/scheduler/editions/<date>-<slot>.json`을 idempotency key로 사용한다. state가 한 번 생긴 회차, 목표 시각 30분 전보다 이른 실행, 목표 시각에서 30분 넘게 지난 실행, 다른 회차가 실행 중인 경우에는 새 게시를 시작하지 않는다. `needs_review`와 제출 뒤 오류를 자동 재시도하지 않는다. Windows 사용자가 로그인되어 있고 `%LOCALAPPDATA%\NewsPick\EdgeProfile`의 세션과 `edge9333` 연결을 사용할 수 있을 때만 동작하며, 컴퓨터가 꺼져 있던 회차는 나중에 몰아서 게시하지 않는다. 자세한 고정 prompt와 결과 schema는 `scripts/scheduled_runner.py`와 `references/scheduled-result.schema.json`을 사용한다.
+예약 실행은 `output/scheduler/editions/<date>-<slot>.json`을 idempotency key로 사용한다. state가 한 번 생긴 회차, 목표 시각 30분 전보다 이른 실행, 목표 시각에서 30분 넘게 지난 실행, 다른 회차가 실행 중인 경우에는 새 게시를 시작하지 않는다. `needs_review`와 제출 뒤 오류를 자동 재시도하지 않는다. Windows 사용자가 로그인되어 있고 ego lite 프로필에 Instagram 세션이 있을 때만 동작하며(ego가 꺼져 있으면 실행기가 켠다), 컴퓨터가 꺼져 있던 회차는 나중에 몰아서 게시하지 않는다. 자세한 고정 prompt와 결과 schema는 `scripts/scheduled_runner.py`와 `references/scheduled-result.schema.json`을 사용한다.
 
 ## 완료 보고
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ego lite(기본) 또는 비상용 Edge의 Instagram 탭에서 '회원님을 위한 추천(모두 보기)' 계정을 천천히 팔로우한다."""
+"""ego lite의 Instagram 탭(TaskSpace newspick-growth)에서 '회원님을 위한 추천(모두 보기)' 계정을 천천히 팔로우한다."""
 
 from __future__ import annotations
 

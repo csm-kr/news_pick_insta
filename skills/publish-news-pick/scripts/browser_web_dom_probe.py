@@ -52,9 +52,9 @@ def inspect_dom():
 
 
 product = str(cdp('Browser.getVersion').get('product') or '')
-if not product.lower().startswith(('edg/', 'microsoftedge/', 'ego-lite/')):
-    raise RuntimeError('DOM diagnostics require Microsoft Edge or ego lite')
-connection = 'ego-lite' if product.lower().startswith('ego-lite/') else 'edge9333'
+if not product.lower().startswith('ego-lite/'):
+    raise RuntimeError('DOM diagnostics require ego lite')
+connection = 'ego-lite'
 targets = [target for target in cdp('Target.getTargets').get('targetInfos', [])
            if target.get('type') == 'page'
            and urlsplit(target.get('url') or '').hostname in {'instagram.com', 'www.instagram.com'}]

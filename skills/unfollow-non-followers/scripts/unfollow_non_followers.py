@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ego lite(기본) 또는 비상용 Edge CDP의 Instagram 탭에서 맞팔이 아닌 팔로잉을 찾고 천천히 팔로우 취소한다."""
+"""ego lite의 Instagram 탭(TaskSpace newspick-growth)에서 맞팔이 아닌 팔로잉을 찾고 천천히 팔로우 취소한다."""
 
 from __future__ import annotations
 
@@ -7,11 +7,8 @@ import argparse
 import json
 import random
 import shutil
-import subprocess
 import sys
 import time as time_module
-import urllib.parse
-import urllib.request
 from datetime import datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -19,12 +16,10 @@ from zoneinfo import ZoneInfo
 PUBLISH_SCRIPTS = Path(__file__).resolve().parents[2] / "publish-news-pick" / "scripts"
 if str(PUBLISH_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PUBLISH_SCRIPTS))
-import edge_browser  # noqa: E402
 import ego_harness  # noqa: E402
 
 
 KST = ZoneInfo("Asia/Seoul")
-CDP_URL = "http://127.0.0.1:9333"
 # 예약 run(07·12·17시 게시, 19시 스토리)이 같은 Instagram 계정을 쓰는 시작~종료 시각
 SCHEDULED_RUNS = (
     (time(6, 30), time(7, 40)),
@@ -35,10 +30,8 @@ SCHEDULED_RUNS = (
 GUARD = timedelta(minutes=15)
 # follow-suggested 스킬이 남기는 팔로우 기록. 최근에 팔로우한 계정은 맞팔할 시간을 준다
 FOLLOW_LOG = Path("output/follow/follow_log.jsonl")
-LAUNCH_EDGE = PUBLISH_SCRIPTS / "launch_edge_profile.py"
 # 게시 helper의 `newspick-instagram` 탭(작성기)과 섞이지 않게 팔로우·언팔은 별도 ego TaskSpace를 쓴다.
 GROWTH_SPACE = "newspick-growth"
-NO_WINDOW_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 FETCH_LISTS_JS = """(async () => {
   const H = {"X-IG-App-ID": "936619743392459", "X-Requested-With": "XMLHttpRequest"};
@@ -140,36 +133,11 @@ def next_deadline(now: datetime) -> datetime:
     raise AssertionError("다음 예약 run 시각을 찾지 못했다")
 
 
-def is_instagram_app_tab(tab: dict) -> bool:
-    """window.require가 있는 Instagram 웹앱 탭만 쓴다. 이미지 CDN·API JSON 탭이 고르면 'R is not a function'이 난다."""
-    url = urllib.parse.urlsplit(tab.get("url", ""))
-    return (tab.get("type") == "page" and url.hostname in {"www.instagram.com", "instagram.com"}
-            and not url.path.startswith("/api/"))
-
-
-def _has_instagram_tab() -> bool:
-    try:
-        tabs = json.load(urllib.request.urlopen(f"{CDP_URL}/json/list", timeout=10))
-    except OSError:
-        return False
-    return any(is_instagram_app_tab(t) for t in tabs)
-
-
 def ensure_browser() -> None:
-    """ego(기본)는 ego-browser CLI만 있으면 된다. 비상용 Edge는 Instagram 탭이 없으면 디버그 프로필을 연다."""
-    if edge_browser.selected_browser() == "ego":
-        if not shutil.which("ego-browser"):
-            raise SystemExit("ego-browser CLI가 없다. ego lite를 설치하거나 PATH를 확인한다.")
-        return
-    if _has_instagram_tab():
-        return
-    subprocess.run([sys.executable, str(LAUNCH_EDGE), "--account", "newspick_studio"],
-                   check=True, capture_output=True, creationflags=NO_WINDOW_FLAGS)
-    for _ in range(30):
-        if _has_instagram_tab():
-            return
-        time_module.sleep(1)
-    raise SystemExit("Edge(9333)를 열었지만 instagram.com 탭이 보이지 않는다.")
+    """ego lite가 꺼져 있으면 켜고, 응답할 때까지 기다린다."""
+    if not shutil.which("ego-browser"):
+        raise SystemExit("ego-browser CLI가 없다. ego lite를 설치하거나 PATH를 확인한다.")
+    ego_harness.ensure_ego_running()
 
 
 def log_to_file_if_windowless(path: Path) -> None:
@@ -208,33 +176,7 @@ def _evaluate_on_ego(expression: str, timeout: int):
 
 
 def evaluate(expression: str, timeout: int = 600):
-    if edge_browser.selected_browser() == "ego":
-        result = _evaluate_on_ego(expression, timeout)
-        if "exceptionDetails" in result:
-            raise SystemExit("브라우저 스크립트 실패: " + json.dumps(result["exceptionDetails"], ensure_ascii=False)[:500])
-        return result["result"].get("value")
-    import websocket  # 비상용 Edge 경로에서만 필요하다
-
-    tabs = json.load(urllib.request.urlopen(f"{CDP_URL}/json/list", timeout=10))
-    page = next((t for t in tabs if is_instagram_app_tab(t)), None)
-    if page is None:
-        raise SystemExit("Edge(9333)에 열린 instagram.com 탭이 없다. launch_edge_profile.py로 먼저 연다.")
-    ws = websocket.create_connection(page["webSocketDebuggerUrl"], timeout=timeout, suppress_origin=True)
-    ids = iter(range(1, 1_000_000))
-
-    def send(method: str, params: dict) -> dict:
-        call_id = next(ids)
-        ws.send(json.dumps({"id": call_id, "method": method, "params": params}))
-        while True:
-            message = json.loads(ws.recv())
-            if message.get("id") == call_id:
-                return message.get("result", {})
-
-    try:
-        wait_for_page_modules(send)
-        result = send("Runtime.evaluate", {"expression": expression, "awaitPromise": True, "returnByValue": True})
-    finally:
-        ws.close()
+    result = _evaluate_on_ego(expression, timeout)
     if "exceptionDetails" in result:
         raise SystemExit("브라우저 스크립트 실패: " + json.dumps(result["exceptionDetails"], ensure_ascii=False)[:500])
     return result["result"].get("value")

@@ -97,17 +97,9 @@ class ScheduleGuardTests(unittest.TestCase):
         self.assertEqual(MOD.next_deadline(at(17, 50)), at(18, 45))
         self.assertEqual(MOD.next_deadline(at(21, 0)).strftime("%m-%d %H:%M"), "09-27 06:15")
 
-    def test_only_instagram_web_app_tabs_are_used(self):
-        def tab(url, kind="page"):
-            return {"type": kind, "url": url}
-        self.assertTrue(MOD.is_instagram_app_tab(tab("https://www.instagram.com/")))
-        self.assertTrue(MOD.is_instagram_app_tab(tab("https://www.instagram.com/newspick_studio/")))
-        # 이미지 CDN·API JSON·빈 탭·서비스워커에는 페이지 모듈(window.require)이 없다
-        self.assertFalse(MOD.is_instagram_app_tab(tab("https://scontent-ssn1-1.cdninstagram.com/v/t51/a.jpg")))
-        self.assertFalse(MOD.is_instagram_app_tab(tab("https://www.instagram.com/api/v1/users/web_profile_info/?username=x")))
-        self.assertFalse(MOD.is_instagram_app_tab(tab("https://www.google.com/search?q=instagram.com")))
-        self.assertFalse(MOD.is_instagram_app_tab(tab("about:blank")))
-        self.assertFalse(MOD.is_instagram_app_tab(tab("https://www.instagram.com/", kind="service_worker")))
+    def test_edge_connection_is_gone(self):
+        for name in ("CDP_URL", "LAUNCH_EDGE", "ensure_edge", "_has_instagram_tab", "is_instagram_app_tab"):
+            self.assertFalse(hasattr(MOD, name), name)
 
     def test_reopens_instagram_home_when_page_modules_are_missing(self):
         calls, answers = [], iter(["undefined", "undefined", "function"])
@@ -188,13 +180,13 @@ class EgoBrowserTests(unittest.TestCase):
         expressions = [c["params"]["expression"] for c in transport.calls if c["op"] == "page_cdp"]
         self.assertEqual(expressions[-1], "doWork()")
 
-    def test_ensure_browser_does_not_launch_edge_on_ego(self):
+    def test_ensure_browser_starts_ego_when_needed(self):
         from unittest.mock import patch
-        with patch.dict("os.environ", {}, clear=True), patch.object(MOD.subprocess, "run") as run, patch.object(
-            MOD.shutil, "which", return_value="C:/bin/ego-browser.exe"
-        ):
+        with patch.object(MOD.shutil, "which", return_value="C:/bin/ego-browser.exe"), patch.object(
+            MOD.ego_harness, "ensure_ego_running", return_value=True
+        ) as ensure:
             MOD.ensure_browser()
-        run.assert_not_called()
+        ensure.assert_called_once()
 
     def test_ensure_browser_requires_ego_cli(self):
         from unittest.mock import patch

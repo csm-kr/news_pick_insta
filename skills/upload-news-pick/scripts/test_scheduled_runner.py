@@ -58,13 +58,10 @@ class ScheduledRunnerTests(unittest.TestCase):
         value = MOD.edition_at("17:00", date(2026, 8, 18))
         self.assertEqual(value.isoformat(), "2026-08-18T17:00:00+09:00")
 
-    def test_browser_contract_rejects_non_edge_workspace(self):
-        browser = self.settings("C:/work/output")["browser"]
-        self.assertEqual(MOD.validate_edge_browser(browser)["connection_name"], "edge9333")
-        with self.assertRaisesRegex(ValueError, "edge"):
-            MOD.validate_edge_browser({**browser, "engine": "chrome"})
-        with self.assertRaisesRegex(ValueError, "edge9333"):
-            MOD.validate_edge_browser({**browser, "connection_name": "default"})
+    def test_edge_browser_settings_are_gone(self):
+        # 2026-11-06부터 Edge를 쓰지 않는다. workspace.json의 옛 browser 블록은 무시한다.
+        for name in ("validate_edge_browser", "EDGE_CONNECTION_NAME", "EDGE_CDP_URL"):
+            self.assertFalse(hasattr(MOD, name), name)
 
     def test_start_window_rejects_catch_up_posts(self):
         scheduled = MOD.edition_at("07:00", date(2026, 8, 18))
@@ -270,6 +267,7 @@ class ScheduledRunnerTests(unittest.TestCase):
                 },
             )
             settings = MOD.workspace_settings(root)
+            self.assertNotIn("browser", settings)
             self.assertEqual(settings["imagegen"]["model"], "gpt-6-astra")
             self.assertEqual(settings["imagegen"]["auth_file"], str((root / "auth.json").resolve()))
             environment = MOD.child_environment(settings, MOD.edition_at("07:00", date(2026, 8, 18)), base={})

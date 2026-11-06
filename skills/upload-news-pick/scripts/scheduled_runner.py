@@ -29,8 +29,6 @@ ASIAN_GAMES_LAST_DAY = date(2026, 10, 2)
 PREPARATION_LEAD = timedelta(minutes=30)
 MAX_START_LATENESS = timedelta(minutes=30)
 STALE_LOCK_AGE = timedelta(hours=4)
-EDGE_CONNECTION_NAME = "edge9333"
-EDGE_CDP_URL = "http://127.0.0.1:9333"
 EXECUTOR = "claude-code"
 DEFAULT_CLAUDE_MODEL = "claude-fable-5-1"
 DEFAULT_CLAUDE_EFFORT = "high"
@@ -61,23 +59,6 @@ def validate_account(value: str) -> str:
     return account
 
 
-def validate_edge_browser(value: dict[str, Any] | None) -> dict[str, str]:
-    browser = value or {}
-    expected = {
-        "engine": "edge",
-        "connection_name": EDGE_CONNECTION_NAME,
-        "cdp_url": EDGE_CDP_URL,
-        "profile_directory": "Default",
-    }
-    for key, expected_value in expected.items():
-        if browser.get(key) != expected_value:
-            raise ValueError(f"workspace browser.{key}는 {expected_value!r}이어야 한다.")
-    user_data_dir = Path(str(browser.get("user_data_dir") or "")).expanduser()
-    if not user_data_dir.is_absolute():
-        raise ValueError("workspace browser.user_data_dir은 절대경로여야 한다.")
-    return {**expected, "user_data_dir": str(user_data_dir.resolve())}
-
-
 def edition_at(slot: str, edition_date: date) -> datetime:
     if slot not in VALID_SLOTS:
         raise ValueError(f"지원하지 않는 회차다: {slot}")
@@ -103,7 +84,6 @@ def workspace_settings(
     return {
         "output_root": output_root,
         "account": validate_account(account_override or config.get("account", "newspick_studio")),
-        "browser": validate_edge_browser(config.get("browser")),
         "imagegen": validate_imagegen(config.get("imagegen")),
     }
 

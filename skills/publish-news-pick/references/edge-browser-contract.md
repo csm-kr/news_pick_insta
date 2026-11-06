@@ -1,26 +1,22 @@
-# 뉴스픽 브라우저 계약 (기본 ego lite, 비상용 Edge)
+# 뉴스픽 브라우저 계약 (ego lite)
 
-2026-11-06부터 뉴스픽은 Microsoft Edge를 쓰지 않는다. 게시·스토리·팔로우·언팔·reference 캡처 모두 ego lite로 돈다. 파일 이름은 기존 링크 때문에 그대로 둔다.
+2026-11-06부터 뉴스픽은 Microsoft Edge를 쓰지 않는다. 게시·스토리·팔로우·언팔·reference 캡처 모두 ego lite로 돌고, Edge 코드(launcher·9333 연결·설정)는 삭제했다. 파일 이름은 기존 링크 때문에 그대로 둔다.
 
-- 기본 브라우저: ego lite (`NEWS_PICK_BROWSER`를 비우거나 `ego`)
+- 브라우저: ego lite (`NEWS_PICK_BROWSER`는 비우거나 `ego`만 허용)
 - 실행기: `scripts/invoke_edge_browser_harness.py` → `scripts/ego_harness.py` → `scripts/ego_bridge.mjs`(`ego-browser nodejs`)
 - TaskSpace: 게시·스토리 `newspick-instagram`, 팔로우·언팔 `newspick-growth`(작성기와 섞이지 않게 분리)
 - 로그인: ego lite 기본 프로필의 newspick_studio Instagram 세션
-- 필요한 것: `ego-browser` CLI(사용자 PATH `%USERPROFILE%\.local\share\ego\active_version_dir`), 실행 중인 ego lite
+- 필요한 것: `ego-browser` CLI(사용자 PATH `%USERPROFILE%\.local\share\ego\active_version_dir`)와 ego lite. ego가 꺼져 있으면 실행기가 `ego.exe --startup-ego-browser-service`로 켜고 최대 90초 기다린다(`NEWS_PICK_EGO_EXE`로 경로 지정 가능).
 
-Chrome, Chromium, Browser Harness `default`, 원격 CDP, 확장 프로그램 제어, `computer-use`, ego-browser 직접 스크립트는 이 스킬의 대체 경로가 아니다. `NEWS_PICK_BROWSER`는 `ego`·`edge` 외의 값이면 변경 동작 전에 실패한다.
+Chrome, Chromium, Browser Harness `default`, 원격 CDP, 확장 프로그램 제어, `computer-use`, ego-browser 직접 스크립트는 이 스킬의 대체 경로가 아니다. `NEWS_PICK_BROWSER`가 `ego`가 아니면 변경 동작 전에 실패한다.
 
 비밀번호, MFA, CAPTCHA, challenge는 사용자가 ego lite 창에서 직접 완료한다. cookie와 session 문자열은 출력하거나 파일에 저장하지 않는다.
-
-### 비상용 Edge 경로
-
-`NEWS_PICK_BROWSER=edge`를 명시할 때만 예전 Edge 경로(`edge9333`, `http://127.0.0.1:9333`, `%LOCALAPPDATA%\NewsPick\EdgeProfile`)를 쓴다. 이때만 `python scripts/launch_edge_profile.py --account $env:IG_ACCOUNT`로 Edge를 열고, `scripts/edge_browser.py`가 `/json/version`의 product가 `Edg/` 또는 `MicrosoftEdge/`인지 확인한다. 예약 작업은 이 경로를 쓰지 않는다.
 
 ## Excel Collector fast-path 적용
 
 `cafe24-excel-collector`의 빠른 실행 계약과 같은 원칙을 적용한다.
 
-1. `scripts/invoke_edge_browser_harness.py`가 브라우저 guard(ego는 `ego-lite/`, 비상용 Edge는 `Edg/`)를 먼저 확인하고 browser script의 UTF-8 원본을 helper 프로세스 하나에서 실행한다.
+1. `scripts/invoke_edge_browser_harness.py`가 ego guard(`Browser.getVersion`이 `ego-lite/`)를 먼저 확인하고 browser script의 UTF-8 원본을 helper 프로세스 하나에서 실행한다.
 2. 하나의 bounded phase 안에서 target 선택, targeted DOM 판독, 필요한 UI 조작, 완료 검증을 묶는다.
 3. 전체 DOM·전체 AX tree·반복 screenshot 탐색을 기본 경로로 사용하지 않는다. 고정 selector와 작은 allowlist 결과를 우선한다.
 4. 고정 sleep 대신 상태가 준비되는 즉시 끝나는 짧은 polling을 사용한다.

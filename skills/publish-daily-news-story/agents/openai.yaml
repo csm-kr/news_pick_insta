@@ -1,4 +1,4 @@
 interface:
   display_name: "오늘의 뉴스픽 스토리"
-  short_description: "고정 Edge 연결로 07·12·17시 표지를 Story 3개로 게시"
-  default_prompt: "Use $publish-daily-news-story with only Microsoft Edge edge9333 to publish the verified 07:00, 12:00, and 17:00 News Pick covers as exactly three separate Stories at 21:00."
+  short_description: "ego lite로 07·12·17시 표지를 Story 3개로 게시"
+  default_prompt: "Use $publish-daily-news-story with only the ego lite browser to publish the verified 07:00, 12:00, and 17:00 News Pick covers as exactly three separate Stories at 21:00."
