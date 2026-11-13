@@ -18,8 +18,23 @@ STORY_COUNT = 3
 EDITION_SLOTS = ("07:00", "12:00", "17:00")
 
 
+def slot_replacements(output_root: Path, target_date: date) -> dict[str, str]:
+    """정규 회차를 대신한 수동 run 기록(`scheduler/editions/<날짜>-HHMM.replacement.json`)을 run_id → 회차로 읽는다."""
+    overrides: dict[str, str] = {}
+    for slot in EDITION_SLOTS:
+        path = output_root / "scheduler" / "editions" / f"{target_date.isoformat()}-{slot.replace(':', '')}.replacement.json"
+        if path.is_file():
+            record = json.loads(path.read_text(encoding="utf-8-sig"))
+            if record.get("run_id"):
+                overrides[str(record["run_id"])] = slot
+    return overrides
+
+
 def ordered_slot_sources(
-    sources: list[legacy.Source], target_date: date, story_count: int = STORY_COUNT
+    sources: list[legacy.Source],
+    target_date: date,
+    story_count: int = STORY_COUNT,
+    slot_overrides: dict[str, str] | None = None,
 ) -> list[legacy.Source]:
     slots = EDITION_SLOTS[:story_count]
     by_slot: dict[str, legacy.Source] = {}
@@ -28,7 +43,7 @@ def ordered_slot_sources(
             raise ValueError(
                 f"Story source edition date must be {target_date}: {source.run_id}"
             )
-        slot = source.edition_at.strftime("%H:%M")
+        slot = (slot_overrides or {}).get(source.run_id) or source.edition_at.strftime("%H:%M")
         if slot not in slots:
             raise ValueError(
                 f"Story source must be a 07:00, 12:00, or 17:00 edition: {source.run_id}"
@@ -182,7 +197,7 @@ def render(
             f"21:00 batch requires exactly {story_count} publicly verified posts; found {len(sources)}"
         )
     if not include_manual_editions:
-        sources = ordered_slot_sources(sources, target_date, story_count)
+        sources = ordered_slot_sources(sources, target_date, story_count, slot_replacements(output_root, target_date))
     set_hash = batch_input_sha256(sources, target_date)
     output_dir = output_root / "daily-story" / target_date.isoformat()
     output_dir.mkdir(parents=True, exist_ok=True)

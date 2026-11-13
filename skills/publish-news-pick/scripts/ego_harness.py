@@ -21,6 +21,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
 from urllib.parse import urlsplit
@@ -47,6 +48,14 @@ def is_instagram_app_url(url: str) -> bool:
     return parsed.hostname in {"www.instagram.com", "instagram.com"} and not parsed.path.startswith("/api/")
 
 
+def require_instagram_navigation(url: str) -> None:
+    if url == "about:blank":
+        return
+    if urlsplit(url).scheme == "https" and is_instagram_app_url(url):
+        return
+    raise RuntimeError("News Pick ego space is for Instagram only; use Aside for public research and reference capture: " + url)
+
+
 # --- ego lite process -------------------------------------------------------
 def ego_executable(environment: Mapping[str, str] | None = None, exists: Callable[[Path], bool] = Path.is_file) -> Path | None:
     source = os.environ if environment is None else environment
@@ -68,6 +77,39 @@ def ego_process_running() -> bool:
     return "ego.exe" in (listed.stdout or "").lower()
 
 
+def ego_profile_id(environment: Mapping[str, str] | None = None) -> str | None:
+    source = os.environ if environment is None else environment
+    selected = str(source.get("NEWS_PICK_EGO_PROFILE_ID") or "").strip()
+    if not selected:
+        output = Path(source.get("NEWS_PICK_OUTPUT_ROOT") or Path.cwd() / "output")
+        workspace = output / "workspace.json"
+        if workspace.is_file():
+            settings = json.loads(workspace.read_text(encoding="utf-8-sig"))
+            selected = str((settings.get("browser") or {}).get("ego_profile_id") or "").strip()
+    if selected and (len(selected) > 128 or any(ord(character) < 32 for character in selected)):
+        raise ValueError("Invalid configured ego profile id")
+    return selected or None
+
+
+def ego_session_log(environment: Mapping[str, str] | None = None) -> Path:
+    source = os.environ if environment is None else environment
+    return Path(source.get("NEWS_PICK_OUTPUT_ROOT") or Path.cwd() / "output") / "logs" / "ego-sessions.jsonl"
+
+
+def record_ego_session(transport: Any, space: str, log_path: Path | None = None, now: datetime | None = None) -> None:
+    """이번 연결이 실제로 붙은 TaskSpace와 ego 프로필을 한 줄 남긴다. 일일 보고가 읽는다. 실패해도 연결은 계속한다."""
+    try:
+        info = transport.call({"op": "space_info"}) or {}
+        path = log_path or ego_session_log()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        row = {"at": (now or datetime.now(timezone.utc)).isoformat(timespec="seconds"), "space": space,
+               "space_id": info.get("spaceId"), "profile_id": info.get("profileId"), "profile_name": info.get("profileName")}
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except Exception:  # noqa: BLE001 - 기록은 보조 기능이라 게시·팔로우를 막지 않는다
+        pass
+
+
 def ego_ready() -> bool:
     executable = shutil.which("ego-browser")
     if not executable:
@@ -77,7 +119,9 @@ def ego_ready() -> bool:
                                errors="replace", timeout=20, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except subprocess.TimeoutExpired:
         return False
-    return probe.returncode == 0 and "ego-ready" in (probe.stdout or "")
+    # ego-browser forwards console output to stderr on current Windows releases.
+    output = (probe.stdout or "") + "\n" + (probe.stderr or "")
+    return probe.returncode == 0 and "ego-ready" in output
 
 
 def ensure_ego_running(timeout: float = EGO_START_TIMEOUT_SECONDS) -> bool:
@@ -103,6 +147,7 @@ class EgoSession:
     """Browser Harness `_send` semantics implemented over an ego bridge transport."""
 
     def __init__(self, transport: Any, start_url: str = DEFAULT_START_URL, cdp_timeout_ms: int = DEFAULT_CDP_TIMEOUT_MS):
+        require_instagram_navigation(start_url)
         self.transport = transport
         self.start_url = start_url
         self.cdp_timeout_ms = int(cdp_timeout_ms)
@@ -134,6 +179,8 @@ class EgoSession:
         return label
 
     def _page_cdp(self, page: str, method: str, params: dict[str, Any]) -> Any:
+        if method == "Page.navigate":
+            require_instagram_navigation(str(params.get("url") or ""))
         return self.transport.call({"op": "page_cdp", "page": page, "method": method, "params": params, "timeout": self.cdp_timeout_ms})
 
     # --- Browser Harness protocol -----------------------------------------
@@ -189,12 +236,13 @@ class EgoSession:
                 ]
             }
         if method == "Target.createTarget":
+            url = str(params.get("url") or "about:blank")
+            require_instagram_navigation(url)
             label = self.transport.call({"op": "new_page"})["label"]
             if params.get("newWindow"):
                 # Edge의 '뒤쪽 새 창'처럼 보이는 탭이 필요할 때다. ego 새 탭은 창만 최소화가 아니면
                 # 앞으로 가져오지 않아도 visible이라 포커스를 뺏지 않는다.
                 self._restore_window(label)
-            url = str(params.get("url") or "about:blank")
             if url != "about:blank":
                 self.transport.call({"op": "goto", "page": label, "url": url})
             return {"targetId": label}
@@ -467,6 +515,9 @@ class BridgeTransport:
         port_file = self.workdir / "bridge.port"
         entry = self.workdir / "entry.mjs"
         config = {"space": space, "portFile": port_file.as_posix()}
+        profile_id = ego_profile_id()
+        if profile_id:
+            config["profileId"] = profile_id
         entry.write_text(
             f"import {{ serve }} from {json.dumps(BRIDGE_PATH.as_uri())};\nawait serve({json.dumps(config)});\n",
             encoding="utf-8",
@@ -476,6 +527,7 @@ class BridgeTransport:
             [executable, "nodejs", "-e", f"await import('{entry.as_uri()}')"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         deadline = time.time() + startup_timeout
         while not port_file.exists():
@@ -491,6 +543,7 @@ class BridgeTransport:
         self.sock = socket.create_connection(("127.0.0.1", port), timeout=call_timeout)
         self.reader = self.sock.makefile("r", encoding="utf-8")
         self._next_id = 0
+        record_ego_session(self, space)
 
     def call(self, op: dict[str, Any]) -> Any:
         self._next_id += 1

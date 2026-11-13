@@ -1,4 +1,4 @@
-"""Fast read-only Instagram preflight for the fixed Edge Browser Harness connection."""
+"""Fast read-only Instagram preflight for the configured ego lite profile."""
 
 import json
 import os
@@ -52,7 +52,16 @@ try:
       text.includes('프로필 편집') || text.includes('보관함 보기') ||
       text.includes('프로페셔널 대시보드') ||
       controls.some(e => String(e.getAttribute('href') || '').includes('/accounts/edit'));
-    const loginWall = url.includes('/accounts/login') || !!document.querySelector('input[type=password]');
+    const visibleAuthDialog = [...document.querySelectorAll('[role="dialog"]')].some(dialog => {
+      const rect = dialog.getBoundingClientRect();
+      const style = getComputedStyle(dialog);
+      if (rect.width <= 0 || rect.height <= 0 || style.display === 'none' || style.visibility === 'hidden') return false;
+      const names = [...dialog.querySelectorAll('a[href],button,[role=button]')]
+        .map(element => normalized(element.innerText || element.getAttribute('aria-label')));
+      return names.some(name => /^(로그인|log in|login|sign in)$/.test(name)) &&
+        names.some(name => /^(가입하기|가입|sign up|signup|create new account)$/.test(name));
+    });
+    const loginWall = url.includes('/accounts/login') || !!document.querySelector('input[type=password]') || visibleAuthDialog;
     const challenge = /(challenge|checkpoint)/.test(url);
     const accountVisible = pathAccount.toLocaleLowerCase() === account || text.toLocaleLowerCase().includes(account);
     const posts = [...document.querySelectorAll('a[href*="/p/"]')]
@@ -73,6 +82,7 @@ try:
       has_create: hasCreate,
       login_wall: loginWall,
       challenge,
+      authentication_reason: loginWall ? 'instagram_login_required' : challenge ? 'instagram_challenge_required' : null,
       posts_ready: posts.length>0,
       duplicate_match: !!duplicate,
       duplicate_href: duplicate?.href||null,
@@ -96,7 +106,8 @@ try:
     )
     print("INSTAGRAM_WEB_PREFLIGHT=" + json.dumps(state, ensure_ascii=True))
     if not state["ready"]:
-        raise RuntimeError(f"configured Microsoft Edge profile is not ready for @{ACCOUNT}")
+        reason = state.get("authentication_reason") or "account_preflight_not_ready"
+        raise RuntimeError(f"{reason}: configured ego profile is not ready for @{ACCOUNT}")
     if DUPLICATE_TOKENS and state["duplicate_match"]:
         raise RuntimeError("duplicate post matched every IG_DUPLICATE_TOKENS value")
 finally:

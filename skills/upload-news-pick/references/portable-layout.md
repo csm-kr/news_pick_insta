@@ -47,4 +47,4 @@ $env:NEWS_PICK_BROWSER = 'ego'  # 생략해도 ego다
 - ego lite와 `ego-browser` CLI, ego 프로필에 로그인한 Instagram 계정
 - `god-tibo-gpt-image2-skill`; 필요하면 `GOD_TIBO_SKILL_ROOT`로 위치 지정
 
-외부 실행기의 설치 폴더와 ego user data는 output이 아니다. workspace 설정에는 브라우저 종류(`ego`)만 기록하며 로그인 비밀번호·cookie·session 문자열은 기록하지 않는다. Chrome/default Browser Harness 연결은 이 pack에서 지원하지 않는다.
+외부 실행기의 설치 폴더와 ego user data는 output이 아니다. workspace 설정에는 브라우저 종류(`ego`)와 사용자가 지정한 기존 로그인 프로필의 ID(`browser.ego_profile_id`)를 기록할 수 있다. 로그인 비밀번호·cookie·session 문자열은 기록하지 않는다. Chrome/default Browser Harness 연결은 이 pack에서 지원하지 않는다.

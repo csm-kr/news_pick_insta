@@ -93,6 +93,24 @@ class DiscoveryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "07:00, 12:00, or 17:00"):
                 render_story_batch.ordered_slot_sources(sources, date(2026, 8, 19))
 
+    def test_manual_run_recorded_as_slot_replacement_counts_for_that_slot(self):
+        # 2026-11-13: 07시 예약이 건너뛰어져 07:25 수동 게시로 대신했다. 사용자가 정규로 넣으라고 지시했다.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_run(root, "run-manual", 8, (210, 40, 40))
+            self.make_run(root, "run-b", 12, (40, 160, 70))
+            self.make_run(root, "run-c", 17, (40, 80, 210))
+            sources = render_story_video.discover_sources(root, date(2026, 8, 19))
+            with self.assertRaisesRegex(ValueError, "07:00, 12:00, or 17:00"):
+                render_story_batch.ordered_slot_sources(sources, date(2026, 8, 19))
+            replacement = root / "scheduler" / "editions" / "2026-08-19-0700.replacement.json"
+            replacement.parent.mkdir(parents=True)
+            replacement.write_text(json.dumps({"slot": "07:00", "run_id": "run-manual"}), encoding="utf-8")
+            overrides = render_story_batch.slot_replacements(root, date(2026, 8, 19))
+            self.assertEqual(overrides, {"run-manual": "07:00"})
+            ordered = render_story_batch.ordered_slot_sources(sources, date(2026, 8, 19), slot_overrides=overrides)
+            self.assertEqual([source.run_id for source in ordered], ["run-manual", "run-b", "run-c"])
+
     @unittest.skipUnless(
         shutil.which("ffmpeg") and shutil.which("ffprobe"),
         "ffmpeg and ffprobe are required",

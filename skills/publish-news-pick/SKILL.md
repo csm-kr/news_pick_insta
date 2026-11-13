@@ -13,7 +13,7 @@ description: 승인된 1080×1350 PNG 다섯 장을 설정된 Instagram 계정�
 
 - 승인된 1080×1350 PNG 5장과 고정된 순서
 - 2200자 이하 caption과 게시 시각
-- `IG_ACCOUNT`의 계정에 로그인된 ego lite 기본 프로필과 `ego-browser` CLI
+- `IG_ACCOUNT`의 계정에 로그인된 ego lite 프로필과 `ego-browser` CLI
 - skill 폴더 밖의 절대 `NEWS_PICK_OUTPUT_ROOT`
 - helper 실행기 `scripts/invoke_edge_browser_harness.py`(ego lite로 중계)
 - 첫 카드 중복 확인용 안정적 고유 토큰 2~3개를 `|`로 연결한 `IG_DUPLICATE_TOKENS`

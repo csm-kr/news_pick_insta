@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -100,6 +101,24 @@ class EgoSessionTests(unittest.TestCase):
         self.assertIn({"op": "goto", "page": "p2", "url": "https://www.instagram.com/p/x/"}, transport.calls)
         # 새 탭은 만들기만 하고 현재 세션은 바꾸지 않는다(harness 동작과 같음).
         self.assertEqual(session.send({"meta": "current_tab"})["targetId"], "p1")
+
+    def test_public_news_and_style_navigation_never_reaches_instagram_transport(self):
+        for request in (
+            {"method": "Page.navigate", "params": {"url": "https://news.mt.co.kr/article/example"}, "session_id": "p1"},
+            {"method": "Target.createTarget", "params": {"url": "https://www.korea.kr/cardnews/example", "background": True}, "session_id": None},
+        ):
+            with self.subTest(method=request['method']):
+                session, transport = self.session()
+                with self.assertRaisesRegex(RuntimeError, 'Aside'):
+                    session.send(request)
+                self.assertEqual(transport.ops('new_page'), [])
+                self.assertEqual(transport.ops('goto'), [])
+                self.assertEqual([x for x in transport.ops('page_cdp') if x['method'] == 'Page.navigate'], [])
+
+    def test_instagram_public_post_navigation_remains_available(self):
+        session, transport = self.session()
+        session.send({'method': 'Page.navigate', 'params': {'url': 'https://www.instagram.com/p/approved/'}, 'session_id': 'p1'})
+        self.assertEqual(transport.ops('page_cdp')[-1]['params']['url'], 'https://www.instagram.com/p/approved/')
 
     def test_new_window_request_restores_window_without_stealing_focus(self):
         # 스토리 검증은 화면에 보이는 탭이 필요해 newWindow를 쓴다. ego 새 탭은 앞으로 가져오지 않아도
@@ -267,6 +286,98 @@ class HelperPythonTests(unittest.TestCase):
             self.assertEqual(run.call_args.args[0][0], "C:/py312/python.exe")
 
 
+class EgoProfileTests(unittest.TestCase):
+    def test_existing_task_is_resumed_without_creation_only_profile_option(self):
+        import json
+        import shutil
+        import subprocess
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('Node.js is required for bridge profile checks')
+        script = """
+const fs=await import('node:fs');const input=JSON.parse(fs.readFileSync(0,'utf8'));
+globalThis.listTaskSpaces=async()=>[{id:7,name:'newspick-instagram',taskId:'newspick-instagram',profileId:'Profile 1',ownership:'agent'}];
+let chosen;globalThis.taskSpace=async(name,options)=>{chosen={name,options};if(options?.profileId)throw new Error('profileId is only valid when creating a new space');return {spaceId:7}};
+const bridge=await import(input.module);let error=null;
+try{await bridge.openTask({space:'newspick-instagram',profileId:'Profile 1'})}catch(e){error=e.message}
+console.log(JSON.stringify({chosen,error}));
+"""
+        result = subprocess.run([node, '--input-type=module', '-e', script],
+            input=json.dumps({'module': ego_harness.BRIDGE_PATH.as_uri()}), capture_output=True,
+            text=True, encoding='utf-8', timeout=10,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0), check=True)
+        observed = json.loads(result.stdout)
+        self.assertIsNone(observed['error'])
+        self.assertEqual(observed['chosen']['name'], 7)
+        self.assertNotIn('profileId', observed['chosen'].get('options') or {})
+
+    def test_workspace_profile_is_used_when_no_override_is_set(self):
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / 'workspace.json').write_text(
+                json.dumps({'browser': {'ego_profile_id': 'Profile 1'}}), encoding='utf-8'
+            )
+            self.assertEqual(ego_harness.ego_profile_id({'NEWS_PICK_OUTPUT_ROOT': directory}), 'Profile 1')
+            self.assertEqual(ego_harness.ego_profile_id({'NEWS_PICK_OUTPUT_ROOT': directory, 'NEWS_PICK_EGO_PROFILE_ID': 'Default'}), 'Default')
+
+    def test_missing_workspace_keeps_legacy_default(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertIsNone(ego_harness.ego_profile_id({'NEWS_PICK_OUTPUT_ROOT': directory}))
+
+    def test_bridge_passes_profile_and_rejects_a_different_existing_space(self):
+        import json
+        import shutil
+        import subprocess
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('Node.js is required for bridge profile checks')
+        script = """
+const fs=await import('node:fs');const input=JSON.parse(fs.readFileSync(0,'utf8'));
+let chosen;globalThis.taskSpace=async(name,options)=>{chosen={name,options};return {spaceId:7}};
+globalThis.listTaskSpaces=async()=>[{id:7,profileId:input.profile}];
+const bridge=await import(input.module);
+let error=null;try{await bridge.openTask({space:'newspick-instagram',profileId:'Profile 1'})}catch(e){error=e.message}
+console.log(JSON.stringify({chosen,error}));
+"""
+        for profile in ('Profile 1', 'Default'):
+            with self.subTest(profile=profile):
+                result = subprocess.run([node, '--input-type=module', '-e', script],
+                    input=json.dumps({'module': ego_harness.BRIDGE_PATH.as_uri(), 'profile': profile}),
+                    capture_output=True, text=True, encoding='utf-8', timeout=10,
+                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0), check=True)
+                observed = json.loads(result.stdout)
+                if profile == 'Profile 1':
+                    self.assertIsNone(observed['error'])
+                    self.assertEqual(observed['chosen']['options'], {'profileId': 'Profile 1'})
+                else:
+                    self.assertIn('profile mismatch', observed['error'])
+
+
+class EgoReadinessTests(unittest.TestCase):
+    def probe_result(self, returncode=0, stdout="", stderr=""):
+        from subprocess import CompletedProcess
+        from unittest.mock import patch
+
+        with patch.object(ego_harness.shutil, "which", return_value="ego-browser.exe"), patch.object(
+            ego_harness.subprocess, "run", return_value=CompletedProcess([], returncode, stdout, stderr)
+        ):
+            return ego_harness.ego_ready()
+
+    def test_ready_marker_on_stderr_is_accepted(self):
+        self.assertTrue(self.probe_result(stderr="ego-ready\n[ego-browser:notice] Update available\n"))
+
+    def test_ready_marker_on_stdout_is_accepted(self):
+        self.assertTrue(self.probe_result(stdout="ego-ready\n"))
+
+    def test_failed_probe_is_rejected_even_with_marker(self):
+        self.assertFalse(self.probe_result(returncode=1, stderr="ego-ready\nconnection failed\n"))
+
+    def test_success_without_marker_is_rejected(self):
+        self.assertFalse(self.probe_result(stderr="[ego-browser:notice] Update available\n"))
+
+
 class EgoAutostartTests(unittest.TestCase):
     """ego lite가 꺼져 있으면 실행기가 직접 켠다(사용자 요청 11-06)."""
 
@@ -320,6 +431,47 @@ class EgoAutostartTests(unittest.TestCase):
                 ego_harness.BridgeTransport()
         ensure.assert_called_once()
         popen.assert_not_called()
+
+
+class EgoSessionRecordTests(unittest.TestCase):
+    """실제로 어느 ego 프로필에 붙었는지 연결마다 남긴다. 일일 보고가 게시 시각과 맞춰 읽는다(사용자 요청 11-13)."""
+
+    def test_appends_space_and_profile_of_the_connection(self):
+        import tempfile
+        from datetime import datetime, timezone
+
+        class InfoTransport:
+            def call(self, op):
+                assert op == {"op": "space_info"}
+                return {"spaceId": 91, "name": "newspick-instagram", "profileId": "Profile 2", "profileName": "뉴스픽"}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "logs" / "ego-sessions.jsonl"
+            when = datetime(2026, 11, 13, 7, 8, tzinfo=timezone.utc)
+            ego_harness.record_ego_session(InfoTransport(), "newspick-instagram", log, now=when)
+            row = json.loads(log.read_text(encoding="utf-8").strip())
+            self.assertEqual(row, {"at": "2026-11-13T07:08:00+00:00", "space": "newspick-instagram", "space_id": 91,
+                                   "profile_id": "Profile 2", "profile_name": "뉴스픽"})
+
+    def test_recording_failure_never_blocks_the_connection(self):
+        import tempfile
+
+        class BrokenTransport:
+            def call(self, op):
+                raise RuntimeError("unknown op: space_info")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "ego-sessions.jsonl"
+            ego_harness.record_ego_session(BrokenTransport(), "newspick-growth", log)
+            self.assertFalse(log.exists())
+
+    def test_log_lives_under_output_root(self):
+        self.assertEqual(ego_harness.ego_session_log({"NEWS_PICK_OUTPUT_ROOT": "D:/np/output"}), Path("D:/np/output/logs/ego-sessions.jsonl"))
+
+    def test_bridge_answers_space_info(self):
+        source = ego_harness.BRIDGE_PATH.read_text(encoding="utf-8")
+        self.assertIn('case "space_info"', source)
+        self.assertIn("profileName", source)
 
 
 class RuntimeGuardTests(unittest.TestCase):

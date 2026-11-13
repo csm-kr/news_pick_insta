@@ -25,7 +25,7 @@ ego lite 기본 프로필에 로그인된 Instagram 탭(TaskSpace `newspick-grow
 | `NewsPickFollow-Morning` | 매일 08:00~10:50 사이 무작위 | `--session morning` |
 | `NewsPickFollow-Afternoon` | 매일 13:00~15:30 사이 무작위 | `--session afternoon` |
 | `NewsPickFollow-Evening` | 매일 20:00~23:00 사이 무작위 | `--session evening` |
-| `NewsPickUnfollow-Weekly` | 매주 월요일 00:30 | `unfollow_non_followers.py --auto`, 팔로우한 지 7일 안 된 계정은 남긴다 |
+| `NewsPickUnfollow-Weekly` | 매주 월·목요일 00:30 | `unfollow_non_followers.py --auto`, 팔로우한 지 7일 안 된 계정은 남긴다 |
 
 시작 시각은 작업 스케줄러의 RandomDelay가 매일 다르게 정한다. `--session`은 날짜로 시드를 준 `daily_plan()`으로 그날 목표(40~55명)와 실제로 돌 구간(2~3개)을 정하고, `follow_log.jsonl`의 오늘 건수를 빼서 이번 몫을 나눈다(구간당 최대 30). 쉬는 구간이어도 앞 구간이 실패해 뒤 구간만으로 못 채우면 돈다. 예전 `NewsPickFollow-1000`·`-2100`은 `install` 때 지운다.
 

@@ -57,7 +57,7 @@ python skills/upload-news-pick/scripts/orchestrate.py init `
 
 ## 예약 무인 게시
 
-Windows에서는 Task Scheduler로 `07:00 연예`, `12:00 최근 7일 핫뉴스`, `17:00 최근 3일 핫뉴스` KST 회차를 등록합니다. 각 회차는 `scheduled_runner.py`가 Claude Code 비대화형 실행(`claude -p`)으로 네 스킬을 수행합니다. 로그인된 사용자 세션, Claude Code CLI 로그인(`claude auth status`), ego lite 프로필의 Instagram 로그인이 필요합니다(ego가 꺼져 있으면 실행기가 켭니다). 모델·effort는 `NEWS_PICK_CLAUDE_MODEL`, `NEWS_PICK_CLAUDE_EFFORT`로 바꿉니다. 이미지 백엔드 인증 파일·모델은 `output/workspace.json`의 `imagegen` 블록으로 지정합니다. 공개 웹 조사는 Aside CLI를 우선하며, 게시에는 ego lite의 newspick_studio 세션을 사용합니다.
+Windows에서는 Task Scheduler로 `07:00 연예`, `12:00 최근 7일 핫뉴스`, `17:00 최근 3일 핫뉴스` KST 회차를 등록합니다. 각 회차는 `scheduled_runner.py`가 Codex 비대화형 실행(`codex --no-daemon exec --ephemeral --json --approve-for-me`)으로 네 스킬을 수행합니다. 로그인된 사용자 세션, Codex CLI 로그인(`codex --no-daemon login status`), ego lite 프로필의 Instagram 로그인이 필요합니다(ego가 꺼져 있으면 실행기가 켭니다). 모델·effort는 현재 Codex 설정을 상속하며 `NEWS_PICK_CODEX_MODEL`, `NEWS_PICK_CODEX_EFFORT`로 바꿉니다. 이미지 백엔드 인증 파일·모델은 `output/workspace.json`의 `imagegen` 블록으로 지정합니다. 공개 웹 조사는 Aside CLI를 우선하며, 게시에는 ego lite의 newspick_studio 세션을 사용합니다.
 
 매일 `19:00`에는 위 세 회차의 공개 검증 표지를 각각 6초 Story로 만들어 정확히 3개를 ego lite 세션에서 게시·검증합니다.
 

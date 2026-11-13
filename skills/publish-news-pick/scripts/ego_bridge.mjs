@@ -4,10 +4,30 @@
 
 const IDLE_EXIT_MS = 10 * 60 * 1000;
 
+export async function openTask(config) {
+  if (!config.profileId) return await taskSpace(config.space);
+  const spaces = await listTaskSpaces();
+  const existing = typeof config.space === "number"
+    ? spaces.find((space) => space.id === config.space)
+    : spaces.find((space) => space.taskId === config.space) || spaces.find((space) => space.name === config.space);
+  if (existing && existing.profileId !== config.profileId) {
+    throw new Error("News Pick ego profile mismatch; existing task space is not in the configured profile");
+  }
+  // profileId is creation-only. Resume by id without passing creation options.
+  const task = existing
+    ? await taskSpace(existing.id)
+    : await taskSpace(config.space, { profileId: config.profileId });
+  const current = existing || (await listTaskSpaces()).find((space) => space.id === task.spaceId);
+  if (!current || current.profileId !== config.profileId) {
+    throw new Error("News Pick ego profile mismatch; existing task space is not in the configured profile");
+  }
+  return task;
+}
+
 export async function serve(config) {
   const net = await import("node:net");
   const fs = await import("node:fs/promises");
-  const task = await taskSpace(config.space);
+  const task = await openTask(config);
 
   const page = (label) => {
     if (typeof label !== "string" || !/^p\d+$/.test(label)) throw new Error("invalid page label: " + label);
@@ -30,6 +50,11 @@ export async function serve(config) {
         return await page(req.page).cdp(req.method, req.params || {}, req.timeout ? { timeout: req.timeout } : undefined);
       case "task_cdp":
         return await task.cdp(req.method, req.params || {});
+      case "space_info": {
+        // 일일 보고용: 이 연결이 실제로 붙은 공간과 프로필
+        const info = (await listTaskSpaces()).find((space) => space.id === task.spaceId) || {};
+        return { spaceId: task.spaceId, name: info.name ?? null, profileId: info.profileId ?? null, profileName: info.profileName ?? null };
+      }
       default:
         throw new Error("unknown op: " + req.op);
     }

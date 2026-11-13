@@ -16,7 +16,7 @@ ego lite 기본 프로필에 로그인된 Instagram 탭(TaskSpace `newspick-grow
    ```
    남길 계정이 있으면 `--exclude "name1,name2"`를 붙인다. `follow-suggested`로 팔로우한 지 7일이 안 된 계정은 맞팔할 시간을 주려고 자동으로 뺀다(`--min-follow-age-days`). 결과는 `targets.json`에 저장된다. 대상 수와 대표 계정을 사용자에게 보여 주고, 사용자가 이미 "다 지워"라고 승인한 경우가 아니면 확인을 받는다.
 3. **팔로우 취소**: 같은 `--out-dir`에 `--apply`를 붙여 **백그라운드로** 실행한다. 몇 시간 걸린다.
-   예약 실행은 `--auto`로 목록 추출과 취소를 한 번에 한다(`NewsPickUnfollow-Weekly`, 매주 월요일 00:30, `follow-suggested`의 `manage_windows_growth_schedule.ps1`이 등록). 출력은 `--out-dir`의 `run.log`에 남는다.
+   예약 실행은 `--auto`로 목록 추출과 취소를 한 번에 한다(`NewsPickUnfollow-Weekly`, 매주 월·목요일 00:30, `follow-suggested`의 `manage_windows_growth_schedule.ps1`이 등록). 출력은 `--out-dir`의 `run.log`에 남는다.
 4. **진행 보고**: `unfollow_log.jsonl`의 줄 수와 `step`별 개수(`unfollow`, `skip_mutual`, `skip_not_following`)로 보고한다.
 
 ## 안전장치 (스크립트에 내장)

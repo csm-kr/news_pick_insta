@@ -130,6 +130,8 @@ class ScheduledRunnerTests(unittest.TestCase):
         prompt = MOD.build_prompt(Path("C:/work"), MOD.edition_at("12:00", date(2026, 8, 18)), settings)
         self.assertNotIn("$upload-news-pick", prompt)
         self.assertIn("Claude Code 비대화형", prompt)
+        self.assertNotIn("tty: true", prompt)
+        self.assertNotIn("CodexSandboxOffline", prompt)
         self.assertNotIn("codex", prompt.replace("CODEX_IMAGEGEN", "").replace(".codex", "").lower())
         self.assertIn("질문하거나 확인을 기다리지 말고", prompt)
         self.assertIn("skipped 또는 needs_review", prompt)
@@ -278,6 +280,27 @@ class ScheduledRunnerTests(unittest.TestCase):
             for edge_key in ("BU_NAME", "BU_CDP_URL", "NEWS_PICK_BROWSER_HARNESS_NAME", "NEWS_PICK_EDGE_CDP_URL", "NEWS_PICK_EDGE_USER_DATA_DIR"):
                 self.assertNotIn(edge_key, environment)
 
+    def test_prompt_excludes_verified_stories_of_earlier_editions_in_progress(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.make_root(tmp)
+            settings = self.settings(root / "output")
+            target = MOD.edition_at("17:00", date(2026, 11, 7))
+            for name, edition, status, verified in (
+                ("earlier", "2026-11-07T12:00:00+09:00", "in_progress", "verified"),
+                ("cancelled", "2026-11-07T07:00:00+09:00", "cancelled", "verified"),
+                ("unverified", "2026-11-07T07:00:00+09:00", "in_progress", "developing"),
+                ("same-slot", "2026-11-07T17:00:00+09:00", "in_progress", "verified"),
+                ("previous-day", "2026-11-06T12:00:00+09:00", "in_progress", "verified"),
+            ):
+                run = settings["output_root"] / "runs" / name
+                MOD.atomic_json(run / "run.json", {"status": status, "edition_at": edition})
+                MOD.atomic_json(run / "01-search/selected-story.json", {"verification_status": verified, "story_id": name, "verified_headline": "reserved-" + name})
+            prompt = MOD.build_prompt(root, target, settings)
+            self.assertIn("reserved-earlier", prompt)
+            for name in ("cancelled", "unverified", "same-slot", "previous-day"):
+                self.assertNotIn("reserved-" + name, prompt)
+            self.assertIn("공개 게시가 아직 끝나지 않았어도", prompt)
+
     def test_child_environment_without_imagegen_block_leaves_backend_defaults(self):
         environment = MOD.child_environment(self.settings("C:/work/output"), MOD.edition_at("07:00", date(2026, 8, 18)), base={})
         self.assertNotIn("CODEX_IMAGEGEN_MODEL", environment)
@@ -326,7 +349,7 @@ class ScheduledRunnerTests(unittest.TestCase):
             self.assertIn("--dangerously-skip-permissions", command)
             self.assertEqual(command[command.index("--output-format") + 1], "stream-json")
             self.assertIn("--verbose", command)
-            self.assertEqual(command[command.index("--model") + 1], MOD.DEFAULT_CLAUDE_MODEL)
+            self.assertNotIn("--model", command)
             self.assertEqual(command[command.index("--effort") + 1], MOD.DEFAULT_CLAUDE_EFFORT)
             schema = json.loads(command[command.index("--json-schema") + 1])
             self.assertEqual(schema["required"], ["status"])
@@ -412,6 +435,14 @@ class ScheduledRunnerTests(unittest.TestCase):
     def test_windows_task_uses_pythonw_so_no_console_opens(self):
         script = PATH.with_name("manage_windows_schedule.ps1").read_text(encoding="utf-8")
         self.assertIn("pythonw.exe", script)
+
+    def test_schedule_installer_registers_claude_code_executor(self):
+        script = PATH.with_name("manage_windows_schedule.ps1").read_text(encoding="utf-8")
+        self.assertIn("auth status --json", script)
+        self.assertIn("executor = 'claude-code'", script)
+        self.assertIn("News Pick Claude Code print-mode executor", script)
+        self.assertNotIn("find_codex", script)
+        self.assertNotIn("codex", script.lower())
 
     def test_run_job_parses_fenced_json_when_structured_output_missing(self):
         with tempfile.TemporaryDirectory() as tmp:

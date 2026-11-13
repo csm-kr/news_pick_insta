@@ -20,3 +20,5 @@
 동일 디렉터리의 `verification.json`에는 `verified`, `card_screenshots`, `visual_confirmation_required`와 비율·장수 등의 결과가 남는다. `verified=true`는 기계 검증만 통과했다는 뜻이며 사람이 보는 카드 일치까지 대신하지 않는다. 공개 `AI 크리에이터`, `Made with AI`, `AI로 생성한 프로필`(2026-09-08부터 관측)도 지원되는 AI 표시이고, 화살표 판독이 없어 `navigation_boundary=false`여도 나머지 필수 근거가 모두 일치하면 검증 가능하다.
 
 이미 게시된 가능성이 있는 `needs_review`에서는 profile 최신 항목을 먼저 읽는다. 같은 payload가 보이면 재제출하지 않고 사람이 상태를 확정한다.
+
+넓은 viewport에서는 이전 카드가 화면 안의 양수 x 좌표에 있어도 캐러셀 컨테이너에 가려질 수 있다. 주 미디어는 viewport와 overflow 조상들의 교차 영역에서 가로·세로 각각 95% 이상 보이는 이미지만 고른다. 가려진 이전 카드를 첫 카드의 중복으로 세지 않는다(2026-11-08 실측, DOM fixture 회귀 검증).

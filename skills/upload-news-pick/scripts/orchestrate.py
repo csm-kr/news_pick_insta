@@ -183,6 +183,46 @@ def cancel_run(run: Path, reason: str) -> dict[str, Any]:
     return state
 
 
+def resume_run(run: Path, reason: str) -> dict[str, Any]:
+    """Resume stopped preparation without replaying any publication."""
+    state = load_json(run / "run.json")
+    if state.get("status") != "cancelled":
+        raise ValueError("cancelled run만 명시적으로 재개할 수 있다.")
+    if not reason.strip():
+        raise ValueError("재개 사유가 필요하다.")
+    publish = run / DIRS[STAGES[-1]]
+    if state.get("external_submission_pending") or any(
+        (publish / name).exists()
+        for name in ("publish-job.json", "attempts.jsonl", "result.json")
+    ):
+        raise ValueError("게시·제출 기록이 있는 run은 재개하지 않는다. 공개 결과를 먼저 대조한다.")
+    cancelled = [i for i, stage in enumerate(STAGES) if state["stages"][stage].get("status") == "cancelled"]
+    if len(cancelled) != 1 or cancelled[0] == len(STAGES) - 1:
+        raise ValueError("검색·기획·제작 중 중지된 단계 하나가 있어야 한다. 게시 단계는 자동 재개하지 않는다.")
+    resume_index = cancelled[0]
+    for index, stage in enumerate(STAGES[:resume_index]):
+        record = state["stages"][stage]
+        if record.get("status") != "completed":
+            raise ValueError("중지된 단계 앞의 완료 기록이 올바르지 않다.")
+        if tree_hash(run / DIRS[stage]) != record.get("output_sha256"):
+            resume_index = index
+            break
+        validate_stage(run, stage)
+    resumed_at = now_iso()
+    state.setdefault("resume_history", []).append({
+        "resumed_at": resumed_at,
+        "reason": reason.strip(),
+        "cancelled_at": state.get("cancelled_at"),
+        "cancellation_reason": state.get("cancellation_reason"),
+        "resume_stage": STAGES[resume_index],
+    })
+    for stage in STAGES[resume_index:]:
+        state["stages"][stage] = {"status": "pending", "output_sha256": None}
+    state.update(status="in_progress", current_stage=STAGES[resume_index], resumed_at=resumed_at)
+    atomic_json(run / "run.json", state)
+    return state
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -200,6 +240,9 @@ def main() -> int:
     cancel = commands.add_parser("cancel-run")
     cancel.add_argument("--run", type=Path, required=True)
     cancel.add_argument("--reason", required=True)
+    resume = commands.add_parser("resume-run")
+    resume.add_argument("--run", type=Path, required=True)
+    resume.add_argument("--reason", required=True)
     validate = commands.add_parser("validate-stage")
     validate.add_argument("--run", type=Path, required=True)
     validate.add_argument("--stage", choices=STAGES, required=True)
@@ -217,6 +260,8 @@ def main() -> int:
             result = complete_stage(args.run, args.stage)
         elif args.command == "cancel-run":
             result = cancel_run(args.run, args.reason)
+        elif args.command == "resume-run":
+            result = resume_run(args.run, args.reason)
         else:
             validate_stage(args.run, args.stage)
             result = {"valid": True, "stage": args.stage}

@@ -4,6 +4,8 @@ import io
 import json
 import os
 import runpy
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -102,6 +104,34 @@ class PublicCarouselTests(unittest.TestCase):
         self.assertEqual(len(ai_checks), 1)
         for marker in ("AI 콘텐츠", "AI 크리에이터", "Made with AI", "AI로 생성한 프로필"):
             self.assertIn(f"text.includes('{marker}')", ai_checks[0])
+
+    def test_media_selection_excludes_previous_slide_clipped_by_carousel(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node.js is required for the DOM fixture")
+        expressions = []
+        with tempfile.TemporaryDirectory() as directory:
+            self.exercise(Path(directory), expressions=expressions)
+        fixture = r"""
+const fs=require('node:fs');
+const box=(x,y,w,h)=>({x,y,width:w,height:h,left:x,top:y,right:x+w,bottom:y+h});
+const carousel={parentElement:null,getBoundingClientRect:()=>box(539,36,480,600)};
+const img=(src,x)=>({currentSrc:src,src,alt:'approved',naturalWidth:1080,naturalHeight:1350,
+ parentElement:carousel,getBoundingClientRect:()=>box(x,36,480,600)});
+global.innerWidth=1908;global.innerHeight=909;
+global.getComputedStyle=()=>({overflowX:'hidden',overflowY:'hidden'});
+global.location={href:'https://www.instagram.com/p/approved/?img_index=2'};
+global.document={body:{innerText:'newspick_studio'},
+ images:[img('hidden-previous',59),img('visible-current',539)],
+ querySelectorAll:()=>[],querySelector:()=>null};
+console.log(JSON.stringify(eval(fs.readFileSync(0,'utf8'))));
+"""
+        result = subprocess.run(
+            [node, "-e", fixture], input=expressions[0], capture_output=True,
+            text=True, encoding="utf-8", timeout=10,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), check=True,
+        )
+        self.assertEqual(json.loads(result.stdout)["media_src"], "visible-current")
 
 
 if __name__ == "__main__":

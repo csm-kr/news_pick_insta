@@ -20,7 +20,7 @@ if (-not (Test-Path $pythonw)) {
 }
 $claudeCommand = Get-Command claude.exe -ErrorAction SilentlyContinue
 if ($null -eq $claudeCommand) {
-    $fallback = Join-Path $env:USERPROFILE '.local\bin\claude.exe'
+    $fallback = Join-Path $env:USERPROFILE '.localin\claude.exe'
     if (-not (Test-Path $fallback)) {
         throw 'Claude Code CLI(claude.exe)를 찾을 수 없다. 설치 후 다시 실행한다.'
     }
@@ -95,6 +95,8 @@ if ($Command -eq 'install') {
             -DontStopIfGoingOnBatteries `
             -MultipleInstances IgnoreNew `
             -ExecutionTimeLimit (New-TimeSpan -Hours 3)
+        # 기본 BelowNormal은 부하 중 시작을 분 단위로 지연시켰다. 실제 예약 환경에서 검증한 Normal로 고정한다.
+        $settings.Priority = 5
         $task = New-ScheduledTask `
             -Action $action `
             -Trigger $trigger `

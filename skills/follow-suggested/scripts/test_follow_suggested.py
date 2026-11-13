@@ -136,5 +136,13 @@ class FollowedOnTests(unittest.TestCase):
         self.assertEqual(MOD.followed_on(Path("no-such-log.jsonl"), date(2026, 10, 28)), 0)
 
 
+class GrowthScheduleTests(unittest.TestCase):
+    def test_unfollow_runs_twice_a_week_on_monday_and_thursday(self):
+        # 팔로우가 하루 40~50명이라 주 1회 언팔로는 팔로잉만 쌓였다(사용자 요청 11-12).
+        script = PATH.with_name("manage_windows_growth_schedule.ps1").read_text(encoding="utf-8-sig")
+        self.assertIn("-Weekly -DaysOfWeek Monday, Thursday -At ([datetime]::Today.AddMinutes(30))", script)
+        self.assertIn("target = 'Monday, Thursday 00:30'", script)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -8,6 +8,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $followScript = (Resolve-Path (Join-Path $PSScriptRoot 'follow_suggested.py')).Path
 $unfollowScript = (Resolve-Path (Join-Path $PSScriptRoot '..\..\unfollow-non-followers\scripts\unfollow_non_followers.py')).Path
+$reportScript = (Resolve-Path (Join-Path $PSScriptRoot '..\..\upload-news-pick\scripts\daily_report.py')).Path
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $python = (Get-Command python.exe -ErrorAction Stop).Source
 # 예약 작업은 콘솔 창 없이 돌도록 pythonw.exe로 실행한다. 출력은 스크립트가 output/ 아래 로그 파일로 돌린다.
@@ -18,7 +19,7 @@ if (-not (Test-Path $pythonw)) {
 $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 
 # 팔로우는 오전·오후·저녁 구간마다 작업 스케줄러가 시작 시각을 매일 무작위로 정한다(게시 회차 시간대는 피한다).
-# 그날 몇 명을 몇 구간에 나눌지는 follow_suggested.py --session이 정한다. 맞팔 아닌 계정 정리는 매주 월요일 00:30
+# 그날 몇 명을 몇 구간에 나눌지는 follow_suggested.py --session이 정한다. 맞팔 아닌 계정 정리는 매주 월·목요일 00:30
 $tasks = @(
     @{ name = 'NewsPickFollow-Morning'; target = 'daily 08:00-10:50 random'; arguments = "`"$followScript`" --session morning"
        trigger = { New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours(8)) -RandomDelay (New-TimeSpan -Hours 2 -Minutes 50) }; limit = New-TimeSpan -Hours 2 },
@@ -26,8 +27,11 @@ $tasks = @(
        trigger = { New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours(13)) -RandomDelay (New-TimeSpan -Hours 2 -Minutes 30) }; limit = New-TimeSpan -Hours 2 },
     @{ name = 'NewsPickFollow-Evening'; target = 'daily 20:00-23:00 random'; arguments = "`"$followScript`" --session evening"
        trigger = { New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours(20)) -RandomDelay (New-TimeSpan -Hours 3) }; limit = New-TimeSpan -Hours 2 },
-    @{ name = 'NewsPickUnfollow-Weekly'; target = 'Monday 00:30'; arguments = "`"$unfollowScript`" --auto"
-       trigger = { New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday -At ([datetime]::Today.AddMinutes(30)) }; limit = New-TimeSpan -Hours 6 }
+    @{ name = 'NewsPickUnfollow-Weekly'; target = 'Monday, Thursday 00:30'; arguments = "`"$unfollowScript`" --auto"
+       trigger = { New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday, Thursday -At ([datetime]::Today.AddMinutes(30)) }; limit = New-TimeSpan -Hours 6 },
+    # 일일 보고: 프로필 페이지 1회 조회로 팔로워 수를 남기고 output/reports/daily에 표·대시보드 JSON을 쓴다
+    @{ name = 'NewsPickDailyReport-1930'; target = 'daily 19:30'; arguments = "`"$reportScript`""
+       trigger = { New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours(19).AddMinutes(30)) }; limit = New-TimeSpan -Minutes 20 }
 )
 # 예전의 고정 시각 팔로우 작업. install·remove 때 지운다
 $legacyTaskNames = @('NewsPickFollow-1000', 'NewsPickFollow-2100')

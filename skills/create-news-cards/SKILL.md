@@ -11,7 +11,7 @@ description: 검증된 5장 뉴스 스토리보드와 실제 기사 사진·공�
 
 생성 모델이 완성 카드 전체를 만든다. 실제 기사 대표 사진과 공식 발표·공시 화면을 reference로 제공하고, 모델이 사진 재구성·한글 카피·핵심 수치·표를 한 이미지 안에서 완성하게 한다. 코드는 렌더링이나 오버레이에 쓰지 않고 크기·해시·장수·매니페스트 QA에만 쓴다.
 
-모든 `--work-dir`은 `<NEWS_PICK_OUTPUT_ROOT>/runs/<run_id>/03-create`처럼 skill 폴더 밖에 둔다. Tibo는 `GOD_TIBO_SKILL_ROOT`, 형제 skill, `$CODEX_HOME/skills`, `~/.agents/skills` 순서로 찾고 없으면 생성 전에 중단한다. 기사·공식 reference를 웹에서 확보해야 할 때는 `../publish-news-pick/references/edge-browser-contract.md`를 읽고 `invoke_edge_browser_harness.py`(기본 ego lite)만 사용한다.
+모든 `--work-dir`은 `<NEWS_PICK_OUTPUT_ROOT>/runs/<run_id>/03-create`처럼 skill 폴더 밖에 둔다. Tibo는 `GOD_TIBO_SKILL_ROOT`, 형제 skill, `$CODEX_HOME/skills`, `~/.agents/skills` 순서로 찾고 없으면 생성 전에 중단한다. 기사 사진·공식 화면·스타일 reference의 공개 웹 수집에는 `aside-browser`와 Aside CLI를 사용한다. 각 원문의 실제 내용과 이미지 관계를 확인한 뒤 URL·locator·SHA-256을 기록한다. `newspick-instagram` ego 작업 공간은 Instagram 전용이며 공개 reference 수집에 사용하지 않는다.
 
 ## 1. 입력을 잠근다
 
@@ -28,6 +28,10 @@ description: 검증된 5장 뉴스 스토리보드와 실제 기사 사진·공�
 reference가 없거나 원문 출처가 불명확하면 생성하지 않는다. 첫 reference는 카드의 핵심 사진·내용 기준이고 나머지는 보조 근거다. 다섯 카드가 같은 파일 또는 동일 SHA-256의 이미지를 첫 reference로 함께 쓰면 job 생성을 차단한다. 파일이 달라도 `scene_similarity.py`의 dHash(축소본·재인코딩본)와 ORB 특징점 매칭(다른 crop·해상도·영상 캡처로 전재된 같은 장면)에 걸리면 같은 장면으로 보고 job 생성을 차단한다. 이 검사에는 OpenCV(`opencv-python`)와 numpy가 필요하며 없으면 생성 전에 중단한다. 실제 사진과 공식 화면의 취급 원칙은 [references/image-policy.md](references/image-policy.md)를 읽는다.
 
 스타일은 [references/popular-cardnews-visual-patterns.md](references/popular-cardnews-visual-patterns.md)의 10개 디렉터 풀에서 시드 기반으로 3개를 중복 없이 무작위 선택한다. 디렉터는 팔레트·타입·본문 전개만 바꾸며, 1장의 `실제 사진 전면 + 하단 35~42% 그라데이션 + 2행 제목` 구조는 항상 고정한다. 스타일 reference는 내용 reference 뒤에 두고 구성만 참고하며 로고·문구·서체·색을 복제하지 않는다.
+
+### reference 검수 실패 복구
+
+빈 공식 화면이나 원문과 다른 스타일 이미지가 확인되면 그 파일을 생성 입력에서 제외하고, 생성 전에 정상적인 자료 수집을 수정한다. 같은 사건의 확인 가능한 다른 공식 발표·원문 사진, 또는 실제 원문 관계가 확인된 다른 스타일 자료로 대체하고 URL·locator·SHA-256을 다시 검사한다. 필요한 공식 근거를 관련 없는 기사로 대체하지 않는다. 제목 화면에 연락처가 포함됐다면 원문에서 제목·날짜 영역만 다시 캡처한다. reference가 바뀌면 job을 다시 준비해 새 reference hash를 반영한다. 필수 근거가 끝내 없거나 원문 관계가 불명확하면 생성·게시하지 않는다. 사실·개인정보·권한 QA를 낮추거나 통과 기록을 만들지 않는다.
 
 ## 2. 15개 reference-aware 작업을 만든다
 

@@ -71,15 +71,28 @@ for index in range(1, expected + 1):
   }).filter(x=>x.w===6&&x.h===6);
   const candidates=[...document.images].map(img=>{
     const r=img.getBoundingClientRect();
+    let left=Math.max(0,r.left),right=Math.min(innerWidth,r.right);
+    let top=Math.max(0,r.top),bottom=Math.min(innerHeight,r.bottom);
+    for(let parent=img.parentElement;parent;parent=parent.parentElement){
+      const style=getComputedStyle(parent),box=parent.getBoundingClientRect();
+      if(/hidden|clip|scroll|auto/.test(style.overflowX)){
+        left=Math.max(left,box.left);right=Math.min(right,box.right);
+      }
+      if(/hidden|clip|scroll|auto/.test(style.overflowY)){
+        top=Math.max(top,box.top);bottom=Math.min(bottom,box.bottom);
+      }
+    }
     const naturalRatio=img.naturalHeight?img.naturalWidth/img.naturalHeight:0;
     return {
       src:img.currentSrc||img.src||'',alt:img.alt||'',
       natural_w:img.naturalWidth||0,natural_h:img.naturalHeight||0,
       natural_ratio:naturalRatio,x:r.x,y:r.y,w:r.width,h:r.height,
+      visible_w:Math.max(0,right-left),visible_h:Math.max(0,bottom-top),
       render_ratio:r.height?r.width/r.height:0
     };
   }).filter(x=>
     x.w>400&&x.h>500&&x.y<700&&x.x<1200&&x.x+x.w>0&&x.y+x.h>0
+    &&x.visible_w>=0.95*x.w&&x.visible_h>=0.95*x.h
     &&x.natural_ratio>=0.78&&x.natural_ratio<=0.82
   ).sort((a,b)=>
     (a.x>=0?a.x:100000+Math.abs(a.x))

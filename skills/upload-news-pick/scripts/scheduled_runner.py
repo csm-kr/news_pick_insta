@@ -30,7 +30,7 @@ PREPARATION_LEAD = timedelta(minutes=30)
 MAX_START_LATENESS = timedelta(minutes=30)
 STALE_LOCK_AGE = timedelta(hours=4)
 EXECUTOR = "claude-code"
-DEFAULT_CLAUDE_MODEL = "claude-fable-5-1"
+# 모델은 지정하지 않으면 Claude Code에 저장된 기본 모델(/model)을 따른다.
 DEFAULT_CLAUDE_EFFORT = "high"
 CLAUDE_EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
 # 매일 같은 초에 공유하면 자동화로 보이므로 회차 시각 뒤 1~15분 사이에서 무작위로 공유한다
@@ -152,6 +152,31 @@ def recent_published_stories(output_root: Path, limit: int = 6) -> list[dict[str
     return history
 
 
+def earlier_editions_in_progress(output_root: Path, scheduled_at: datetime) -> list[dict[str, str]]:
+    """Reserve verified stories while an earlier edition is being produced."""
+    stories = []
+    for run_path in sorted((output_root / "runs").glob("*/run.json")):
+        try:
+            state = load_json(run_path)
+            when = datetime.fromisoformat(str(state.get("edition_at") or "").replace("Z", "+00:00"))
+            if state.get("status") != "in_progress" or when.tzinfo is None:
+                continue
+            if when.astimezone(KST).date() != scheduled_at.astimezone(KST).date() or when >= scheduled_at:
+                continue
+            story = load_json(run_path.parent / "01-search" / "selected-story.json")
+            if story.get("verification_status") != "verified":
+                continue
+        except (OSError, ValueError, TypeError):
+            continue
+        stories.append({
+            "edition_at": when.isoformat(),
+            "story_id": str(story.get("story_id") or ""),
+            "headline": str(story.get("verified_headline") or ""),
+            "run_directory": str(run_path.parent),
+        })
+    return stories
+
+
 def build_prompt(root: Path, scheduled_at: datetime, settings: dict[str, Any]) -> str:
     skill_path = root / "skills" / "upload-news-pick" / "SKILL.md"
     publish_gate_path = root / "skills" / "upload-news-pick" / "scripts" / "wait_for_publish_time.py"
@@ -167,6 +192,7 @@ def build_prompt(root: Path, scheduled_at: datetime, settings: dict[str, Any]) -
     )
     recent_history = recent_published_stories(settings["output_root"])
     recent_history_json = json.dumps(recent_history, ensure_ascii=False, indent=2)
+    reserved_stories_json = json.dumps(earlier_editions_in_progress(settings["output_root"], scheduled_at), ensure_ascii=False, indent=2)
     imagegen = settings.get("imagegen") or {}
     imagegen_flags = " ".join(
         part
@@ -183,17 +209,17 @@ def build_prompt(root: Path, scheduled_at: datetime, settings: dict[str, Any]) -
     )
     return f"""뉴스픽 `upload-news-pick` 예약 무인 실행이다.
 
-이 실행은 Claude Code 비대화형(`claude -p`) 무인 실행이며 사용자가 지켜보지 않는다. 사용자에게 질문하거나 확인을 기다리지 말고, 판단이 막히거나 어떤 QA든 실패하면 게시 없이 skipped 또는 needs_review로 끝내라. 브레인스토밍·계획 모드·별도 승인 요청 없이 아래 지시와 스킬 문서만 따른다.
+이 실행은 Claude Code 비대화형(`claude -p`) 무인 실행이며 사용자가 지켜보지 않는다. 사용자에게 질문하거나 확인을 기다리지 말고 아래 지시와 전문 스킬에 따라 정상적인 수집·제작 오류를 수정해 완료하라. 참조 이미지 누락·원문 불일치는 검증된 대체 자료를 확보해 재검수한 뒤에만 진행하며, 실패한 QA를 통과로 바꾸지 않는다. 사실·계정·권한·정책 경계가 막히거나 정상 복구 뒤에도 필수 QA가 실패하면 게시 없이 skipped 또는 needs_review로 끝낸다. 브레인스토밍·계획 모드·별도 승인 요청 없이 수행한다.
 
 먼저 `{skill_path}`를 완전히 읽고 그 파일이 연결하는 네 전문 스킬을 단계 직전에 읽어 그대로 수행하라.
 
-파일은 기본적으로 Read 도구로 읽는다. Windows PowerShell에서 한글 UTF-8 텍스트 파일을 읽어야 할 때는 반드시 `Get-Content -Raw -Encoding UTF8`을 사용한다. `-Encoding UTF8` 없이 스킬·JSON·Markdown을 읽지 말고, 글자가 깨져 보이면 즉시 중단해 UTF-8로 다시 읽는다. Python 하위 프로세스에는 `PYTHONUTF8=1`이 이미 설정돼 있다.
+파일은 사용 가능한 읽기 도구로 읽는다. Windows PowerShell에서 한글 UTF-8 텍스트 파일을 읽어야 할 때는 반드시 `Get-Content -Raw -Encoding UTF8`을 사용한다. `-Encoding UTF8` 없이 스킬·JSON·Markdown을 읽지 말고, 글자가 깨져 보이면 즉시 중단해 UTF-8로 다시 읽는다. Python 하위 프로세스에는 `PYTHONUTF8=1`이 이미 설정돼 있다.
 
 이번 회차:
 - edition_at: {scheduled_at.isoformat()}
 - timezone: Asia/Seoul
 - account: {settings['account']}
-- public research browser: Aside CLI first (read `aside-browser` skill)
+- public research and reference capture browser: Aside CLI (read `aside-browser` skill)
 - Instagram browser: ego lite (`NEWS_PICK_BROWSER=ego`가 주입돼 있다). `invoke_edge_browser_harness.py`가 helper를 ego TaskSpace `newspick-instagram`의 agent 탭으로 중계한다.
 - output root: {settings['output_root']}
 - target editorial lane: {editorial_lane}
@@ -202,6 +228,12 @@ def build_prompt(root: Path, scheduled_at: datetime, settings: dict[str, Any]) -
 
 ```json
 {recent_history_json}
+```
+
+오늘 앞 회차가 제작 중이며 사실 검증을 통과해 확보한 사건은 다음과 같다. 공개 게시가 아직 끝나지 않았어도 이 사건은 이번 회차 후보에서 제외한다. 공개 프로필의 최근 게시물과 함께 확인하고, 다른 run의 산출물이나 작성기를 수정하지 않는다.
+
+```json
+{reserved_stories_json}
 ```
 
 사용자는 이 예약 정책 범위의 실게시를 사전 승인했다. 모든 검증을 통과한 정확한 payload hash를 잠근 뒤 예약 승인으로 한 번만 승인하고, Instagram 웹 UI에서 실제 캐러셀 게시와 공개 검증까지 끝내라. 게시 직전 사용자 입력을 요구하지 마라.
@@ -228,6 +260,7 @@ python "{publish_gate_path}"
 - 언론 기사와 공식 발표만 사실 근거로 사용하고, 독립 언론 2곳 이상으로 교차검증한다.
 - 결과·손실·격차·반전을 전면에 두는 고강도 사실형 후킹을 사용한다. 1080×1350 세로형 5장으로 만들고, 1장은 실제 사진 전면+하단 그라데이션+좌측 2행 제목을 고정한다. 10개 디렉터 풀에서 3개를 무작위 선택해 15장 후보를 만든 뒤 가장 읽기 좋은 한 세트를 고른다.
 {imagegen_rule}
+- 공개 기사 사진·공식 화면·스타일 reference는 Aside CLI로 확보한다. Instagram용 ego TaskSpace에서 언론사·기관·스타일 사이트를 열지 않는다. 원문이 빈 화면이거나 추천 콘텐츠로 이동하면 같은 사건의 검증된 다른 원문·공식 자료 또는 정상 확인된 다른 스타일 자료로 대체하고 URL·locator·SHA-256을 다시 검증한다. 제목 캡처에 연락처가 있으면 제목·날짜 영역만 다시 캡처해 입력에서 제외한다. 이미지 backend로 전송하기 전에 reference QA를 통과해야 한다.
 - Tibo 후보 job은 `backend_size=1024x1536`, `resize_fit=cover`, `preserve_backend_raw=true`를 명시한다. `contain` 패딩은 기본 제작에 쓰지 않는다. backend `raw_size`와 최종 1080×1350 결과를 나란히 비교해 제목·본문·표·로고·핵심 사진이 crop으로 손실된 후보를 탈락시키고, 실패 카드만 통과한 4:5 카드의 레이아웃을 마지막 보조 reference로 추가해 재생성한다. 그래도 같은 crop 손실만 반복되고 backend raw의 내용이 모두 정확할 때만 1장에 한해 원본 가장자리 배경색을 맞춘 좌우 contain 폴백을 검수한다. 띠 경계, 360px 가독성, 세트 리듬 중 하나라도 실패하면 쓰지 말고, 통과하면 raw·최종 sha256, 패딩 색, `fallback_reason=repeated_cover_crop_loss`를 manifest에 기록한다.
 - Instagram 자르기 단계에서는 입력 PNG가 1080×1350이어도 실제 접근성 이름 `자르기 선택`인 종횡비 control을 열어 exact `4:5`를 직접 선택한다. 첫 카드 상·하단 전체와 세로 프레임 screenshot, 자연·렌더 비율 `0.78~0.82`를 확인하기 전에는 `다음`을 누르지 않는다. 입력 크기·정방형 crop preview·carousel dot만으로 4:5를 추정하면 hard fail이다.
 - 업로드 준비는 설치된 `browser_web_upload_prepare.py`를 그대로 사용한다. 좌측 create link wrapper의 이름이 비어 있으면 helper가 자식 SVG의 exact `새로운 게시물`/`만들기` label을 사용한다. helper가 `existing_confirmed_crop_session` 또는 crop dialog 성공을 반환한 뒤 React가 file input을 제거했어도 새 run-local helper를 만들거나 create control·파일 업로드를 반복하지 말고 4:5 단계로 진행한다.
@@ -238,8 +271,9 @@ python "{publish_gate_path}"
 - 사실적 AI 재구성 게시물은 Instagram의 `AI 콘텐츠` 라벨을 켠다.
 
 실행 안전 규칙:
-- 모든 Instagram·브라우저 상호작용은 `invoke_edge_browser_harness.py`로만 실행한다(이번 회차는 `NEWS_PICK_BROWSER=ego`라 ego lite로 간다). 이 환경변수를 바꾸지 말고, ego-browser 직접 스크립트·Chrome·다른 CDP URL로 우회하지 않는다.
+- Instagram 상호작용만 `invoke_edge_browser_harness.py`로 실행한다(이번 회차는 `NEWS_PICK_BROWSER=ego`라 ego lite로 간다). 공개 조사·기사 사진·공식 화면·스타일 자료는 Aside CLI를 사용한다. 이 환경변수를 바꾸지 말고, Instagram은 ego-browser 직접 스크립트·Chrome·다른 CDP URL로 우회하지 않는다. ego helper는 Instagram과 준비용 about:blank 이외의 탐색을 차단한다.
 - Instagram 변경 동작 직전에 `output/runs/*/run.json`을 다시 읽는다. 자신과 다른 run이 `status=in_progress`이면서 `current_stage=publish-news-pick`이면 작성기를 열거나 기존 draft를 폐기하지 말고 `skipped`(`composer_busy`)로 끝낸다. 수동 run과 예약 run의 산출물·run_id를 절대 공유하거나 덮어쓰지 않는다.
+- `external_submission_pending=true`인 run은 executor가 종료돼도 stale run으로 취소하지 않는다. 공유 요청의 성공·실패가 공개 근거로 확정되기 전에는 읽기 전용 확인만 하며, 작성기 폐기·재업로드·추가 공유를 하지 않는다.
 - ego lite는 따로 띄울 필요가 없다. 기존 사용자 탭은 닫거나 탐색하지 않는다(helper는 `newspick-instagram` agent 탭만 본다). exact-byte invoker로 targeted preflight를 helper 프로세스 하나에서 실행한다. 전체 AX/DOM dump를 사용하지 않는다. `upload_prepare`가 클릭 전에 `visible control not found`로 끝나면 탭이 막 앞으로 온 직후일 수 있으니 같은 명령을 한 번만 다시 실행한다.
 
 ```powershell
@@ -248,8 +282,8 @@ $env:IG_DUPLICATE_TOKENS = '<첫 카드의 안정적인 고유 토큰 2~3개를 
 python "{edge_invoker_path}" "{instagram_preflight_path}"
 ```
 - preflight 한 번에서 설정 계정·소유자 control·로그인/challenge·공개 프로필 최신 게시물 중복을 함께 확인한다. 중복 점검을 별도 Harness 호출로 반복하지 않는다.
-- 같은 bounded phase 안의 target 탐색·DOM 판독·대기·검증은 한 Browser Harness 프로세스 안에서 묶는다. 조회는 event-driven targeted probe로 빠르게 처리하고, 게시 UI 변경 사이에만 짧은 random jitter를 둔다.
-- 적합한 새 이슈가 없거나 검색·기획·이미지·중복·계정·캐러셀·AI 라벨 QA가 하나라도 실패하면 filler를 만들지 말고 skipped 또는 needs_review로 끝낸다.
+- 같은 Instagram bounded phase 안의 target 탐색·DOM 판독·대기·검증은 한 Browser Harness 호환 helper 프로세스 안에서 묶는다. 공개 자료 수집에는 Aside CLI를 사용한다. 조회는 event-driven targeted probe로 빠르게 처리하고, 게시 UI 변경 사이에만 짧은 random jitter를 둔다.
+- 적합한 새 이슈가 없거나 정상적인 재수집·재생성 복구 후에도 필수 QA가 실패하면 filler를 만들지 말고 skipped 또는 needs_review로 끝낸다. 사실·개인정보·권한·중복·계정·캐러셀·AI 라벨의 안전 조건은 완화하지 않는다.
 - 공유하기는 한 번만 누른다. 제출 시작 뒤 오류·timeout이면 자동 재시도하지 않고 공개 프로필을 읽기 전용으로 확인한다. 작성기 dialog에 `게시물 공유됨`·`완료`·`게시물` 링크 중 하나가 보이면 공유 성공이므로 정상 검증으로 간다.
 - 미게시 복구(사용자 사전 승인, 회차당 한 번): 성공 표지가 없고, 작성기 dialog가 사라졌고, background target에서 프로필을 새로 열어 읽은 최신 게시물 href와 게시물 수가 공유 전 preflight 값과 같을 때만 미게시로 판정한다. 그중 하나라도 다르거나 dialog가 남아 있으면 복구하지 말고 needs_review로 끝낸다. 미게시로 판정하면 실패 시각을 timezone 포함 ISO로 `NEWS_PICK_SHARE_FAILED_AT`에 넣고 `NEWS_PICK_SHARE_RECOVERY=1`, `NEWS_PICK_RUN_DIR=<이번 run 디렉터리>`를 함께 설정해 위 시간 게이트를 다시 실행한다(실패 10분 뒤 해제, 회차 시각+60분이 지나면 거부). 게이트가 끝나면 같은 `IG_DUPLICATE_TOKENS`로 preflight를 다시 실행해 `duplicate_match=false`이고 최신 게시물 href가 그대로일 때만 진행한다. 첫 queue job은 needs_review로 둔 채 같은 slides·caption으로 `carousel_queue.py prepare`를 다시 하고, payload hash가 첫 job과 같을 때만 새 job을 예약 승인한다. `browser_web_upload_prepare.py`부터 4:5·caption·AI 라벨·게시 직전 검증을 처음과 똑같이 다시 통과한 뒤, 위 세 환경변수와 `NEWS_PICK_SCHEDULED_MODE=1`, `NEWS_PICK_EDITION_AT`을 유지한 채 `browser_web_share_once.py`를 한 번 실행한다. 이 helper는 run당 한 번만 복구 클릭을 허용한다. 복구 공유도 실패하면 더 시도하지 말고 needs_review로 끝낸다. 복구로 게시했으면 summary에 첫 실패 원인과 복구 시각을 남긴다.
 - 기존 게시물을 삭제하거나 수정하지 않는다. 단, 이번 게시물의 AI 라벨 공개 검증 복구는 publish-news-pick 계약이 허용한 한 번만 수행한다.
@@ -311,8 +345,10 @@ def find_claude() -> Path:
     )
 
 
-def claude_model() -> str:
-    value = (os.environ.get("NEWS_PICK_CLAUDE_MODEL") or DEFAULT_CLAUDE_MODEL).strip()
+def claude_model() -> str | None:
+    value = (os.environ.get("NEWS_PICK_CLAUDE_MODEL") or "").strip()
+    if not value:
+        return None
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]*", value):
         raise ValueError("NEWS_PICK_CLAUDE_MODEL 형식이 올바르지 않다.")
     return value
@@ -340,13 +376,14 @@ def build_command(claude_path: Path, root: Path, schema: dict[str, Any], output_
         "stream-json",
         "--verbose",
         "--dangerously-skip-permissions",
-        "--model",
-        claude_model(),
         "--effort",
         claude_effort(),
         "--json-schema",
         json.dumps(schema, ensure_ascii=False, separators=(",", ":")),
     ]
+    model = claude_model()
+    if model:
+        command.extend(["--model", model])
     try:
         Path(output_root).resolve().relative_to(Path(root).resolve())
     except ValueError:
@@ -542,6 +579,7 @@ def run_job(
     environment = child_environment(settings, scheduled_at, publish_offset=publish_offset)
     with exclusive_lock(scheduler_root / "scheduled-run.lock", now):
         atomic_json(state_path, started)
+        result_path.unlink(missing_ok=True)
         with event_path.open("w", encoding="utf-8") as events, error_path.open("w", encoding="utf-8") as errors:
             completed = subprocess.run(
                 command,

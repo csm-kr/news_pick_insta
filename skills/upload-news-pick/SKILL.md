@@ -7,7 +7,7 @@ description: 공개 반응이 큰 한국 종합 이슈를 최근 48시간에서 
 
 하나의 `run_id` 아래 네 전문 스킬을 순서대로 연결한다. 이 스킬은 각 단계의 일을 직접 대신하지 않고 입력·출력 계약, hash, 중단·재개와 게시 승인 경계만 관리한다.
 
-실행 전 [references/portable-layout.md](references/portable-layout.md)와 [../publish-news-pick/references/edge-browser-contract.md](../publish-news-pick/references/edge-browser-contract.md)를 읽고 다섯 스킬이 같은 부모 폴더에 설치됐는지 확인한다. skill 폴더는 읽기 전용으로 유지하고 모든 실행물은 별도 `NEWS_PICK_OUTPUT_ROOT` 아래에 쓴다. 뉴스픽의 모든 웹 상호작용은 `invoke_edge_browser_harness.py`로만 실행한다. 브라우저는 ego lite 하나다(예약 실행기도 `NEWS_PICK_BROWSER=ego`를 주입한다). Chrome/default/다른 CDP로 대체하지 않는다.
+실행 전 [references/portable-layout.md](references/portable-layout.md)와 [../publish-news-pick/references/edge-browser-contract.md](../publish-news-pick/references/edge-browser-contract.md)를 읽고 다섯 스킬이 같은 부모 폴더에 설치됐는지 확인한다. skill 폴더는 읽기 전용으로 유지하고 모든 실행물은 별도 `NEWS_PICK_OUTPUT_ROOT` 아래에 쓴다. 공개 뉴스 조사와 사진·공식 화면·스타일 reference 수집은 `aside-browser`와 Aside CLI를 사용한다. Instagram 조작·검증만 `invoke_edge_browser_harness.py`의 ego lite를 사용한다(예약 실행기는 `NEWS_PICK_BROWSER=ego`를 주입). Instagram을 Chrome/default/다른 CDP로 대체하지 않는다. 공개 사이트를 Instagram용 ego TaskSpace에 열지 않는다.
 
 ## 고정 구성
 
@@ -31,11 +31,15 @@ python scripts/orchestrate.py init --output-root $env:NEWS_PICK_OUTPUT_ROOT --ed
 
 중단된 executor가 종료됐는데 run만 `in_progress`로 남았다면 산출물을 삭제하거나 직접 JSON을 편집하지 말고 `python scripts/orchestrate.py cancel-run --run <run-directory> --reason <reason>`으로 닫는다.
 
+단, `external_submission_pending=true`이면 executor 종료만으로 stale run으로 취소하지 않는다. 제출 성공·실패가 공개 근거로 확인될 때까지 작성기와 queue를 보존하고 읽기 전용 확인만 한다.
+
 이 명령은 `<output-root>/runs`, `publish-news-pick`, `profile-candidates`, `cache`, `logs`를 만들고 run은 `<output-root>/runs/<run_id>`에 둔다. 기존 실행은 먼저 상태를 읽는다.
 
 ```powershell
 python scripts/orchestrate.py status --run <run-directory>
 ```
+
+사용자가 중지했던 같은 작업을 명시적으로 재개하라고 하면 새 요청으로 다시 만들지 않고 `python scripts/orchestrate.py resume-run --run <run-directory> --reason <재개 지시>`로 준비 단계를 이어간다. 완료 단계의 hash를 다시 확인하며 바뀐 단계부터 재검증한다. 게시 단계 중지나 제출·queue 기록이 있으면 재개 명령으로 변경하지 않는다.
 
 입력 hash가 기존 완료 기록과 같으면 완료 단계를 다시 실행하지 않는다. 앞 단계 산출물이 바뀌면 그 뒤 단계 기록과 승인은 폐기하고 해당 단계부터 다시 시작한다. 자세한 계약은 [references/workflow-contract.md](references/workflow-contract.md)를 읽는다.
 
@@ -77,7 +81,7 @@ python scripts/orchestrate.py complete-stage --run <run-directory> --stage searc
 
 Tibo 작업은 `backend_size=1024x1536`, `resize_fit=cover`, `preserve_backend_raw=true`를 명시한다. 크기 선택은 요청값일 뿐 실제 backend 원본 크기를 잠그지 않으므로 raw와 최종 4:5 결과를 함께 검수한다. 패딩으로 글자와 사진이 작아지는 `contain`은 기본 제작에 쓰지 않는다. 중앙 crop으로 제목·본문·표·로고·핵심 사진이 손실되면 해당 카드만 탈락시키고, 통과한 같은 세트의 4:5 카드를 마지막 레이아웃 reference로 추가해 재생성한다. 그래도 같은 crop 손실만 반복되고 backend raw는 내용 QA를 모두 통과했을 때만 1장에 한해 배경색 매칭 좌우 contain 폴백을 검수할 수 있다. 띠 경계가 보이거나 360px 가독성·세트 리듬이 낮아지면 실패이며, manifest에 raw·최종 sha256, 패딩 색, `fallback_reason=repeated_cover_crop_loss`를 남긴다.
 
-- 원문 기사 대표 사진과 공식 발표·공시 화면을 `invoke_edge_browser_harness.py`(기본 ego lite)로 확보하고 URL·로컬 경로·SHA-256을 기록
+- 원문 기사 대표 사진과 공식 발표·공시 화면을 Aside CLI로 확보하고 URL·로컬 경로·SHA-256을 기록
 - 10개 디렉터 풀에서 3개를 시드 기반 무작위 선택: 3개 × 5장 = 완성 후보 15장
 - 1장은 실제 사진 전면+하단 그라데이션 표지, 2~4장은 줄글+실제 이미지+표, 5장은 출처 전용
 - 프로젝트 어댑터 한 명령에서 단일 이미지 job 15개를 동시에 실행
@@ -135,7 +139,7 @@ DOM/control 오류나 이전 게시 실패 점검을 요청받으면 `publish-ne
 - 마지막 카드의 전체 출처 블록 누락 또는 판독 불가
 - 360px 폭에서 표지 제목·본문 줄글·표 셀·출처 행 중 하나라도 판독 불가
 - exact/near duplicate 또는 같은 인물·사건 사진·공식 화면의 유사 crop 반복
-- 이미지 QA 실패 또는 payload 변경으로 승인 hash 불일치
+- 정상적인 재수집·재생성 후에도 미해결인 이미지 QA 실패 또는 payload 변경으로 승인 hash 불일치
 
 운영 정책은 [references/operating-policy.md](references/operating-policy.md)를 읽는다.
 
@@ -148,7 +152,7 @@ python scripts/scheduled_runner.py --slot 07:00 --dry-run
 python scripts/scheduled_runner.py --slot 07:00
 ```
 
-실행 파일은 `CLAUDE_EXECUTABLE` → PATH의 `claude` → `%USERPROFILE%\.local\bin\claude.exe` 순서로 찾고, `--json-schema`와 `--dangerously-skip-permissions`를 지원하는 버전만 사용한다. 모델과 effort는 기본값(`claude-fable-5-1`, `high`)을 쓰며 `NEWS_PICK_CLAUDE_MODEL`, `NEWS_PICK_CLAUDE_EFFORT`(low·medium·high·xhigh·max)로 바꾼다. `output/workspace.json`에 선택적 `imagegen` 블록(`auth_file`, `model`)을 두면 실행기가 `CODEX_IMAGEGEN_AUTH_FILE`/`CODEX_IMAGEGEN_MODEL`을 주입하고 prompt에 같은 `--imagegen-auth-file`/`--imagegen-model` 값을 명시한다. 이벤트 로그(`output/logs/scheduler/<slot>.jsonl`)는 stream-json이며 `claude_session_id`로 `claude --resume`할 수 있다.
+실행 파일은 `CLAUDE_EXECUTABLE` → PATH의 `claude` → `%USERPROFILE%\.localin\claude.exe` 순서로 찾고, `--json-schema`와 `--dangerously-skip-permissions`를 지원하는 버전만 사용하며 자식 창을 숨긴다. 모델은 Claude Code에 저장된 기본 모델(`/model`)을 따르고 `NEWS_PICK_CLAUDE_MODEL`로만 덮어쓴다. effort는 기본 `high`이며 `NEWS_PICK_CLAUDE_EFFORT`(low·medium·high·xhigh·max)로 바꾼다. `output/workspace.json`의 선택적 `imagegen` 블록(`auth_file`, `model`)이 있으면 실행기가 `CODEX_IMAGEGEN_AUTH_FILE`/`CODEX_IMAGEGEN_MODEL`을 주입하고 prompt에 같은 `--imagegen-auth-file`/`--imagegen-model` 값을 명시한다(이미지 생성 백엔드 인증일 뿐 실행 엔진과 무관하다). 이벤트 로그(`output/logs/scheduler/<slot>.jsonl`)는 stream-json이며 `claude_session_id`로 `claude --resume`할 수 있다.
 
 공개 웹 조사는 `aside-browser`와 Aside CLI를 우선한다. 현재 운영 계정은 Aside의 Instagram 로그아웃을 확인하고 사용자에게 알린 뒤, 게시는 ego lite 기본 프로필의 newspick_studio 세션을 쓴다.
 
