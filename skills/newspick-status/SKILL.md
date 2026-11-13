@@ -9,10 +9,10 @@ description: 뉴스픽(@newspick_studio) 운영 상태를 지금 바로 짧은 �
 
 ```powershell
 $env:PYTHONUTF8 = '1'
-python skills/upload-news-pick/scripts/daily_report.py --status
+python skills/newspick-status/scripts/daily_report.py --status
 ```
 
-Git Bash라면 `PYTHONUTF8=1 python skills/upload-news-pick/scripts/daily_report.py --status`.
+Git Bash라면 `PYTHONUTF8=1 python skills/newspick-status/scripts/daily_report.py --status`.
 
 ## 보여 주는 방법
 

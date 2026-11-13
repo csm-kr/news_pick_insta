@@ -14,6 +14,26 @@ SPEC.loader.exec_module(MOD)
 
 
 class BootstrapTests(unittest.TestCase):
+    def test_pack_has_exactly_two_skills(self):
+        # 사용자 요청(2026-11-13): 단계별 스킬을 newspick-pipeline 하나로 합치고 지금 보고만 따로 둔다
+        top = sorted(p.name for p in MOD.SOURCE_SKILLS.iterdir() if p.is_dir())
+        self.assertEqual(top, ["newspick-pipeline", "newspick-status"])
+        self.assertEqual(MOD.SKILL_NAMES, ("newspick-pipeline", "newspick-status"))
+        for name in MOD.SKILL_NAMES:
+            self.assertTrue((MOD.SOURCE_SKILLS / name / "SKILL.md").is_file())
+
+    def test_pipeline_bundles_every_stage(self):
+        pipeline = MOD.SOURCE_SKILLS / "newspick-pipeline"
+        for stage in ("upload-news-pick", "search-news", "plan-news-pick", "create-news-cards", "publish-news-pick",
+                      "publish-daily-news-story", "follow-suggested", "unfollow-non-followers"):
+            self.assertTrue((pipeline / stage / "SKILL.md").is_file(), stage)
+        hub = (pipeline / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("name: newspick-pipeline", hub)
+        for stage in ("upload-news-pick/SKILL.md", "follow-suggested/SKILL.md", "unfollow-non-followers/SKILL.md"):
+            self.assertIn(stage, hub)
+        status = MOD.SOURCE_SKILLS / "newspick-status"
+        self.assertTrue((status / "scripts" / "daily_report.py").is_file())
+
     def test_initialize_separates_runtime_output(self):
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp)
@@ -34,7 +54,7 @@ class BootstrapTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp) / "skills"
             result = MOD.install(target)
-            self.assertEqual(len(result["installed"]), 6)
+            self.assertEqual(len(result["installed"]), 2)
             for name in MOD.SKILL_NAMES:
                 self.assertTrue((target / name / "SKILL.md").is_file())
                 self.assertFalse((target / name / ".local").exists())
@@ -43,14 +63,14 @@ class BootstrapTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp) / "skills"
             MOD.install(target)
-            marker = target / "publish-news-pick" / "old-marker.txt"
+            marker = target / "newspick-pipeline" / "old-marker.txt"
             marker.write_text("old", encoding="utf-8")
             result = MOD.install(target, update_existing=True)
             self.assertEqual(set(result["updated"]), set(MOD.SKILL_NAMES))
             self.assertFalse(marker.exists())
             backup = Path(result["backup_root"])
-            self.assertEqual((backup / "publish-news-pick" / "old-marker.txt").read_text(encoding="utf-8"), "old")
-            self.assertTrue((target / "publish-news-pick" / "scripts" / "ego_harness.py").is_file())
+            self.assertEqual((backup / "newspick-pipeline" / "old-marker.txt").read_text(encoding="utf-8"), "old")
+            self.assertTrue((target / "newspick-pipeline" / "publish-news-pick" / "scripts" / "ego_harness.py").is_file())
 
     def test_dependency_status_has_aggregate_ready_flag(self):
         result = MOD.dependency_status()
@@ -58,13 +78,13 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(result["ready"], all(item["ok"] for item in result["dependencies"].values()))
 
     def test_publish_skill_uses_only_ego(self):
-        scripts = MOD.SOURCE_SKILLS / "publish-news-pick" / "scripts"
+        scripts = MOD.SOURCE_SKILLS / "newspick-pipeline" / "publish-news-pick" / "scripts"
         self.assertTrue((scripts / "ego_harness.py").is_file())
         self.assertTrue((scripts / "ego_bridge.mjs").is_file())
         self.assertTrue((scripts / "invoke_edge_browser_harness.py").is_file())
         self.assertFalse((scripts / "launch_edge_profile.py").exists())
         self.assertFalse((scripts / "launch_chrome_profile.py").exists())
-        skill = (MOD.SOURCE_SKILLS / "publish-news-pick" / "SKILL.md").read_text(encoding="utf-8")
+        skill = (MOD.SOURCE_SKILLS / "newspick-pipeline" / "publish-news-pick" / "SKILL.md").read_text(encoding="utf-8")
         self.assertNotIn("edge9333", skill)
         self.assertIn("Chrome/default/다른 endpoint는 fail closed", skill)
 
