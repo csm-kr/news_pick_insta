@@ -18,12 +18,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCE_SKILLS = REPO_ROOT / "skills"
 SKILL_NAMES = (
-    "search-news",
-    "plan-news-pick",
-    "create-news-cards",
-    "publish-news-pick",
-    "publish-daily-news-story",
-    "upload-news-pick",
+    "newspick-pipeline",
+    "newspick-status",
 )
 OUTPUT_DIRS = ("runs", "publish-news-pick", "daily-story", "profile-candidates", "cache", "logs")
 
