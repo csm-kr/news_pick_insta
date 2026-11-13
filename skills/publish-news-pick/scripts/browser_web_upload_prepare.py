@@ -26,25 +26,71 @@ def paced_wait(low=0.22, high=0.48):
     time.sleep(random.uniform(low, high))
 
 
-def click_named_control(name):
+def ensure_window_visible(timeout=5):
+    """최소화된 Edge 창의 탭은 hidden이라 Instagram이 파일을 받아도 자르기 단계를 그리지 않는다."""
+    if js("document.visibilityState==='visible'"):
+        return
+    window = cdp("Browser.getWindowForTarget")
+    if window.get("bounds", {}).get("windowState") == "minimized":
+        cdp("Browser.setWindowBounds", windowId=window["windowId"], bounds={"windowState": "normal"})
+    deadline = time.monotonic() + timeout
+    while not js("document.visibilityState==='visible'"):
+        if time.monotonic() >= deadline:
+            raise RuntimeError("Instagram tab is hidden (minimized or covered Edge window); crop step cannot render")
+        paced_wait(0.2, 0.3)
+
+
+def dispatch_pointer_click(x, y):
+    """좌표 클릭이 작성 창을 열지 못했을 때만 쓰는 같은 좌표의 합성 포인터 시퀀스."""
+    return js(
+        """
+((x, y) => {
+  const target=document.elementFromPoint(x, y);
+  if(!target)return false;
+  const opts={bubbles:true,cancelable:true,composed:true,clientX:x,clientY:y,button:0,pointerId:1,isPrimary:true,pointerType:'mouse'};
+  target.dispatchEvent(new PointerEvent('pointerover',opts));
+  target.dispatchEvent(new MouseEvent('mouseover',opts));
+  target.dispatchEvent(new MouseEvent('mousemove',opts));
+  target.dispatchEvent(new PointerEvent('pointerdown',opts));
+  target.dispatchEvent(new MouseEvent('mousedown',opts));
+  target.dispatchEvent(new PointerEvent('pointerup',opts));
+  target.dispatchEvent(new MouseEvent('mouseup',opts));
+  target.dispatchEvent(new MouseEvent('click',opts));
+  return true;
+})(%s, %s)
+"""
+        % (json.dumps(x), json.dumps(y))
+    )
+
+
+def click_named_control(name, deprioritize_href=None):
     control = js(
         """
-((name) => {
+((name, deprioritizeHref) => {
+  const normalize=value=>String(value||'').replace(/\\/$/,'');
   const candidates=[...document.querySelectorAll('a,button,[role=button]')];
-  const e=candidates.find(x=>{
+  const matched=candidates.filter(x=>{
     const r=x.getBoundingClientRect();
     const ownLabel=(x.getAttribute('aria-label')||'').trim();
     const textLabel=(x.innerText||'').trim();
     const svgLabel=(x.querySelector('svg[aria-label]')?.getAttribute('aria-label')||'').trim();
     const label=ownLabel||textLabel||svgLabel;
     return label===name && r.width>0 && r.height>0;
+  }).map(x=>{
+    const r=x.getBoundingClientRect();
+    const href=(x.getAttribute('href')||'').trim();
+    return {
+      x:r.x+r.width/2, y:r.y+r.height/2, label:name, href,
+      profile_link: !!deprioritizeHref && normalize(new URL(href||'#', location.href).href)===normalize(deprioritizeHref)
+    };
   });
-  if(!e)return null;
-  const r=e.getBoundingClientRect();
-  return {x:r.x+r.width/2,y:r.y+r.height/2,label:name};
-})(%s)
+  // 좁은 사이드바에서는 계정 프로필 링크가 같은 svg 라벨을 달고 먼저 나온다.
+  // 그 후보를 누르면 프로필로 이동만 하므로 항상 뒤로 미룬다.
+  matched.sort((a,b)=>Number(a.profile_link)-Number(b.profile_link));
+  return matched[0]||null;
+})(%s, %s)
 """
-        % json.dumps(name, ensure_ascii=False)
+        % (json.dumps(name, ensure_ascii=False), json.dumps(deprioritize_href))
     )
     if control:
         click_at_xy(control["x"], control["y"])
@@ -148,6 +194,7 @@ targets = [
 if len(targets) != 1:
     raise RuntimeError("Instagram page target count is " + str(len(targets)))
 attach_writable_target(targets[0]["targetId"])
+ensure_window_visible()
 
 account = os.environ.get("IG_ACCOUNT", "newspick_studio").strip().lstrip("@").lower()
 if not re.fullmatch(r"[a-z0-9._]+", account):
@@ -202,10 +249,17 @@ else:
         clicked = {"source": "existing_create_modal"}
     else:
         try:
-            clicked = click_named_control("새로운 게시물")
+            clicked = click_named_control("새로운 게시물", profile_url)
         except RuntimeError:
-            clicked = click_named_control("만들기")
+            clicked = click_named_control("만들기", profile_url)
         paced_wait(0.32, 0.58)
+        # 좌표 클릭이 화면에 닿지 않으면 작성 dialog도 file input도 생기지 않는다.
+        # dialog가 이미 열렸으면 그 위를 다시 누르지 않는다.
+        opened = read_upload_state()
+        if not opened.get("dialog_present") and not opened.get("input_present"):
+            if "x" in clicked and dispatch_pointer_click(clicked["x"], clicked["y"]):
+                clicked["reinforced_with_pointer_sequence"] = True
+            paced_wait(0.32, 0.58)
     input_state = wait_for_multiple_input()
     upload_file(selector, media)
     deadline = time.monotonic() + 12

@@ -4,8 +4,6 @@ Executed inside Browser Harness. The session cookie stays in process memory and
 is never persisted or included in output.
 """
 
-from __future__ import annotations
-
 import hashlib
 import json
 import os
@@ -148,6 +146,17 @@ def session_secret(session_id: str) -> str:
     return secret
 
 
+def harden_private_client(client):
+    """제거된 qe/expose 엔드포인트의 404가 성공한 게시를 덮어쓰지 않게 한다.
+
+    instagrapi는 스토리 configure가 끝난 뒤에만 expose()를 부른다. 2026-09-13·14 실측에서
+    이 호출이 404를 돌려 예외가 났고, 첫 스토리는 이미 올라간 상태로 배치가 중단됐다.
+    노출 로깅은 게시 성공과 무관하므로 호출을 무해하게 만든다.
+    """
+    client.expose = lambda *args, **kwargs: {}
+    return client
+
+
 def story_identity(story) -> tuple[str, str]:
     return (
         str(getattr(story, "pk", "") or ""),
@@ -210,7 +219,7 @@ def main() -> int:
         stage = "read_session_cookie"
         secret = session_secret(attached_session)
         stage = "confirm_private_client_account"
-        client = Client()
+        client = harden_private_client(Client())
         client.request_timeout = 45
         if not client.login_by_sessionid(secret):
             raise RuntimeError("private client login failed")

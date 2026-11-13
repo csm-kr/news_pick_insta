@@ -20,12 +20,8 @@ class PipelineIntegrationTests(unittest.TestCase):
             folder = run / "02-plan"
             folder.mkdir(parents=True)
             board = {
-                "card_count": 3,
-                "cards": [
-                    {"index": 1, "evidence_ids": ["c1"]},
-                    {"index": 2, "evidence_ids": ["c1"]},
-                    {"index": 3, "evidence_ids": ["c1"]},
-                ],
+                "card_count": 5,
+                "cards": [{"index": index, "evidence_ids": ["c1"]} for index in range(1, 6)],
                 "qa": {"hard_fail_passed": True, "editorial_score": 15},
             }
             (folder / "storyboard.json").write_text(json.dumps(board), encoding="utf-8")
@@ -43,6 +39,7 @@ class PipelineIntegrationTests(unittest.TestCase):
                 "topic": "real_estate",
                 "verified_headline": "검증 문장",
                 "why_it_matters": "국내 영향",
+                "reaction_signals": [{"type": "portal"}, {"type": "coverage"}],
                 "claims": [{"id": "c1", "text": "사실", "status": "verified", "evidence_ids": ["p1", "p2"]}],
                 "sources": [
                     {"id": "p1", "source_type": "press_article", "publisher": "A"},
@@ -56,11 +53,13 @@ class PipelineIntegrationTests(unittest.TestCase):
             board = {
                 "schema_version": "1.0",
                 "story_id": "story-1",
-                "card_count": 3,
+                "card_count": 5,
                 "cards": [
                     {"index": 1, "role": "hook", "copy": "a", "evidence_ids": ["c1"]},
-                    {"index": 2, "role": "facts_and_context", "copy": "b", "evidence_ids": ["c1"]},
-                    {"index": 3, "role": "impact_unknowns_sources", "copy": "c", "evidence_ids": ["c1"]},
+                    {"index": 2, "role": "verified_facts", "copy": "b", "evidence_ids": ["c1"]},
+                    {"index": 3, "role": "numbers_and_context", "copy": "c", "evidence_ids": ["c1"]},
+                    {"index": 4, "role": "impact_and_reactions", "copy": "d", "evidence_ids": ["c1"]},
+                    {"index": 5, "role": "sources", "copy": "e", "evidence_ids": ["c1"]},
                 ],
                 "qa": {"hard_fail_passed": True, "editorial_score": 16},
             }
@@ -69,16 +68,16 @@ class PipelineIntegrationTests(unittest.TestCase):
             MOD.complete_stage(run, "plan-news-pick")
 
             candidates = run / "03-create" / "candidates"
-            for direction in range(1, 5):
+            for direction in range(1, 4):
                 folder = candidates / f"direction-{direction:02d}"
                 folder.mkdir(parents=True)
-                for card in range(1, 4):
+                for card in range(1, 6):
                     (folder / f"card-{card:02d}.png").write_bytes(b"synthetic-png")
             slides = run / "03-create" / "slides"
             slides.mkdir()
-            for card in range(1, 4):
+            for card in range(1, 6):
                 (slides / f"{card:02d}.png").write_bytes(b"synthetic-final-png")
-            (run / "03-create" / "selection.json").write_text(json.dumps({"story_id": "story-1", "direction_id": "direction-01", "card_count": 3}), encoding="utf-8")
+            (run / "03-create" / "selection.json").write_text(json.dumps({"story_id": "story-1", "direction_id": "direction-01", "card_count": 5}), encoding="utf-8")
             (run / "03-create" / "duplicate-qa.json").write_text(json.dumps({"passed": True}), encoding="utf-8")
             (run / "03-create" / "qa-report.json").write_text(
                 json.dumps({"passed": True, "checks": {"no_exact_or_near_duplicate": True}}),
@@ -87,7 +86,7 @@ class PipelineIntegrationTests(unittest.TestCase):
             MOD.complete_stage(run, "create-news-cards")
 
             (run / "04-publish" / "publish-job.json").write_text("{}", encoding="utf-8")
-            (run / "04-publish" / "result.json").write_text(json.dumps({"status": "published", "public_verified": True}), encoding="utf-8")
+            (run / "04-publish" / "result.json").write_text(json.dumps({"status": "published", "public_verified": True, "portrait_4x5": True, "card_count": 5}), encoding="utf-8")
             final = MOD.complete_stage(run, "publish-news-pick")
             self.assertEqual(final["status"], "completed")
             self.assertIsNone(final["current_stage"])

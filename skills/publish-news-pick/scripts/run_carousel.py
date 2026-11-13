@@ -49,11 +49,8 @@ def main() -> int:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--job", type=Path)
     mode.add_argument("--probe-account")
-    parser.add_argument("--config", type=Path, required=True)
     args = parser.parse_args()
     try:
-        config = carousel_queue.read_config(args.config)
-        carousel_queue.probe_endpoint(config["endpoint"])
         packages = site_packages()
         if args.job:
             job_path = args.job.resolve()

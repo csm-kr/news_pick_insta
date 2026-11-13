@@ -37,6 +37,7 @@ class OrchestrateTests(unittest.TestCase):
             run = Path(result["run"])
             story = {
                 "verification_status": "verified",
+                "reaction_signals": [{"type": "portal"}, {"type": "coverage"}],
                 "sources": [
                     {"source_type": "press_article", "publisher": "A"},
                     {"source_type": "press_article", "publisher": "B"},
@@ -51,7 +52,7 @@ class OrchestrateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             result = MOD.init_run(Path(tmp), "2026-08-17T17:00:00+09:00", "newspick_studio")
             run = Path(result["run"])
-            story = {"verification_status": "verified", "sources": [{"source_type": "press_article", "publisher": "A"}]}
+            story = {"verification_status": "verified", "reaction_signals": [{"type": "portal"}, {"type": "coverage"}], "sources": [{"source_type": "press_article", "publisher": "A"}]}
             (run / "01-search" / "selected-story.json").write_text(json.dumps(story), encoding="utf-8")
             with self.assertRaises(ValueError):
                 MOD.complete_stage(run, "search-news")
@@ -70,6 +71,74 @@ class OrchestrateTests(unittest.TestCase):
             self.assertEqual(artifact.read_text(encoding="utf-8"), "keep")
             with self.assertRaises(ValueError):
                 MOD.cancel_run(run, "again")
+
+
+    def cancelled_preparation(self, root):
+        run = Path(MOD.init_run(root, "2026-11-10T07:00:00+09:00", "newspick_studio")["run"])
+        story = {"verification_status": "verified", "reaction_signals": [{"type": "portal"}, {"type": "coverage"}], "sources": [{"source_type": "press_article", "publisher": "A"}, {"source_type": "press_article", "publisher": "B"}]}
+        MOD.atomic_json(run / "01-search/selected-story.json", story)
+        MOD.complete_stage(run, "search-news")
+        MOD.cancel_run(run, "user requested stop")
+        return run
+
+    def test_resume_reuses_unchanged_completed_stage_and_keeps_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = self.cancelled_preparation(Path(tmp))
+            artifact = run / "01-search/selected-story.json"
+            before = artifact.read_bytes()
+            previous = MOD.load_json(run / "run.json")["stages"]["search-news"]
+            state = MOD.resume_run(run, "user explicitly requested continue")
+            self.assertEqual(state["status"], "in_progress")
+            self.assertEqual(state["current_stage"], "plan-news-pick")
+            self.assertEqual(state["stages"]["search-news"], previous)
+            self.assertEqual(artifact.read_bytes(), before)
+            self.assertEqual(state["resume_history"][0]["cancellation_reason"], "user requested stop")
+            self.assertEqual(state["stages"]["plan-news-pick"]["status"], "pending")
+
+    def test_resume_invalidates_changed_completed_inputs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = self.cancelled_preparation(Path(tmp))
+            story = MOD.load_json(run / "01-search/selected-story.json")
+            story["updated_at"] = "2026-11-10T21:00:00+09:00"
+            MOD.atomic_json(run / "01-search/selected-story.json", story)
+            state = MOD.resume_run(run, "resume after changed input")
+            self.assertEqual(state["current_stage"], "search-news")
+            self.assertTrue(all(r == {"status": "pending", "output_sha256": None} for r in state["stages"].values()))
+            self.assertEqual(MOD.load_json(run / "01-search/selected-story.json"), story)
+
+    def test_resume_refuses_submission_evidence_without_mutation(self):
+        for evidence in ("external_submission_pending", "publish-job.json", "attempts.jsonl", "result.json"):
+            with self.subTest(evidence=evidence), tempfile.TemporaryDirectory() as tmp:
+                run = self.cancelled_preparation(Path(tmp))
+                if evidence == "external_submission_pending":
+                    state = MOD.load_json(run / "run.json")
+                    state[evidence] = True
+                    MOD.atomic_json(run / "run.json", state)
+                else:
+                    (run / "04-publish" / evidence).write_text("{}", encoding="utf-8")
+                before = (run / "run.json").read_bytes()
+                with self.assertRaisesRegex(ValueError, "제출 기록"):
+                    MOD.resume_run(run, "continue")
+                self.assertEqual((run / "run.json").read_bytes(), before)
+
+    def test_resume_refuses_cancelled_publish_stage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = self.cancelled_preparation(Path(tmp))
+            state = MOD.load_json(run / "run.json")
+            state["stages"]["plan-news-pick"]["status"] = "completed"
+            state["stages"]["publish-news-pick"]["status"] = "cancelled"
+            MOD.atomic_json(run / "run.json", state)
+            with self.assertRaisesRegex(ValueError, "게시 단계"):
+                MOD.resume_run(run, "continue")
+
+    def test_resume_requires_explicit_reason_and_cancelled_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = self.cancelled_preparation(Path(tmp))
+            with self.assertRaisesRegex(ValueError, "사유"):
+                MOD.resume_run(run, "  ")
+            MOD.resume_run(run, "continue")
+            with self.assertRaisesRegex(ValueError, "cancelled"):
+                MOD.resume_run(run, "again")
 
 
 if __name__ == "__main__":

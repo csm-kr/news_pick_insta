@@ -14,8 +14,24 @@ def read_ai_switch():
   const lines=(root.innerText||'').split('\\n').map(line=>line.trim());
   const label=labels.find(value=>lines.includes(value));
   const switches=[...root.querySelectorAll('[role=switch],input[type=checkbox]')];
-  if(!label||switches.length!==1)return null;
-  const element=switches[0];
+  if(!label)return null;
+  // 작성창에는 '콘텐츠 예약' 같은 다른 toggle이 함께 있을 수 있다(2026-09-23 관측).
+  // AI 라벨 문구를 담은 가장 가까운 조상 블록으로 대상을 특정하고,
+  // 후보가 없거나 둘 이상이면 예전처럼 단일 toggle일 때만 받아들인다.
+  const owns=node=>{
+    let parent=node;
+    for(let depth=0;depth<6;depth++){
+      parent=parent.parentElement;
+      if(!parent)return false;
+      const text=(parent.innerText||'').trim();
+      if(!text)continue;
+      return labels.some(value=>text.includes(value));
+    }
+    return false;
+  };
+  const matched=switches.filter(owns);
+  const element=matched.length===1?matched[0]:(switches.length===1?switches[0]:null);
+  if(!element)return null;
   const rect=element.getBoundingClientRect();
   const style=getComputedStyle(element);
   const x=rect.x+rect.width/2,y=rect.y+rect.height/2;
@@ -25,7 +41,9 @@ def read_ai_switch():
     checked:typeof element.checked==='boolean'?element.checked:element.getAttribute('aria-checked')==='true',
     visible:rect.width>0&&rect.height>0&&x>=0&&y>=0&&x<innerWidth&&y<innerHeight&&style.display!=='none'&&style.visibility!=='hidden',
     disabled:element.disabled===true||element.getAttribute('aria-disabled')==='true',
-    hit_matches:!!hit&&(hit===element||element.contains(hit))
+    // Instagram의 AI toggle은 숨은 input 위에 형제 렌더 요소를 덮는다.
+    // 같은 toggle 래퍼 안이 찍히면 좌표 클릭이 그 toggle에 도달하므로 눌러도 되는 상태로 본다.
+    hit_matches:!!hit&&(hit===element||element.contains(hit)||(!!element.parentElement&&element.parentElement.contains(hit)))
   };
 })()
 """
@@ -72,6 +90,23 @@ if "AI로 재구성한 인포그래픽" in caption:
 
 def normalize_editor_text(value):
     return str(value or "").replace("\r\n", "\n").rstrip("\n")
+
+
+def dismiss_caption_suggestions():
+    # A focused trailing hashtag opens suggestions over the AI switch. Blur only
+    # this composer's caption; Escape opens the destructive discard dialog.
+    return js(
+        """
+(() => {
+  const dialog=document.querySelector('[role=dialog]');
+  const editor=dialog?.querySelector('textarea,[role=textbox][contenteditable=true],[role=textbox][aria-label]');
+  const active=document.activeElement;
+  if(!editor||!active||(active!==editor&&!editor.contains(active)))return false;
+  active.blur();
+  return true;
+})()
+"""
+    )
 
 
 def read_caption():
@@ -138,6 +173,10 @@ if normalize_editor_text(read_caption()) != normalize_editor_text(caption):
 
 if normalize_editor_text(read_caption()) != normalize_editor_text(caption):
     raise RuntimeError("caption mismatch; AI label and Share were not touched")
+dismiss_caption_suggestions()
+time.sleep(random.uniform(0.3, 0.5))
+if normalize_editor_text(read_caption()) != normalize_editor_text(caption):
+    raise RuntimeError("caption changed after closing suggestions; do not share")
 ai_switch = ensure_ai_label()
 
 state = js(

@@ -6,10 +6,16 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$taskName = 'NewsPickInstagram-DailyStory-2100'
+$taskName = 'NewsPickInstagram-DailyStory-1900'
+$legacyTaskNames = @('NewsPickInstagram-DailyStory-2100')
 $runner = (Resolve-Path (Join-Path $PSScriptRoot 'scheduled_story_runner.py')).Path
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $python = (Get-Command python.exe -ErrorAction Stop).Source
+# 예약 작업은 콘솔 창 없이 돌도록 pythonw.exe로 실행한다. 창을 닫아 run이 죽는 일을 막는다.
+$pythonw = Join-Path (Split-Path $python) 'pythonw.exe'
+if (-not (Test-Path $pythonw)) {
+    throw "pythonw.exe를 찾을 수 없다: $pythonw"
+}
 $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 
 function Get-NewsPickStoryTaskRecord {
@@ -17,7 +23,7 @@ function Get-NewsPickStoryTaskRecord {
     if ($null -eq $task) {
         return [pscustomobject]@{
             task_name = $taskName
-            target_time = '21:00'
+            target_time = '19:00'
             installed = $false
             state = $null
             next_run = $null
@@ -28,7 +34,7 @@ function Get-NewsPickStoryTaskRecord {
     $info = Get-ScheduledTaskInfo -TaskName $taskName
     return [pscustomobject]@{
         task_name = $taskName
-        target_time = '21:00'
+        target_time = '19:00'
         installed = $true
         state = [string]$task.State
         next_run = $info.NextRunTime.ToString('o')
@@ -44,11 +50,11 @@ if ($Command -eq 'install') {
     }
     & $python $runner --dry-run | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        throw '21:00 Story 예약 dry-run이 실패했다.'
+        throw '19:00 Story 예약 dry-run이 실패했다.'
     }
     $arguments = "`"$runner`""
-    $action = New-ScheduledTaskAction -Execute $python -Argument $arguments -WorkingDirectory $projectRoot
-    $trigger = New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours(21))
+    $action = New-ScheduledTaskAction -Execute $pythonw -Argument $arguments -WorkingDirectory $projectRoot
+    $trigger = New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours(19))
     $principal = New-ScheduledTaskPrincipal -UserId $currentUser -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet `
         -WakeToRun `
@@ -62,11 +68,18 @@ if ($Command -eq 'install') {
         -Trigger $trigger `
         -Principal $principal `
         -Settings $settings `
-        -Description 'News Pick Edge edge9333 only. Publish and verify three separate 05/12/17 edition Stories at 21:00 KST.'
+        -Description 'News Pick ego lite. Publish and verify three separate 07/12/17 edition Stories at 19:00 KST.'
     Register-ScheduledTask -TaskName $taskName -InputObject $task -Force | Out-Null
+    foreach ($legacyName in $legacyTaskNames) {
+        if (Get-ScheduledTask -TaskName $legacyName -ErrorAction SilentlyContinue) {
+            Unregister-ScheduledTask -TaskName $legacyName -Confirm:$false
+        }
+    }
 } elseif ($Command -eq 'remove') {
-    if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
-        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+    foreach ($name in @($taskName) + $legacyTaskNames) {
+        if (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue) {
+            Unregister-ScheduledTask -TaskName $name -Confirm:$false
+        }
     }
 }
 

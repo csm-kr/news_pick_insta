@@ -74,14 +74,16 @@ def validate_stage(run: Path, stage: str) -> None:
         story = load_json(folder / "selected-story.json")
         if story.get("verification_status") != "verified":
             raise ValueError("selected story가 verified가 아니다.")
+        if len(story.get("reaction_signals", [])) < 2:
+            raise ValueError("서로 다른 공개 반응 신호가 최소 2개 필요하다.")
         press = {s.get("publisher") for s in story.get("sources", []) if s.get("source_type") == "press_article"}
         if len({x for x in press if x}) < 2:
             raise ValueError("서로 독립적인 언론사 원문 두 곳이 필요하다.")
     elif stage == "plan-news-pick":
         board = load_json(folder / "storyboard.json")
         count = board.get("card_count")
-        if count not in (3, 4) or len(board.get("cards", [])) != count:
-            raise ValueError("storyboard는 정확히 3장 또는 4장이어야 한다.")
+        if count != 5 or len(board.get("cards", [])) != count:
+            raise ValueError("storyboard는 정확히 5장이어야 한다.")
         if not board.get("qa", {}).get("hard_fail_passed") or board.get("qa", {}).get("editorial_score", 0) < 16:
             raise ValueError("기획 QA가 통과되지 않았다.")
         for card in board["cards"]:
@@ -93,9 +95,9 @@ def validate_stage(run: Path, stage: str) -> None:
         duplicate_qa = load_json(folder / "duplicate-qa.json")
         candidates = [p for p in (folder / "candidates").rglob("*.png")]
         slides = [p for p in (folder / "slides").glob("*.png")]
-        if len(candidates) != 12:
-            raise ValueError("후보 이미지는 정확히 12장이어야 한다.")
-        if len(slides) not in (3, 4) or selection.get("card_count") != len(slides):
+        if len(candidates) != 15:
+            raise ValueError("후보 이미지는 정확히 15장이어야 한다.")
+        if len(slides) != 5 or selection.get("card_count") != len(slides):
             raise ValueError("선택된 최종 slides 장수가 올바르지 않다.")
         if qa.get("passed") is not True:
             raise ValueError("이미지 QA가 통과되지 않았다.")
@@ -103,7 +105,12 @@ def validate_stage(run: Path, stage: str) -> None:
             raise ValueError("이미지 중복 QA가 통과되지 않았다.")
     else:
         result = load_json(folder / "result.json")
-        if result.get("status") != "published" or result.get("public_verified") is not True:
+        if (
+            result.get("status") != "published"
+            or result.get("public_verified") is not True
+            or result.get("portrait_4x5") is not True
+            or result.get("card_count") != 5
+        ):
             raise ValueError("Instagram 공개 검증이 완료되지 않았다.")
 
 
@@ -176,6 +183,46 @@ def cancel_run(run: Path, reason: str) -> dict[str, Any]:
     return state
 
 
+def resume_run(run: Path, reason: str) -> dict[str, Any]:
+    """Resume stopped preparation without replaying any publication."""
+    state = load_json(run / "run.json")
+    if state.get("status") != "cancelled":
+        raise ValueError("cancelled run만 명시적으로 재개할 수 있다.")
+    if not reason.strip():
+        raise ValueError("재개 사유가 필요하다.")
+    publish = run / DIRS[STAGES[-1]]
+    if state.get("external_submission_pending") or any(
+        (publish / name).exists()
+        for name in ("publish-job.json", "attempts.jsonl", "result.json")
+    ):
+        raise ValueError("게시·제출 기록이 있는 run은 재개하지 않는다. 공개 결과를 먼저 대조한다.")
+    cancelled = [i for i, stage in enumerate(STAGES) if state["stages"][stage].get("status") == "cancelled"]
+    if len(cancelled) != 1 or cancelled[0] == len(STAGES) - 1:
+        raise ValueError("검색·기획·제작 중 중지된 단계 하나가 있어야 한다. 게시 단계는 자동 재개하지 않는다.")
+    resume_index = cancelled[0]
+    for index, stage in enumerate(STAGES[:resume_index]):
+        record = state["stages"][stage]
+        if record.get("status") != "completed":
+            raise ValueError("중지된 단계 앞의 완료 기록이 올바르지 않다.")
+        if tree_hash(run / DIRS[stage]) != record.get("output_sha256"):
+            resume_index = index
+            break
+        validate_stage(run, stage)
+    resumed_at = now_iso()
+    state.setdefault("resume_history", []).append({
+        "resumed_at": resumed_at,
+        "reason": reason.strip(),
+        "cancelled_at": state.get("cancelled_at"),
+        "cancellation_reason": state.get("cancellation_reason"),
+        "resume_stage": STAGES[resume_index],
+    })
+    for stage in STAGES[resume_index:]:
+        state["stages"][stage] = {"status": "pending", "output_sha256": None}
+    state.update(status="in_progress", current_stage=STAGES[resume_index], resumed_at=resumed_at)
+    atomic_json(run / "run.json", state)
+    return state
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -193,6 +240,9 @@ def main() -> int:
     cancel = commands.add_parser("cancel-run")
     cancel.add_argument("--run", type=Path, required=True)
     cancel.add_argument("--reason", required=True)
+    resume = commands.add_parser("resume-run")
+    resume.add_argument("--run", type=Path, required=True)
+    resume.add_argument("--reason", required=True)
     validate = commands.add_parser("validate-stage")
     validate.add_argument("--run", type=Path, required=True)
     validate.add_argument("--stage", choices=STAGES, required=True)
@@ -210,6 +260,8 @@ def main() -> int:
             result = complete_stage(args.run, args.stage)
         elif args.command == "cancel-run":
             result = cancel_run(args.run, args.reason)
+        elif args.command == "resume-run":
+            result = resume_run(args.run, args.reason)
         else:
             validate_stage(args.run, args.stage)
             result = {"valid": True, "stage": args.stage}

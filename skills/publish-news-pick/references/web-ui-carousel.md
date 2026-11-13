@@ -65,7 +65,7 @@ python scripts/carousel_queue.py record-web-submitted <job_id> --shortcode <code
 - carousel 장수가 일치
 - 5개 index가 서로 다른 media source이며 모든 주 이미지의 자연·렌더 비율이 `0.78~0.82`
 - caption 첫 문장과 기준시각이 일치
-- 사실적 AI 재구성 카드에 현재 Instagram 공개 DOM의 `AI 콘텐츠`, `AI 크리에이터` 또는 `Made with AI` 표시가 보임
+- 사실적 AI 재구성 카드에 현재 Instagram 공개 DOM의 `AI 콘텐츠`, `AI 크리에이터`, `Made with AI` 또는 `AI로 생성한 프로필` 표시가 보임
 
 화살표와 pagination dot은 DOM에서 사라질 수 있다. 공유 성공 직후 같은 승인 거래임을 나타내는 `IG_APPROVED_PUBLISH_VERIFY=1`을 설정하고 `scripts/browser_web_verify_carousel.py`로 permalink의 `?img_index=1`부터 `?img_index=<장수>`까지 열어 active index 순서와 서로 다른 media source 5개를 확인한다. 본문 주 이미지는 화면 상단의 4:5 이미지와 자연·렌더 비율로 고르며, 페이지 아래 `게시물 더 보기`의 정방형 thumbnail을 제외한다. 첫·마지막 JPEG screenshot을 남기고 실제 마지막 출처 카드가 보이지 않으면 검증 실패다.
 
@@ -75,7 +75,7 @@ python scripts/carousel_queue.py record-web-submitted <job_id> --shortcode <code
 
 ## AI 라벨 저장 누락 복구
 
-작성 직전 switch가 `true`였어도 공개 페이지에 `AI 콘텐츠`, `AI 크리에이터`, `Made with AI` 중 어느 표시도 없을 수 있다. 이 경우 새 게시물을 만들지 않는다.
+작성 직전 switch가 `true`였어도 공개 페이지에 `AI 콘텐츠`, `AI 크리에이터`, `Made with AI`, `AI로 생성한 프로필` 중 어느 표시도 없을 수 있다. 이 경우 새 게시물을 만들지 않는다.
 
 1. 해당 permalink의 `옵션 더 보기` → `수정`을 연다.
 2. `AI 라벨 추가`가 `true`인지 확인한다.
@@ -87,11 +87,11 @@ caption과 이미지에는 손대지 않는다. 한 번의 저장 뒤에도 표�
 
 ## 실제 실패에서 확정한 규칙
 
-- visible Edge 로그인과 private API 로그인은 별개다. private API의 `login_required` 뒤에도 웹 UI는 정상 게시될 수 있다.
+- ego lite 웹 로그인과 private API 로그인은 별개다. private API의 `login_required` 뒤에도 웹 UI는 정상 게시될 수 있다.
 - private API가 제출 경계 뒤 실패했으면 공개 프로필에 중복이 없는지 확인한 후에만 웹 UI로 전환한다.
 - Instagram 성공 문구와 공개 permalink를 둘 다 확인해야 한다.
 - 성공한 웹 게시를 queue job에 연결해야 `failed_pre_submit` 또는 `needs_review`가 다음 실행에서 재게시되지 않는다.
 - 공개 permalink 직후 마지막 장은 지연 로딩될 수 있다. 회색 placeholder와 pagination dot만으로 마지막 카드 일치를 판정하지 않는다.
 - 다른 수동·예약 run이 작성기를 사용 중이면 그 draft를 stale로 간주해 닫지 않는다. 작성기 소유자가 하나인지 먼저 확인하고, 예약 실행은 `composer_busy`로 건너뛴다.
-- `switch_tab` attach만으로 writable Edge target이 전면 활성화됐다고 가정하지 않는다. 변경 helper는 target을 명시적으로 활성화한다.
+- `switch_tab` attach만으로 writable target이 전면 활성화됐다고 가정하지 않는다. 변경 helper는 target을 명시적으로 활성화한다.
 - 활성 작성 화면의 일반 PNG screenshot이 timeout이면 같은 화면을 저용량 JPEG CDP 캡처로 한 번 남긴다. 이 timeout 때문에 업로드를 반복하지 않는다.

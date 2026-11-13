@@ -49,8 +49,8 @@ def normalized_mae(left: Image.Image, right: Image.Image, crop: tuple[float, flo
 
 
 def analyze_paths(paths: list[Path], hamming_threshold: int = 7, mae_threshold: float = 18.0) -> dict:
-    if len(paths) not in (3, 4):
-        raise ValueError("중복 QA는 정확히 3~4장 세트가 필요하다.")
+    if len(paths) != 5:
+        raise ValueError("중복 QA는 정확히 5장 세트가 필요하다.")
     images = []
     records = []
     for index, path in enumerate(paths, 1):

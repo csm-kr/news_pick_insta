@@ -15,30 +15,46 @@ import render_story_video as legacy
 
 
 STORY_COUNT = 3
-EDITION_SLOTS = ("05:00", "12:00", "17:00")
+EDITION_SLOTS = ("07:00", "12:00", "17:00")
+
+
+def slot_replacements(output_root: Path, target_date: date) -> dict[str, str]:
+    """정규 회차를 대신한 수동 run 기록(`scheduler/editions/<날짜>-HHMM.replacement.json`)을 run_id → 회차로 읽는다."""
+    overrides: dict[str, str] = {}
+    for slot in EDITION_SLOTS:
+        path = output_root / "scheduler" / "editions" / f"{target_date.isoformat()}-{slot.replace(':', '')}.replacement.json"
+        if path.is_file():
+            record = json.loads(path.read_text(encoding="utf-8-sig"))
+            if record.get("run_id"):
+                overrides[str(record["run_id"])] = slot
+    return overrides
 
 
 def ordered_slot_sources(
-    sources: list[legacy.Source], target_date: date
+    sources: list[legacy.Source],
+    target_date: date,
+    story_count: int = STORY_COUNT,
+    slot_overrides: dict[str, str] | None = None,
 ) -> list[legacy.Source]:
+    slots = EDITION_SLOTS[:story_count]
     by_slot: dict[str, legacy.Source] = {}
     for source in sources:
         if source.edition_at.date() != target_date:
             raise ValueError(
                 f"Story source edition date must be {target_date}: {source.run_id}"
             )
-        slot = source.edition_at.strftime("%H:%M")
-        if slot not in EDITION_SLOTS:
+        slot = (slot_overrides or {}).get(source.run_id) or source.edition_at.strftime("%H:%M")
+        if slot not in slots:
             raise ValueError(
-                f"Story source must be a 05:00, 12:00, or 17:00 edition: {source.run_id}"
+                f"Story source must be a 07:00, 12:00, or 17:00 edition: {source.run_id}"
             )
         if slot in by_slot:
             raise ValueError(f"more than one publicly verified Story source exists for {slot}")
         by_slot[slot] = source
-    missing = [slot for slot in EDITION_SLOTS if slot not in by_slot]
+    missing = [slot for slot in slots if slot not in by_slot]
     if missing:
         raise ValueError("missing publicly verified Story editions: " + ", ".join(missing))
-    return [by_slot[slot] for slot in EDITION_SLOTS]
+    return [by_slot[slot] for slot in slots]
 
 
 def batch_input_sha256(sources: list[legacy.Source], target_date: date) -> str:
@@ -51,6 +67,8 @@ def batch_input_sha256(sources: list[legacy.Source], target_date: date) -> str:
             "height": legacy.HEIGHT,
             "fps": legacy.FPS,
             "frames_per_story": legacy.FRAME_COUNT,
+            "foreground": [legacy.COVER_WIDTH, legacy.COVER_HEIGHT],
+            "foreground_xy": [legacy.COVER_X, legacy.COVER_Y],
         },
     }
     return hashlib.sha256(
@@ -163,7 +181,10 @@ def render(
     explicit_runs: list[str] | None = None,
     force: bool = False,
     include_manual_editions: bool = False,
+    story_count: int = STORY_COUNT,
 ) -> dict:
+    if not 1 <= story_count <= STORY_COUNT:
+        raise ValueError(f"story_count must be between 1 and {STORY_COUNT}")
     if include_manual_editions and os.environ.get("NEWS_PICK_DAILY_STORY_SCHEDULED_MODE") == "1":
         raise ValueError("scheduled Story runs cannot include manual editions")
     ffmpeg = shutil.which("ffmpeg")
@@ -171,12 +192,12 @@ def render(
     if not ffmpeg or not ffprobe:
         raise FileNotFoundError("ffmpeg and ffprobe must be available on PATH")
     sources = legacy.discover_sources(output_root, target_date, explicit_runs)
-    if len(sources) != STORY_COUNT:
+    if len(sources) != story_count:
         raise ValueError(
-            f"21:00 batch requires exactly {STORY_COUNT} publicly verified posts; found {len(sources)}"
+            f"21:00 batch requires exactly {story_count} publicly verified posts; found {len(sources)}"
         )
     if not include_manual_editions:
-        sources = ordered_slot_sources(sources, target_date)
+        sources = ordered_slot_sources(sources, target_date, story_count, slot_replacements(output_root, target_date))
     set_hash = batch_input_sha256(sources, target_date)
     output_dir = output_root / "daily-story" / target_date.isoformat()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -188,8 +209,8 @@ def render(
                 "daily Story inputs changed; inspect output and use --force-render explicitly"
             )
         stories = existing.get("stories", [])
-        if len(stories) != STORY_COUNT:
-            raise ValueError("existing manifest is not a three-Story batch")
+        if len(stories) != story_count:
+            raise ValueError(f"existing manifest does not hold {story_count} Story videos")
         existing["stories"] = [validate_existing_story(item, ffprobe) for item in stories]
         existing["reused"] = True
         legacy.atomic_json(manifest_path, existing)
@@ -206,15 +227,15 @@ def render(
         "target_date": target_date.isoformat(),
         "timezone": "Asia/Seoul",
         "input_set_sha256": set_hash,
-        "source_count": STORY_COUNT,
-        "story_count": STORY_COUNT,
+        "source_count": story_count,
+        "story_count": story_count,
         "source_selection": "verified_date" if include_manual_editions else "fixed_editions",
         "sources": [source.record() for source in sources],
         "stories": stories,
         "layout": {
             "canvas": [legacy.WIDTH, legacy.HEIGHT],
-            "foreground": [1024, 1024],
-            "foreground_xy": [28, 448],
+            "foreground": [legacy.COVER_WIDTH, legacy.COVER_HEIGHT],
+            "foreground_xy": [legacy.COVER_X, legacy.COVER_Y],
             "background": "same cover, aspect-fill, blur 60, darkened",
             "duration_seconds_each": legacy.DURATION,
         },
@@ -234,6 +255,7 @@ def main() -> int:
     parser.add_argument("--run", action="append", dest="runs")
     parser.add_argument("--force-render", action="store_true")
     parser.add_argument("--include-manual-editions", action="store_true")
+    parser.add_argument("--story-count", type=int, default=STORY_COUNT)
     args = parser.parse_args()
     try:
         output_root = (args.output_root or legacy.default_output_root()).expanduser().resolve()
@@ -242,7 +264,14 @@ def main() -> int:
             if args.target_date
             else datetime.now(legacy.KST).date()
         )
-        result = render(output_root, target_date, args.runs, args.force_render, args.include_manual_editions)
+        result = render(
+            output_root,
+            target_date,
+            args.runs,
+            args.force_render,
+            args.include_manual_editions,
+            args.story_count,
+        )
     except Exception as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 2

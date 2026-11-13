@@ -4,14 +4,17 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
+from itertools import combinations
 from pathlib import Path
 from typing import Any
 
-ROLES_4 = ["hook", "verified_facts", "context_and_positions", "impact_unknowns_sources"]
-ROLES_3 = ["hook", "facts_and_context", "impact_unknowns_sources"]
+from PIL import Image, ImageOps
+
+ROLES_5 = ["hook", "verified_facts", "numbers_and_context", "impact_and_reactions", "sources"]
 FORBIDDEN = (
     "전 국민 충격",
     "발칵",
@@ -27,7 +30,9 @@ FORBIDDEN = (
     "세금 퍼준다",
     "외국인 특혜",
 )
-CARD_INDEX_CAPTION = re.compile(r"(?m)^\s*[1-4]\s*장\s*[|:]", re.UNICODE)
+CARD_INDEX_CAPTION = re.compile(r"(?m)^\s*[1-5]\s*장\s*[|:]", re.UNICODE)
+# 카드에 인쇄될 기준시각. '기준시각' 문구 또는 연-월-일 날짜 중 하나는 반드시 있어야 한다.
+AS_OF_TEXT = re.compile(r"기준시각|\d{4}\s*[년.\-/]\s*\d{1,2}\s*[월.\-/]\s*\d{1,2}", re.UNICODE)
 HOOK_TYPES = {
     "immediate_consequence",
     "reversal_contrast",
@@ -35,6 +40,7 @@ HOOK_TYPES = {
     "decision_deadline",
     "answerable_question",
 }
+PRIMARY_REFERENCE_DHASH_MAX = 6
 SCORE_RANGES = {
     "specificity": (0, 2),
     "life_impact": (0, 2),
@@ -47,19 +53,63 @@ SCORE_RANGES = {
 }
 
 
-def validate(story: dict[str, Any], board: dict[str, Any]) -> None:
+def _dhash64(path: Path) -> int:
+    with Image.open(path) as raw:
+        gray = ImageOps.exif_transpose(raw).convert("L").resize((9, 8), Image.Resampling.LANCZOS)
+    pixels = list(gray.get_flattened_data()) if hasattr(gray, "get_flattened_data") else list(gray.getdata())
+    value = 0
+    for row in range(8):
+        for column in range(8):
+            value = (value << 1) | int(pixels[row * 9 + column] > pixels[row * 9 + column + 1])
+    return value
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def validate_primary_references(cards: list[dict[str, Any]], board_dir: Path | None = None) -> None:
+    """카드별 첫 reference가 같은 파일이거나 같은 사진의 전재본·축소본이면 실패한다. reference_images가 없는 storyboard는 건너뛴다."""
+    if not any(card.get("reference_images") for card in cards):
+        return
+    primaries: list[tuple[int, Path]] = []
+    for card in cards:
+        references = card.get("reference_images") or []
+        if not references:
+            raise ValueError(f"card {card.get('index')}에 reference_images가 없다. 모든 카드에 첫 reference를 지정한다.")
+        path = Path(str(references[0]))
+        if not path.is_absolute() and board_dir is not None:
+            path = (board_dir / path).resolve()
+        primaries.append((int(card.get("index", 0)), path))
+    resolved = [(index, str(path.resolve()).casefold()) for index, path in primaries]
+    for (left_index, left), (right_index, right) in combinations(resolved, 2):
+        if left == right:
+            raise ValueError(f"card {left_index}와 card {right_index}가 같은 첫 reference 파일을 쓴다.")
+    existing = [(index, path) for index, path in primaries if path.is_file()]
+    for (left_index, left), (right_index, right) in combinations(existing, 2):
+        if _sha256(left) == _sha256(right):
+            raise ValueError(f"card {left_index}와 card {right_index}의 첫 reference가 내용이 같은 파일이다.")
+        distance = (_dhash64(left) ^ _dhash64(right)).bit_count()
+        if distance <= PRIMARY_REFERENCE_DHASH_MAX:
+            raise ValueError(
+                f"card {left_index}와 card {right_index}의 첫 reference가 같은 사진의 전재본·축소본이다(dHash 거리 {distance}). "
+                "다른 장면의 사진이나 공식 화면·문서를 첫 reference로 지정한다."
+            )
+
+
+def validate(story: dict[str, Any], board: dict[str, Any], board_dir: Path | None = None) -> None:
     if story.get("verification_status") != "verified":
         raise ValueError("입력 story가 verified가 아니다.")
     if board.get("story_id") != story.get("story_id"):
         raise ValueError("story_id가 입력과 다르다.")
     count = board.get("card_count")
-    if count not in (3, 4):
-        raise ValueError("card_count는 3 또는 4다.")
+    if count != 5:
+        raise ValueError("card_count는 정확히 5다.")
     cards = board.get("cards", [])
     if len(cards) != count:
         raise ValueError("cards 장수가 card_count와 다르다.")
     roles = [c.get("role") for c in cards]
-    expected = ROLES_3 if count == 3 else ROLES_4
+    expected = ROLES_5
     if roles != expected:
         raise ValueError(f"card role 순서는 {expected}여야 한다.")
     visual_roles = [str(card.get("visual_role") or "").strip() for card in cards]
@@ -67,6 +117,7 @@ def validate(story: dict[str, Any], board: dict[str, Any]) -> None:
         raise ValueError("모든 카드에는 visual_role이 필요하다.")
     if len({role.casefold() for role in visual_roles}) != count:
         raise ValueError("한 세트 안에서 visual_role을 중복할 수 없다.")
+    validate_primary_references(cards, board_dir)
     sources = board.get("sources", [])
     if len(sources) < 2 or any(not str(source.get("publisher") or "").strip() or not str(source.get("url") or "").strip() for source in sources):
         raise ValueError("storyboard sources에는 publisher와 URL이 있는 근거가 2개 이상 필요하다.")
@@ -79,7 +130,25 @@ def validate(story: dict[str, Any], board: dict[str, Any]) -> None:
         copy = str(card.get("copy") or "").strip()
         if not copy:
             raise ValueError(f"card {index} copy가 비었다.")
-        if len(copy) > 220:
+        if index in (2, 3, 4):
+            if not 60 <= len(copy) <= 110:
+                raise ValueError(f"card {index} 본문은 60~110자여야 한다.")
+            sentence_count = len(re.findall(r"[.!?。！？](?:\s|$)", copy))
+            if not 2 <= sentence_count <= 3:
+                raise ValueError(f"card {index} 본문은 2~3문장이어야 한다.")
+            requirements = card.get("reference_requirements") or []
+            if not requirements:
+                raise ValueError(f"card {index}에는 관련 실제 이미지 요구가 필요하다.")
+            table = card.get("chart_spec")
+            if not isinstance(table, dict) or "table" not in str(table.get("type") or "").lower():
+                raise ValueError(f"card {index} chart_spec은 표(table)여야 한다.")
+            columns = table.get("columns") or []
+            rows = table.get("rows") or []
+            if not 2 <= len(columns) <= 3 or not 2 <= len(rows) <= 4:
+                raise ValueError(f"card {index} 표는 2~3열, 2~4행이어야 한다.")
+            if any(not isinstance(row, list) or len(row) != len(columns) for row in rows):
+                raise ValueError(f"card {index} 표의 행과 열 대응이 맞지 않는다.")
+        elif len(copy) > 220:
             raise ValueError(f"card {index} copy가 과도하게 길다.")
         if any(word in copy for word in FORBIDDEN):
             raise ValueError(f"card {index}에 금지 후킹 표현이 있다.")
@@ -101,7 +170,13 @@ def validate(story: dict[str, Any], board: dict[str, Any]) -> None:
     for card in cards[:-1]:
         visible_text = [str(value).strip() for value in card.get("required_text", [])]
         if any(value == "출처" or value.startswith("출처:") for value in visible_text):
-            raise ValueError("1~3장에는 보이는 출처 행을 넣지 않고 마지막 카드에만 모아야 한다.")
+            raise ValueError("1~4장에는 보이는 출처 행을 넣지 않고 5장에만 모아야 한다.")
+    for card in cards:
+        printed = [str(value) for value in (card.get("required_text") or [])]
+        if printed and not any(AS_OF_TEXT.search(value) for value in printed):
+            raise ValueError(
+                f"card {card.get('index')} required_text에 기준시각(또는 연월일 날짜) 행이 없다. 모든 장에 기준시각을 넣는다."
+            )
     hook = board.get("hook", {})
     headline = str(hook.get("headline") or "")
     deck = str(hook.get("deck") or "")
@@ -162,7 +237,11 @@ def main() -> int:
     parser.add_argument("--storyboard", type=Path, required=True)
     args = parser.parse_args()
     try:
-        validate(json.loads(args.story.read_text(encoding="utf-8")), json.loads(args.storyboard.read_text(encoding="utf-8")))
+        validate(
+            json.loads(args.story.read_text(encoding="utf-8")),
+            json.loads(args.storyboard.read_text(encoding="utf-8")),
+            board_dir=args.storyboard.resolve().parent,
+        )
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 1

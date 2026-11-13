@@ -1,28 +1,24 @@
-# 뉴스픽 Edge Browser Harness 계약
+# 뉴스픽 브라우저 계약 (ego lite)
 
-뉴스픽의 모든 웹 상호작용은 다음 하나의 로컬 브라우저 연결만 사용한다.
+2026-11-06부터 뉴스픽 Instagram 게시·스토리·팔로우·언팔은 ego lite를 사용하며 Edge 코드(launcher·9333 연결·설정)는 삭제했다. 파일 이름은 기존 링크 때문에 그대로 둔다. 공개 뉴스 조사와 기사 사진·공식 화면·스타일 reference 수집은 사용자가 지정한 Aside CLI를 사용한다. 언론사 알림 권한창이 Instagram 게시 공간을 중단시키지 않도록 두 용도를 섞지 않는다.
 
-- 브라우저: Microsoft Edge
-- Browser Harness named connection: `edge9333`
-- CDP URL: `http://127.0.0.1:9333`
-- user data dir: `%LOCALAPPDATA%\NewsPick\EdgeProfile`
-- Edge profile directory: `Default`
+- 브라우저: ego lite (`NEWS_PICK_BROWSER`는 비우거나 `ego`만 허용)
+- 실행기: `scripts/invoke_edge_browser_harness.py` → `scripts/ego_harness.py` → `scripts/ego_bridge.mjs`(`ego-browser nodejs`)
+- TaskSpace: 게시·스토리 `newspick-instagram`, 팔로우·언팔 `newspick-growth`(작성기와 섞이지 않게 분리)
+- 로그인: 설정된 ego lite 프로필의 newspick_studio Instagram 세션(프로필 미지정 시 브라우저 기본값)
+- 프로필 지정이 필요한 호스트는 `<output-root>/workspace.json`의 `browser.ego_profile_id`(또는 `NEWS_PICK_EGO_PROFILE_ID`)에 사용자가 지정한 기존 로그인 프로필 ID를 저장한다. 새 작업 공간 생성에 해당 프로필을 전달하고, 같은 이름의 기존 공간이 다른 프로필이면 탐색 전에 실패한다. 브라우저 재시작 후 기본 프로필이 바뀌어 다른 계정으로 이어지는 것을 막는다.
+- 필요한 것: `ego-browser` CLI(사용자 PATH `%USERPROFILE%\.local\share\ego\active_version_dir`)와 ego lite. ego가 꺼져 있으면 실행기가 `ego.exe --startup-ego-browser-service`로 켜고 최대 90초 기다린다(`NEWS_PICK_EGO_EXE`로 경로 지정 가능).
+- 이 helper에서 탐색 가능한 URL은 HTTPS Instagram 웹 UI와 준비용 `about:blank`다. 공개 기사·기관·스타일 사이트 URL은 탭 생성·탐색 전에 거부하며 Aside로 수집하도록 안내한다. 권한창을 자동 허용·차단하거나 중단된 TaskSpace를 우회하는 기능은 제공하지 않는다.
 
-Chrome, Chromium, Browser Harness `default`, 다른 named connection, 원격 CDP, 확장 프로그램 제어, `computer-use`는 이 스킬의 대체 경로가 아니다. `scripts/edge_browser.py`는 `/json/version`의 product가 `Edg/` 또는 `MicrosoftEdge/`인지 확인한다. 다른 브라우저가 9333 포트를 점유하거나 환경변수가 고정값과 다르면 변경 동작 전에 실패한다.
+Chrome, Chromium, Browser Harness `default`, 원격 CDP, 확장 프로그램 제어, `computer-use`, ego-browser 직접 스크립트는 이 스킬의 대체 경로가 아니다. `NEWS_PICK_BROWSER`가 `ego`가 아니면 변경 동작 전에 실패한다.
 
-최초 실행 또는 Edge가 닫힌 경우에만 다음 launcher를 실행한다.
-
-```powershell
-python scripts/launch_edge_profile.py --account $env:IG_ACCOUNT
-```
-
-비밀번호, MFA, CAPTCHA, challenge는 사용자가 표시형 Edge에서 직접 완료한다. cookie와 session 문자열은 출력하거나 파일에 저장하지 않는다.
+비밀번호, MFA, CAPTCHA, challenge는 사용자가 ego lite 창에서 직접 완료한다. cookie와 session 문자열은 출력하거나 파일에 저장하지 않는다.
 
 ## Excel Collector fast-path 적용
 
 `cafe24-excel-collector`의 빠른 실행 계약과 같은 원칙을 적용한다.
 
-1. `scripts/invoke_edge_browser_harness.py`가 실제 Harness target의 `Browser.getVersion` Edge guard와 browser script의 UTF-8 원본 바이트를 Browser Harness 프로세스 하나에 전달한다.
+1. `scripts/invoke_edge_browser_harness.py`가 ego guard(`Browser.getVersion`이 `ego-lite/`)를 먼저 확인하고 browser script의 UTF-8 원본을 helper 프로세스 하나에서 실행한다.
 2. 하나의 bounded phase 안에서 target 선택, targeted DOM 판독, 필요한 UI 조작, 완료 검증을 묶는다.
 3. 전체 DOM·전체 AX tree·반복 screenshot 탐색을 기본 경로로 사용하지 않는다. 고정 selector와 작은 allowlist 결과를 우선한다.
 4. 고정 sleep 대신 상태가 준비되는 즉시 끝나는 짧은 polling을 사용한다.
@@ -46,4 +42,23 @@ preflight는 `IG_DUPLICATE_TOKENS`가 있으면 계정·소유자 control·login
 python scripts/invoke_edge_browser_harness.py scripts/browser_web_preflight.py
 ```
 
-예약 실행기는 `BU_NAME`, `BU_CDP_URL`, `NEWS_PICK_BROWSER`를 위 값으로 주입한다. 개별 스킬이나 하위 프로세스가 이를 덮어쓸 수 없다.
+예약 실행기(게시·스토리)는 `NEWS_PICK_BROWSER=ego`를 주입한다. 개별 스킬이나 하위 프로세스가 이를 덮어쓸 수 없다.
+
+## ego lite 구현 메모
+
+ego lite는 원격 디버깅 포트를 열지 않아 Browser Harness가 붙을 수 없다. 그래서 helper가 쓰는 Browser Harness 함수는 그대로 두고 전송만 ego로 바꿨다. helper 스크립트는 수정 없이 돈다.
+
+- `scripts/ego_harness.py`: Browser Harness helper(`cdp`, `js`, `click_at_xy`, `switch_tab`, `_send` 등)를 같은 이름으로 제공하고, 전송만 ego로 바꾼다. 실행 전 `Browser.getVersion`이 `ego-lite/`인지 확인한다.
+- `scripts/ego_bridge.mjs`: `ego-browser nodejs` 안에서 TaskSpace `newspick-instagram`을 열고 loopback TCP로 `page.cdp`·`task.cdp`·탭 조작만 중계한다. 10분 동안 요청이 없으면 스스로 종료한다.
+- target·session은 ego Page 라벨(`p1`, `p2` …)로 바뀐다. `Target.getTargets`는 이 TaskSpace의 탭만 돌려주므로, 사용자가 ego에서 따로 연 Instagram 탭은 계산에 들어가지 않는다. `Target.createTarget`은 `task.newPage()`, `Target.closeTarget`은 `page.close()`, `Target.activateTarget`은 `Page.bringToFront`로 바뀐다. 그 밖의 `Target.*`·`Browser.*`(창 위치 조회·변경 제외)는 실패한다.
+- ego 창이 최소화돼 있으면 `Page.captureScreenshot` 앞뒤로 창을 잠깐 복원했다가 다시 최소화한다. `activate=True` 탭 전환은 창을 앞으로 가져온다.
+- `Target.createTarget(newWindow=True)`(스토리 검증)는 새 탭을 만들고 최소화된 창만 복원한다. ego 새 탭은 앞으로 가져오지 않아도 visible·unfocused라 스토리 영상이 재생되고, 포커스 보존 검사도 통과한다(11-06 실측).
+- ego `page.cdp`의 기본 제한 시간은 짧아서 모든 page CDP 호출에 timeout을 실어 보낸다(기본 110초, 팔로우·언팔은 `evaluate(timeout)` 값). 팔로잉 목록 수집은 약 3분 걸린다.
+- ego 경로의 helper는 `output/publish-news-pick/private-venv`의 python(3.12)으로 돈다(`NEWS_PICK_HELPER_PYTHON`으로 바꿀 수 있다). private API helper가 그 venv의 instagrapi를 불러오기 때문이다.
+- 로그인은 ego lite 기본 프로필의 Instagram 세션을 쓴다. 계정 확인은 preflight가 Edge 때와 같은 방식으로 한다.
+- Windows의 현재 `ego-browser nodejs`는 `console.log`를 stderr로 전달한다. 연결 probe는 종료 코드 0과 stdout·stderr의 `ego-ready`를 함께 검사한다. stderr가 있다는 이유만으로 연결 실패로 판단하지 않는다.
+- TaskSpace가 사용자에게 넘어간 상태는 프로세스 재시작으로 복구하지 않는다. 사용자의 명시적인 계속 진행 지시가 있으면 기존 numeric space id를 확인해 같은 공간을 이어받는다. 새로 나타난 브라우저 권한 요청은 사용자가 처리한다.
+- 게시 확인: 2026-11-06 수동 run `20261106-081953-d13439eb`에서 preflight → upload_prepare → 갤러리 확인 → advance_to_caption(4:5, 0.8) → fill_caption_ai(AI 라벨) → share_once → verify_carousel까지 helper 수정 없이 ego로 게시·공개 검증했다([DfYNmPskh8b](https://www.instagram.com/p/DfYNmPskh8b/)). 그래서 `scheduled_runner.py`는 예약 회차에 `NEWS_PICK_BROWSER=ego`를 주입한다.
+- 첫 `upload_prepare`가 클릭 전에 `visible control not found: 만들기`로 끝난 적이 있다(같은 명령 재실행으로 통과). 클릭 전 실패라 재실행해도 이중 업로드가 아니다.
+- `browser_web_dom_probe.py`는 `ego-lite/` product도 허용하고 보고서 `connection`을 `ego-lite`로 적는다.
+- 11-06 추가 확인: 어제 스토리 3개 공개 검증(6초), private API 세션 probe(쿠키→instagrapi), 언팔 대상 수집(팔로잉 1535·팔로워 1180), 추천 계정 41개 읽기를 모두 ego로 통과했다.

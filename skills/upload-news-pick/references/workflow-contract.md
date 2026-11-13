@@ -6,8 +6,8 @@
 |---|---|---|---|---|
 | 1 | `search-news` | edition/checkpoint | verified story | 증거 부족·충돌 |
 | 2 | `plan-news-pick` | verified story | editorial plan/storyboard | 선정성·근거 누락 |
-| 3 | `create-news-cards` | locked storyboard | selected slides/QA | 12장 미완성·시각 QA 실패·이미지 중복 |
-| 4 | `publish-news-pick` | locked slides/caption | public verified result | hash 불일치·계정 불일치 |
+| 3 | `create-news-cards` | locked 5-card storyboard | selected 5 slides/QA | 15장 미완성·360px 가독성 실패·이미지 중복 |
+| 4 | `publish-news-pick` | locked slides/caption | `public_verified=true`, `portrait_4x5=true`, `card_count=5` result | hash·계정 불일치, 정방형 crop, 공개 5장 불일치 |
 
 각 단계는 앞 단계 내용을 수정하지 않는다. 오류가 있으면 앞 단계로 반환하고 새 산출물 hash를 만든다.
 
@@ -15,6 +15,7 @@
 
 - `run.json`은 현재 단계와 단계별 출력 hash를 기록한다.
 - 같은 hash의 완료 단계는 재사용한다.
+- 사용자가 중지한 준비 작업을 명시적으로 재개하면 `orchestrate.py resume-run --run <run-directory> --reason <사용자 재개 지시>`로 이어간다. 변경된 완료 단계가 있으면 그 단계부터 다시 검증하며 파일은 보존한다. 게시 단계 중지 또는 제출·queue 기록이 있으면 이 명령으로 재개하지 않는다.
 - 완료된 단계의 파일이 바뀌면 그 단계와 모든 뒤 단계 상태를 `pending`으로 되돌린다.
 - 외부 제출이 시작된 4단계는 자동 재실행하지 않는다.
 - `needs_review`는 공개 프로필을 먼저 확인한 뒤 사람의 결정으로만 해제한다.

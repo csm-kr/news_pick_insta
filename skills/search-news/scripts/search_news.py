@@ -37,6 +37,12 @@ AUDIENCE_FIT_DIMENSIONS = (
     "visual_explainability",
     "novelty",
 )
+REACTION_SCORE_DIMENSIONS = (
+    "observable_response",
+    "coverage_breadth",
+    "conversation_heat",
+    "persistence",
+)
 
 
 def parse_time(value: str) -> datetime:
@@ -137,6 +143,8 @@ def validate_story(story: dict[str, Any]) -> None:
         "topic",
         "editorial_lane",
         "audience_fit",
+        "reaction_score",
+        "reaction_signals",
         "verified_headline",
         "why_it_matters",
         "claims",
@@ -164,6 +172,24 @@ def validate_story(story: dict[str, Any]) -> None:
         scores.append(score)
     if lane == "popular_interest" and sum(scores) < 8:
         raise ValueError("popular_interest 사건은 audience_fit 합계가 8점 이상이어야 한다.")
+    reaction_score = story["reaction_score"]
+    if not isinstance(reaction_score, dict):
+        raise ValueError("reaction_score는 점수 객체여야 한다.")
+    for dimension in REACTION_SCORE_DIMENSIONS:
+        score = reaction_score.get(dimension)
+        if isinstance(score, bool) or not isinstance(score, int) or not 0 <= score <= 3:
+            raise ValueError(f"reaction_score.{dimension}은 0~3 정수여야 한다.")
+    signals = story["reaction_signals"]
+    if not isinstance(signals, list) or len(signals) < 2:
+        raise ValueError("공개 반응 신호는 서로 다른 유형으로 최소 2개 필요하다.")
+    signal_types = set()
+    for signal in signals:
+        for field in ("type", "source", "value", "observed_at"):
+            if not str(signal.get(field) or "").strip():
+                raise ValueError(f"reaction_signals 필드 누락: {field}")
+        signal_types.add(str(signal["type"]).strip())
+    if len(signal_types) < 2:
+        raise ValueError("reaction_signals는 서로 다른 유형을 최소 2개 포함해야 한다.")
     source_ids = set()
     press_publishers = set()
     official = 0

@@ -9,6 +9,7 @@ import time
 from datetime import datetime, timedelta
 
 
+recovery_lock = None
 if os.environ.get("NEWS_PICK_SCHEDULED_MODE") == "1":
     raw_scheduled_at = os.environ.get("NEWS_PICK_EDITION_AT")
     if not raw_scheduled_at:
@@ -27,7 +28,33 @@ if os.environ.get("NEWS_PICK_SCHEDULED_MODE") == "1":
         raise RuntimeError(
             "scheduled publish time has not arrived; run wait_for_publish_time.py first; nothing was clicked"
         )
-    if current_time > scheduled_at + timedelta(minutes=30):
+    if os.environ.get("NEWS_PICK_SHARE_RECOVERY") == "1":
+        # 미게시가 확인된 회차의 복구 공유: 실패 10분 뒤부터 회차+60분까지, run당 한 번만 허용한다.
+        failed_at = datetime.fromisoformat(
+            re.sub(
+                r"(\.\d{6})\d+(?=([+-]\d{2}:\d{2})?$)",
+                r"\1",
+                os.environ["NEWS_PICK_SHARE_FAILED_AT"].replace("Z", "+00:00"),
+            )
+        )
+        if failed_at.tzinfo is None or failed_at < scheduled_at:
+            raise RuntimeError("NEWS_PICK_SHARE_FAILED_AT is invalid; nothing was clicked")
+        if current_time < failed_at + timedelta(minutes=10):
+            raise RuntimeError(
+                "recovery share must wait 10 minutes after the failed share; nothing was clicked"
+            )
+        if current_time > scheduled_at + timedelta(minutes=60):
+            raise RuntimeError(
+                "recovery share window expired 60 minutes after edition; nothing was clicked"
+            )
+        recovery_lock = os.path.join(
+            os.environ["NEWS_PICK_RUN_DIR"], "04-publish", "share-recovery.lock"
+        )
+        if os.path.exists(recovery_lock):
+            raise RuntimeError(
+                "recovery share was already used in this run; nothing was clicked"
+            )
+    elif current_time > scheduled_at + timedelta(minutes=30):
         raise RuntimeError(
             "scheduled publish window expired 30 minutes ago; nothing was clicked"
         )
@@ -45,8 +72,9 @@ if len(targets) != 1:
     )
 switch_tab(targets[0]["targetId"], activate=True)
 
-clicked = js(
-    """
+def read_share_control():
+    return js(
+        """
 (() => {
   const root=document.querySelector('[role=dialog]')||document;
   const controls=[...root.querySelectorAll('button,[role=button]')].filter(e=>{
@@ -55,11 +83,42 @@ clicked = js(
     return label==='공유하기'&&r.width>0&&r.height>0&&r.right>0&&r.bottom>0&&r.left<innerWidth&&r.top<innerHeight;
   });
   const e=controls[0];
-  if(!e)return null;
+  if(!e)return {present:false};
   const r=e.getBoundingClientRect();
-  return {x:r.x+r.width/2,y:r.y+r.height/2,source:'dom'};
+  return {present:true,x:r.x+r.width/2,y:r.y+r.height/2,source:'dom'};
 })()
 """
+    )
+
+
+def dispatch_pointer_click(x, y):
+    """CDP 좌표 클릭이 아무 효과도 내지 못했을 때만 쓰는 같은 좌표의 합성 포인터 시퀀스."""
+    return js(
+        """
+((x, y) => {
+  const target=document.elementFromPoint(x, y);
+  if(!target)return false;
+  const opts={bubbles:true,cancelable:true,composed:true,clientX:x,clientY:y,button:0,pointerId:1,isPrimary:true,pointerType:'mouse'};
+  target.dispatchEvent(new PointerEvent('pointerover',opts));
+  target.dispatchEvent(new MouseEvent('mouseover',opts));
+  target.dispatchEvent(new MouseEvent('mousemove',opts));
+  target.dispatchEvent(new PointerEvent('pointerdown',opts));
+  target.dispatchEvent(new MouseEvent('mousedown',opts));
+  target.dispatchEvent(new PointerEvent('pointerup',opts));
+  target.dispatchEvent(new MouseEvent('mouseup',opts));
+  target.dispatchEvent(new MouseEvent('click',opts));
+  return true;
+})(%s, %s)
+"""
+        % (json.dumps(x), json.dumps(y))
+    )
+
+
+control = read_share_control()
+clicked = (
+    {"x": control["x"], "y": control["y"], "source": control.get("source", "dom")}
+    if control.get("present")
+    else None
 )
 if not clicked:
     nodes = cdp("Accessibility.getFullAXTree").get("nodes", [])
@@ -84,10 +143,24 @@ if not clicked:
                 break
         except Exception:
             pass
-if not clicked:
-    raise RuntimeError("visible Share control not found; nothing was clicked")
-time.sleep(random.uniform(0.22, 0.48))
-click_at_xy(clicked["x"], clicked["y"])
+submission_already_started = not clicked
+reinforced = False
+if clicked:
+    if recovery_lock:
+        with open(recovery_lock, "x", encoding="utf-8") as handle:
+            handle.write(datetime.now().astimezone().isoformat())
+    time.sleep(random.uniform(0.22, 0.48))
+    click_at_xy(clicked["x"], clicked["y"])
+    # 좌표 클릭이 화면에 닿지 않으면 공유 control이 같은 자리에 그대로 남는다.
+    # 그때만 같은 좌표에 합성 포인터 시퀀스를 한 번 더 보낸다.
+    time.sleep(1.2)
+    after = read_share_control()
+    if (
+        after.get("present")
+        and abs(float(after.get("x", -9999)) - clicked["x"]) < 2
+        and abs(float(after.get("y", -9999)) - clicked["y"]) < 2
+    ):
+        reinforced = bool(dispatch_pointer_click(clicked["x"], clicked["y"]))
 
 markers = (
     "게시물이 공유되었습니다",
@@ -121,6 +194,8 @@ print(
     + json.dumps(
         {
             "clicked": clicked,
+            "reinforced_with_pointer_sequence": reinforced,
+            "submission_already_started": submission_already_started,
             "success_marker": success,
             "url": (state or {}).get("url"),
             "screenshot": shot,
@@ -130,6 +205,10 @@ print(
     )
 )
 if not success:
+    if submission_already_started:
+        raise RuntimeError(
+            "Share control was absent and no success marker appeared; verify the public profile before any retry"
+        )
     raise RuntimeError(
         "Share was clicked once but Instagram success marker was not confirmed; do not retry"
     )

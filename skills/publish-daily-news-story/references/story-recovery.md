@@ -9,14 +9,15 @@
 - `submission_started=true` 또는 `needs_review`이면 기존 출력·제출 기록을 삭제하거나 날짜 폴더를 바꿔 새 배치를 올리지 않는다. ID가 일부만 있거나 제출 결과가 모호해도 자동 재시도하지 않는다.
 - 세 ID가 모두 있고 입력 해시가 같을 때 `publish_story_batch.py`는 기존 결과의 검증 경로만 실행한다. 다만 focus 실패 후에는 같은 명령을 반복하지 말고 사용자에게 확인한다. 수동 복구는 업로드 helper 없이 기록된 세 URL만 대상으로 한다.
 
-## Edge 재생 증거
+## 재생 증거
 
-1. 고정 Microsoft Edge `edge9333`만 사용한다. 공개 검증 helper는 기본 background를 유지하고, polling 및 캡처 전후의 focus·정확한 Story URL·계정·영상 상태를 확인한다.
+2026-11-06부터 스토리 공개 검증은 ego lite `newspick-instagram`의 새 탭에서 한다. ego 새 탭은 앞으로 가져오지 않아도 visible이라 영상이 재생되고 포커스도 보존된다(위 09-05 기록은 예전 Edge background 탭의 문제다).
+
+1. ego lite만 사용한다. 공개 검증 helper는 새 탭을 앞으로 가져오지 않고, polling 및 캡처 전후의 focus·정확한 Story URL·계정·영상 상태를 확인한다.
 2. `readyState>=2`, 세로 영상 크기, 약 6초 duration과 `currentTime>0`을 확인한다. 다른 Story로 자동 이동했거나 login/challenge가 나타나면 성공으로 처리하지 않는다.
 3. 로딩되지 않은 영상은 캡처해도 검은 화면일 수 있다. 이 경우 캡처를 반복하지 않고 실패 상태를 남긴다. 실제 frame이 표시되면 영상을 일시정지하고 새 JPEG를 캡처해 정확한 ID가 유지되는지 재확인한다. 기존 screenshot 파일이 있다는 사실만으로 성공 처리하지 않는다.
-4. focus가 바뀌면 남은 background 조회를 즉시 중단한다. 작업용 target만 정리하고 기존 사용자 탭은 탐색·닫기·활성화하지 않는다.
-5. background 검증이 실패하면 **Edge 창을 잠시 활성화해 이미 게시된 세 Story만 확인해도 되는지** 묻는다. 게시 승인이나 스킬 수정·commit 승인 자체는 foreground 검증 승인이 아니다. 승인 없이는 `needs_review`를 유지한다.
-6. 별도로 승인받은 전면 검증도 동일 Edge 연결을 사용한다. 작업용 target 하나에서 기록된 URL만 열고 ID·계정·재생과 screenshot을 확인한다. 공유·삭제·재업로드 control은 누르지 않는다. 기존 background 검증 helper에는 foreground 옵션이 없으므로 focus guard를 제거해서 재사용하지 않는다.
+4. focus가 바뀌면 남은 조회를 즉시 중단한다. 작업용 탭만 정리하고 사용자 탭은 탐색·닫기·활성화하지 않는다.
+5. 검증이 계속 실패하면 ego 창이 최소화된 채 hidden인지 먼저 본다(helper는 newWindow 요청에서 최소화된 창을 복원한다). 그래도 실패하면 `needs_review`를 유지하고 사용자에게 알린다.
 
 각 screenshot을 직접 열어 제목·날짜·표지 상하단이 원본 proof와 일치하고 잘리지 않았는지 확인한다. 세 URL의 공개 화면과 metadata가 모두 확인됐을 때만 `published`, `public_verified=true`로 바꾸고 검증 시각·방식·증거 경로를 남긴다. 이전 실패 진단은 별도 복구 기록으로 보존한다.
 

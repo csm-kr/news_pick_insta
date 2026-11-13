@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run three separate verified-cover Instagram Stories at 21:00 KST."""
+"""Run three separate verified-cover Instagram Stories at 19:00 KST."""
 
 from __future__ import annotations
 
@@ -18,7 +18,9 @@ from zoneinfo import ZoneInfo
 
 
 KST = ZoneInfo("Asia/Seoul")
-STORY_TIME = time(21, 0)
+# 예약 작업은 pythonw로 창 없이 돈다. 콘솔 자식은 숨은 콘솔로 띄워 창이 번쩍이거나 닫혀 run이 죽지 않게 한다.
+NO_WINDOW_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+STORY_TIME = time(19, 0)
 MAX_START_LATENESS = timedelta(minutes=30)
 STALE_LOCK_AGE = timedelta(hours=2)
 
@@ -95,21 +97,12 @@ def dependency_paths(root: Path, output_root: Path) -> dict[str, str]:
         / "Lib"
         / "site-packages"
     )
-    edge_launcher = (
-        root
-        / "skills"
-        / "publish-news-pick"
-        / "scripts"
-        / "launch_edge_profile.py"
-    )
     dependencies = {
         "story_runner": str(runner.resolve()) if runner.is_file() else "",
-        "edge_launcher": (
-            str(edge_launcher.resolve()) if edge_launcher.is_file() else ""
-        ),
         "ffmpeg": shutil.which("ffmpeg") or "",
         "ffprobe": shutil.which("ffprobe") or "",
-        "browser_harness": shutil.which("browser-harness") or "",
+        # 2026-11-06부터 Edge 대신 ego lite로 게시·검증한다(NEWS_PICK_BROWSER=ego).
+        "ego_browser": shutil.which("ego-browser") or "",
         "private_site_packages": (
             str(private_site_packages.resolve()) if private_site_packages.is_dir() else ""
         ),
@@ -117,7 +110,7 @@ def dependency_paths(root: Path, output_root: Path) -> dict[str, str]:
     missing = [name for name, value in dependencies.items() if not value]
     if missing:
         raise FileNotFoundError(
-            "21시 Story 예약 실행 의존성이 없다: " + ", ".join(missing)
+            "19시 Story 예약 실행 의존성이 없다: " + ", ".join(missing)
         )
     return dependencies
 
@@ -192,7 +185,7 @@ def run_job(
 ) -> tuple[int, dict[str, Any]]:
     output_root: Path = settings["output_root"]
     dependencies = dependency_paths(root, output_root)
-    slot_id = target.strftime("%Y-%m-%d-2100")
+    slot_id = target.strftime("%Y-%m-%d-1900")
     scheduler_root = output_root / "scheduler" / "daily-story"
     state_path = scheduler_root / "editions" / f"{slot_id}.json"
     command = story_command(root, target.date(), settings)
@@ -246,42 +239,12 @@ def run_job(
             "PYTHONIOENCODING": "utf-8",
             "NEWS_PICK_OUTPUT_ROOT": str(output_root),
             "IG_ACCOUNT": settings["account"],
-            "NEWS_PICK_BROWSER": "edge",
-            "NEWS_PICK_BROWSER_HARNESS_NAME": "edge9333",
-            "NEWS_PICK_EDGE_CDP_URL": "http://127.0.0.1:9333",
-            "BU_NAME": "edge9333",
-            "BU_CDP_URL": "http://127.0.0.1:9333",
+            "NEWS_PICK_BROWSER": "ego",
             "NEWS_PICK_DAILY_STORY_SCHEDULED_MODE": "1",
         }
     )
     with exclusive_lock(scheduler_root / "daily-story.lock", now):
         atomic_json(state_path, started)
-        launched = subprocess.run(
-            [
-                sys.executable,
-                dependencies["edge_launcher"],
-                "--account",
-                settings["account"],
-            ],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=environment,
-            check=False,
-        )
-        if launched.returncode != 0:
-            stdout_path.write_text(launched.stdout or "", encoding="utf-8")
-            stderr_path.write_text(launched.stderr or "", encoding="utf-8")
-            ended = {
-                **started,
-                "completed_at": datetime.now(KST).isoformat(),
-                "status": "failed_pre_submit",
-                "exit_code": launched.returncode,
-                "reason": "edge_launch_failed",
-            }
-            atomic_json(state_path, ended)
-            return 2, ended
         completed = subprocess.run(
             command,
             capture_output=True,
@@ -290,6 +253,7 @@ def run_job(
             errors="replace",
             env=environment,
             check=False,
+            creationflags=NO_WINDOW_FLAGS,
         )
     stdout_path.write_text(completed.stdout or "", encoding="utf-8")
     stderr_path.write_text(completed.stderr or "", encoding="utf-8")

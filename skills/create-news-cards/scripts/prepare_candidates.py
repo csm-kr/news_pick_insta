@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare 12 isolated Tibo jobs grouped into coherent visual directions."""
+"""Legacy helper for preparing three five-card portrait direction sets."""
 
 from __future__ import annotations
 
@@ -27,10 +27,12 @@ def prepare(board: dict, work: Path, target: str) -> dict:
         raise ValueError("work-dir은 create-news-cards skill 폴더 밖에 있어야 한다.")
     if not re.fullmatch(r"\d{2,5}x\d{2,5}", target):
         raise ValueError("target_size는 WxH 형식이어야 한다.")
+    if target != "1080x1350":
+        raise ValueError("target_size는 1080x1350이어야 한다.")
     count = board.get("card_count")
-    if count not in (3, 4) or len(board.get("cards", [])) != count:
-        raise ValueError("storyboard는 정확히 3장 또는 4장이어야 한다.")
-    direction_count = 12 // count
+    if count != 5 or len(board.get("cards", [])) != count:
+        raise ValueError("storyboard는 정확히 5장이어야 한다.")
+    direction_count = 3
     selected = DIRECTIONS[:direction_count]
     jobs = []
     for d_index, direction in enumerate(selected, 1):
@@ -61,7 +63,7 @@ def prepare(board: dict, work: Path, target: str) -> dict:
             job_path = job_dir / "job.json"
             job_path.write_text(json.dumps(job, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             jobs.append({"direction_id": direction_id, "card_index": c_index, "job": str(job_path.resolve())})
-    plan = {"schema_version": "1.0", "target_size": target, "card_count": count, "direction_count": direction_count, "candidate_count": len(jobs), "concurrency": 12, "jobs": jobs}
+    plan = {"schema_version": "1.0", "target_size": target, "card_count": count, "direction_count": direction_count, "candidate_count": len(jobs), "concurrency": 15, "jobs": jobs}
     (work / "generation-plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return plan
 

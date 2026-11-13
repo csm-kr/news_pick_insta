@@ -2,28 +2,20 @@
 
 ## 필요한 것
 
-- 표시형 Microsoft Edge
-- `%LOCALAPPDATA%\NewsPick\EdgeProfile`의 전용 user data와 `Default` profile
-- 그 profile에 사용자가 직접 로그인한 `IG_ACCOUNT`
-- 같은 profile에 열린 `https://www.instagram.com/<IG_ACCOUNT>/` 탭 하나
-- Browser Harness named 연결 `edge9333`과 `http://127.0.0.1:9333`
+- ego lite와 `ego-browser` CLI
+- ego lite 기본 프로필에 사용자가 직접 로그인한 `IG_ACCOUNT`
+- helper가 쓰는 TaskSpace `newspick-instagram`(없으면 helper가 프로필 탭을 연다)
+- 실행기 `scripts/invoke_edge_browser_harness.py`
 - 안정적인 네트워크
 - 게시할 1080×1350 PNG 5장, caption, 승인된 payload hash
 
-전용 profile 창이 없으면 launcher로 표시형 Edge를 연다.
-
-```powershell
-$env:IG_ACCOUNT = 'newspick_studio'
-$env:NEWS_PICK_BROWSER_HARNESS_NAME = 'edge9333'
-$env:NEWS_PICK_EDGE_CDP_URL = 'http://127.0.0.1:9333'
-python scripts/launch_edge_profile.py --account $env:IG_ACCOUNT
-```
+ego lite가 꺼져 있으면 실행기가 켠다. 로그인이 풀렸으면 ego lite 창에서 Instagram에 다시 로그인한다.
 
 사용자가 그 창에서 로그인·MFA·challenge를 직접 끝낸다. 에이전트는 password, 인증 코드, CAPTCHA를 입력하거나 요청하지 않는다.
 
 ## 웹 UI 경로의 쿠키 정책
 
-웹 UI 게시에는 cookie 문자열을 따로 준비할 필요가 없다. 고정 Edge profile에 저장된 로그인 세션을 Edge가 요청마다 자동 전송한다. Browser Harness는 로그인된 탭을 제어할 뿐 cookie를 추출·복사·출력·파일 저장하지 않는다.
+웹 UI 게시에는 cookie 문자열을 따로 준비할 필요가 없다. ego lite 프로필에 저장된 로그인 세션을 ego가 요청마다 자동 전송한다. helper는 로그인된 탭을 제어할 뿐 cookie를 추출·복사·출력·파일 저장하지 않는다.
 
 다음 값은 웹 UI 경로에 필요하지 않다.
 
@@ -32,11 +24,11 @@ python scripts/launch_edge_profile.py --account $env:IG_ACCOUNT
 - cookie export 확장 프로그램
 - Authorization header 또는 private client settings
 
-InPrivate 창이나 다른 Edge profile에 로그인해도 뉴스픽 전용 세션에는 적용되지 않는다. Edge 재시작 뒤에도 `scripts/launch_edge_profile.py`로 같은 user data dir을 연다.
+다른 브라우저나 다른 ego 프로필에 로그인해도 뉴스픽 세션에는 적용되지 않는다.
 
 ## 로그인 준비 완료 판정
 
-`scripts/browser_web_preflight.py`를 Browser Harness에 전달한다.
+`scripts/browser_web_preflight.py`를 실행기로 돌린다.
 
 ```powershell
 python scripts/invoke_edge_browser_harness.py scripts/browser_web_preflight.py
@@ -58,7 +50,7 @@ Instagram은 background target에서 `프로필 편집`과 `보관함 보기`를
 
 ## 선택적 private API의 cookie
 
-private API 경로만 Instagram 도메인의 `sessionid`가 필요하다. 구현은 Browser Harness 프로세스 메모리에서 기존 탭의 cookie를 읽어 `Client.login_by_sessionid()`에 한 번 전달하고 즉시 참조를 버린다.
+private API 경로만 Instagram 도메인의 `sessionid`가 필요하다. 구현은 helper 프로세스 메모리에서 ego 탭의 cookie를 읽어 `Client.login_by_sessionid()`에 한 번 전달하고 즉시 참조를 버린다.
 
 - 값을 로그·JSON·환경변수·파일·클립보드에 남기지 않는다.
 - 사용자의 browser session과 private client account가 모두 `IG_ACCOUNT`인지 다시 확인한다.
