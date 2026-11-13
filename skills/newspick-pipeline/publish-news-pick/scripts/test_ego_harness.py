@@ -433,6 +433,47 @@ class EgoAutostartTests(unittest.TestCase):
         popen.assert_not_called()
 
 
+class BridgeCleanupTests(unittest.TestCase):
+    """연결이 실패하거나 강제로 끝나도 임시 폴더를 남기지 않는다(11-13 오후 팔로우 실패 때 남았다)."""
+
+    def test_bridge_that_dies_before_start_removes_its_temp_folder(self):
+        import tempfile
+        from unittest.mock import MagicMock, patch
+        base = Path(tempfile.mkdtemp())
+        real_mkdtemp = tempfile.mkdtemp
+        dead = MagicMock()
+        dead.poll.return_value = 1
+        dead.stderr.read.return_value = b"Cannot find module"
+        with patch.object(ego_harness, "ensure_ego_running"), patch.object(
+            ego_harness.shutil, "which", return_value="C:/bin/ego-browser.exe"
+        ), patch.object(ego_harness.tempfile, "gettempdir", return_value=str(base)), patch.object(
+            ego_harness.tempfile, "mkdtemp", side_effect=lambda prefix: real_mkdtemp(prefix=prefix, dir=base)
+        ), patch.object(ego_harness.subprocess, "Popen", return_value=dead):
+            with self.assertRaisesRegex(RuntimeError, "Cannot find module"):
+                ego_harness.BridgeTransport()
+        self.assertEqual(list(base.glob("newspick-ego-*")), [])
+
+    def test_stale_temp_folders_are_swept_but_fresh_ones_kept(self):
+        import os
+        import tempfile
+        base = Path(tempfile.mkdtemp())
+        stale = base / "newspick-ego-old"
+        fresh = base / "newspick-ego-new"
+        other = base / "someone-else-old"
+        for folder in (stale, fresh, other):
+            folder.mkdir()
+            (folder / "entry.mjs").write_text("x", encoding="utf-8")
+        now = 1_000_000.0
+        for folder in (stale, other):
+            os.utime(folder, (now - 7 * 3600, now - 7 * 3600))
+        os.utime(fresh, (now - 60, now - 60))
+        removed = ego_harness.sweep_stale_bridge_dirs(base, now=now)
+        self.assertEqual(removed, 1)
+        self.assertFalse(stale.exists())
+        self.assertTrue(fresh.exists())
+        self.assertTrue(other.exists())
+
+
 class EgoSessionRecordTests(unittest.TestCase):
     """실제로 어느 ego 프로필에 붙었는지 연결마다 남긴다. 일일 보고가 게시 시각과 맞춰 읽는다(사용자 요청 11-13)."""
 

@@ -503,6 +503,26 @@ def helper_namespace(send: Callable[[dict[str, Any]], dict[str, Any]]) -> dict[s
 
 
 # --- real transport ----------------------------------------------------------
+BRIDGE_DIR_PREFIX = "newspick-ego-"
+STALE_BRIDGE_DIR_SECONDS = 6 * 3600
+
+
+def sweep_stale_bridge_dirs(base: Path | None = None, now: float | None = None) -> int:
+    """실패·강제 종료로 남은 오래된 연결 임시 폴더를 지운다. 지금 쓰는 폴더는 최근 것이라 남는다."""
+
+    base = Path(base or tempfile.gettempdir())
+    now = time.time() if now is None else now
+    removed = 0
+    for folder in base.glob(BRIDGE_DIR_PREFIX + "*"):
+        try:
+            if folder.is_dir() and now - folder.stat().st_mtime > STALE_BRIDGE_DIR_SECONDS:
+                shutil.rmtree(folder)
+                removed += 1
+        except OSError:
+            pass
+    return removed
+
+
 class BridgeTransport:
     """Start ego_bridge.mjs under `ego-browser nodejs` and talk JSON lines over loopback TCP."""
 
@@ -511,7 +531,8 @@ class BridgeTransport:
         if not executable:
             raise FileNotFoundError("ego-browser CLI가 없다.")
         ensure_ego_running()
-        self.workdir = Path(tempfile.mkdtemp(prefix="newspick-ego-"))
+        sweep_stale_bridge_dirs()
+        self.workdir = Path(tempfile.mkdtemp(prefix=BRIDGE_DIR_PREFIX))
         port_file = self.workdir / "bridge.port"
         entry = self.workdir / "entry.mjs"
         config = {"space": space, "portFile": port_file.as_posix()}
@@ -533,6 +554,7 @@ class BridgeTransport:
         while not port_file.exists():
             if self.process.poll() is not None:
                 err = (self.process.stderr.read() or b"").decode("utf-8", "replace")
+                shutil.rmtree(self.workdir, ignore_errors=True)
                 raise RuntimeError(f"ego bridge가 시작 전에 종료됐다: {err[:800]}")
             if time.time() > deadline:
                 self.close()
