@@ -188,6 +188,21 @@ class EgoBrowserTests(unittest.TestCase):
             MOD.ensure_browser()
         ensure.assert_called_once()
 
+    def test_growth_space_is_closed_after_work_even_on_error(self):
+        """팔로우·언팔이 끝나면 newspick-growth 공간을 닫아 다음 run이 새 창으로 시작한다."""
+        from unittest.mock import patch
+        with patch.object(MOD.ego_harness, "close_task_spaces", return_value=[5]) as close:
+            self.assertEqual(MOD.then_close_growth_space(lambda: 7), 7)
+        close.assert_called_once_with(["newspick-growth"])
+
+        def broken():
+            raise SystemExit("Instagram 탭 오류")
+
+        with patch.object(MOD.ego_harness, "close_task_spaces", return_value=[]) as close:
+            with self.assertRaises(SystemExit):
+                MOD.then_close_growth_space(broken)
+        close.assert_called_once_with(["newspick-growth"])
+
     def test_ensure_browser_requires_ego_cli(self):
         from unittest.mock import patch
         with patch.dict("os.environ", {}, clear=True), patch.object(MOD.shutil, "which", return_value=None):

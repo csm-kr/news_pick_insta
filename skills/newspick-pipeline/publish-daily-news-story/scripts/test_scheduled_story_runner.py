@@ -105,6 +105,25 @@ class ScheduledStoryRunnerTests(unittest.TestCase):
             self.assertNotIn("BU_CDP_URL", run.call_args.kwargs["env"])
 
 
+    def test_run_job_tidies_ego_space_before_and_after(self):
+        """스토리도 새 newspick-instagram 창으로 시작하고, 끝나면 닫는다."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            settings = self.settings(root)
+            target = MOD.story_at(date(2026, 8, 20))
+            order = []
+            completed = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="")
+
+            def run(*args, **kwargs):
+                order.append("story")
+                return completed
+
+            with patch.object(MOD, "dependency_paths", return_value={"ego_browser": "ego-browser.exe"}), patch.object(
+                MOD.subprocess, "run", side_effect=run
+            ):
+                MOD.run_job(root, target, settings, target, tidy=lambda: order.append("tidy"))
+            self.assertEqual(order, ["tidy", "story", "tidy"])
+
     def test_run_job_starts_children_without_console_window(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

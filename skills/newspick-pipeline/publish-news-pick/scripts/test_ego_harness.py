@@ -453,6 +453,67 @@ class BridgeCleanupTests(unittest.TestCase):
                 ego_harness.BridgeTransport()
         self.assertEqual(list(base.glob("newspick-ego-*")), [])
 
+    def test_bridge_closes_only_agent_spaces_of_the_named_profile(self):
+        """11-14 재사용된 newspick-instagram 창이 최소화로 굳어 캡처가 멈췄다. 끝난 공간은 finish로 닫는다."""
+        import json
+        import shutil
+        import subprocess
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('Node.js is required for bridge checks')
+        script = """
+const fs=await import('node:fs');const input=JSON.parse(fs.readFileSync(0,'utf8'));
+const finished=[];
+globalThis.listTaskSpaces=async()=>[
+ {id:1,name:'newspick-instagram',createdBy:'agent',profileId:'Profile 2'},
+ {id:2,name:'newspick-instagram',createdBy:'user',profileId:'Profile 2'},
+ {id:3,name:'newspick-instagram',createdBy:'agent',profileId:'Profile 1'},
+ {id:4,name:'black-sheep-wall',createdBy:'agent',profileId:'Profile 2'},
+ {id:5,name:'newspick-growth',createdBy:'agent',profileId:'Profile 2'}];
+globalThis.taskSpace=async(id,options)=>({spaceId:id,finish:async(opts)=>{finished.push({id,opts,options:options||null})}});
+const bridge=await import(input.module);
+const result=await bridge.closeTaskSpaces({names:['newspick-instagram','newspick-growth'],profileId:'Profile 2'});
+console.log(JSON.stringify({finished,result}));
+"""
+        completed = subprocess.run([node, '--input-type=module', '-e', script],
+            input=json.dumps({'module': ego_harness.BRIDGE_PATH.as_uri()}), capture_output=True,
+            text=True, encoding='utf-8', timeout=10,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0), check=True)
+        observed = json.loads(completed.stdout)
+        self.assertEqual([item['id'] for item in observed['finished']], [1, 5])
+        self.assertTrue(all(item['opts'] == {'keep': []} and item['options'] is None for item in observed['finished']))
+        self.assertEqual(observed['result'], {'closed': [1, 5]})
+
+    def test_close_task_spaces_runs_one_ego_script_and_reports_closed_ids(self):
+        from types import SimpleNamespace
+        calls = []
+
+        def run(command, **kwargs):
+            calls.append((command, kwargs))
+            entry = Path(command[-1].split("'")[1].replace('file:///', ''))
+            self.assertIn('closeTaskSpaces', entry.read_text(encoding='utf-8'))
+            self.assertIn('"Profile 2"', entry.read_text(encoding='utf-8'))
+            return SimpleNamespace(returncode=0, stdout='', stderr='[ego-browser:notice] x {"closed":[182]}\n')
+
+        closed = ego_harness.close_task_spaces(['newspick-instagram'], profile_id='Profile 2', run=run,
+                                               which=lambda name: 'C:/bin/ego-browser.exe', running=lambda: True)
+        self.assertEqual(closed, [182])
+        command, kwargs = calls[0]
+        self.assertEqual(command[:3], ['C:/bin/ego-browser.exe', 'nodejs', '-e'])
+        self.assertIn('timeout', kwargs)
+
+    def test_close_task_spaces_never_raises_and_skips_when_ego_is_off(self):
+        def boom(*args, **kwargs):
+            raise OSError('ego gone')
+
+        self.assertEqual(ego_harness.close_task_spaces(['newspick-instagram'], profile_id='Profile 2', run=boom,
+                                                       which=lambda name: 'C:/bin/ego-browser.exe', running=lambda: True), [])
+        never = []
+        self.assertEqual(ego_harness.close_task_spaces(['newspick-instagram'], profile_id='Profile 2',
+                                                       run=lambda *a, **k: never.append(1),
+                                                       which=lambda name: 'C:/bin/ego-browser.exe', running=lambda: False), [])
+        self.assertEqual(never, [])
+
     def test_stale_temp_folders_are_swept_but_fresh_ones_kept(self):
         import os
         import tempfile

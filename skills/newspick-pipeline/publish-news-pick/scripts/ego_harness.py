@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -521,6 +522,36 @@ def sweep_stale_bridge_dirs(base: Path | None = None, now: float | None = None) 
         except OSError:
             pass
     return removed
+
+
+def close_task_spaces(names, profile_id=None, run=subprocess.run, which=shutil.which, running=None) -> list:
+    """끝난 뉴스픽 ego 공간을 닫는다. 다음 run은 새 창으로 시작한다. 실패해도 예외를 내지 않는다."""
+
+    running = running or ego_process_running
+    executable = which("ego-browser")
+    if not executable or not running():
+        return []
+    config = {"names": list(names), "profileId": profile_id if profile_id is not None else ego_profile_id()}
+    workdir = Path(tempfile.mkdtemp(prefix=BRIDGE_DIR_PREFIX))
+    try:
+        entry = workdir / "close.mjs"
+        entry.write_text(
+            f"import {{ closeTaskSpaces }} from {json.dumps(BRIDGE_PATH.as_uri())};\n"
+            f"console.log(JSON.stringify(await closeTaskSpaces({json.dumps(config)})));\n",
+            encoding="utf-8",
+        )
+        completed = run(
+            [executable, "nodejs", "-e", f"await import('{entry.as_uri()}')"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        output = f"{completed.stdout or ''}\n{completed.stderr or ''}"
+        match = re.search(r'\{"closed":\[[0-9,]*\]\}', output)
+        return json.loads(match.group(0))["closed"] if match else []
+    except Exception:
+        return []
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
 
 
 class BridgeTransport:

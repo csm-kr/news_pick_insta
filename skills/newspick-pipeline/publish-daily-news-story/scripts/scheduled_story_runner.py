@@ -13,7 +13,7 @@ import sys
 from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 from zoneinfo import ZoneInfo
 
 
@@ -178,14 +178,27 @@ def published_result(payload: dict[str, Any]) -> bool:
     )
 
 
+def close_instagram_space(root: Path) -> None:
+    """스토리 앞뒤로 게시용 ego 공간을 닫아 새 창으로 시작한다. 정리 실패는 스토리를 막지 않는다."""
+    try:
+        sys.path.insert(0, str(root / "skills" / "newspick-pipeline" / "publish-news-pick" / "scripts"))
+        import ego_harness
+
+        ego_harness.close_task_spaces([ego_harness.SPACE_NAME])
+    except Exception:
+        pass
+
+
 def run_job(
     root: Path,
     target: datetime,
     settings: dict[str, Any],
     now: datetime,
     dry_run: bool = False,
+    tidy: Callable[[], Any] | None = None,
 ) -> tuple[int, dict[str, Any]]:
     output_root: Path = settings["output_root"]
+    tidy = tidy or (lambda: None)
     dependencies = dependency_paths(root, output_root)
     slot_id = target.strftime("%Y-%m-%d-1900")
     scheduler_root = output_root / "scheduler" / "daily-story"
@@ -247,16 +260,20 @@ def run_job(
     )
     with exclusive_lock(scheduler_root / "daily-story.lock", now):
         atomic_json(state_path, started)
-        completed = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=environment,
-            check=False,
-            creationflags=NO_WINDOW_FLAGS,
-        )
+        tidy()
+        try:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                env=environment,
+                check=False,
+                creationflags=NO_WINDOW_FLAGS,
+            )
+        finally:
+            tidy()
     stdout_path.write_text(completed.stdout or "", encoding="utf-8")
     stderr_path.write_text(completed.stderr or "", encoding="utf-8")
     try:
@@ -293,7 +310,9 @@ def main() -> int:
         now = datetime.now(KST)
         target = story_at(args.date or now.date())
         settings = workspace_settings(root, args.output_root, args.account)
-        exit_code, result = run_job(root, target, settings, now, args.dry_run)
+        exit_code, result = run_job(
+            root, target, settings, now, args.dry_run, tidy=lambda: close_instagram_space(root)
+        )
     except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 1

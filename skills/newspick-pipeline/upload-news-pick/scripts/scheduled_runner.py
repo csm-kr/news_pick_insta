@@ -15,7 +15,7 @@ import sys
 from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 from zoneinfo import ZoneInfo
 
 
@@ -509,15 +509,28 @@ def exclusive_lock(path: Path, now: datetime) -> Iterator[None]:
         path.unlink(missing_ok=True)
 
 
+def close_instagram_space(root: Path) -> None:
+    """회차 앞뒤로 게시용 ego 공간을 닫아 매번 새 창으로 시작한다. 정리 실패는 회차를 막지 않는다."""
+    try:
+        sys.path.insert(0, str(root / "skills" / "newspick-pipeline" / "publish-news-pick" / "scripts"))
+        import ego_harness
+
+        ego_harness.close_task_spaces([ego_harness.SPACE_NAME])
+    except Exception:
+        pass
+
+
 def run_job(
     root: Path,
     scheduled_at: datetime,
     settings: dict[str, Any],
     now: datetime,
     dry_run: bool = False,
+    tidy: Callable[[], Any] | None = None,
 ) -> tuple[int, dict[str, Any]]:
     output_root: Path = settings["output_root"]
     slot_id = scheduled_at.strftime("%Y-%m-%d-%H%M")
+    tidy = tidy or (lambda: None)
     scheduler_root = output_root / "scheduler"
     state_path = scheduler_root / "editions" / f"{slot_id}.json"
     prompt = build_prompt(root, scheduled_at, settings)
@@ -580,20 +593,24 @@ def run_job(
     with exclusive_lock(scheduler_root / "scheduled-run.lock", now):
         atomic_json(state_path, started)
         result_path.unlink(missing_ok=True)
-        with event_path.open("w", encoding="utf-8") as events, error_path.open("w", encoding="utf-8") as errors:
-            completed = subprocess.run(
-                command,
-                input=prompt,
-                stdout=events,
-                stderr=errors,
-                creationflags=NO_WINDOW_FLAGS,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                env=environment,
-                cwd=str(root),
-                check=False,
-            )
+        tidy()
+        try:
+            with event_path.open("w", encoding="utf-8") as events, error_path.open("w", encoding="utf-8") as errors:
+                completed = subprocess.run(
+                    command,
+                    input=prompt,
+                    stdout=events,
+                    stderr=errors,
+                    creationflags=NO_WINDOW_FLAGS,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    env=environment,
+                    cwd=str(root),
+                    check=False,
+                )
+        finally:
+            tidy()
     finished_at = datetime.now(KST)
     final, meta = parse_stream_result(event_path)
     if final is not None:
@@ -634,7 +651,9 @@ def main() -> int:
         now = datetime.now(KST)
         scheduled_at = edition_at(args.slot, args.edition_date or now.date())
         settings = workspace_settings(root, args.output_root, args.account)
-        exit_code, result = run_job(root, scheduled_at, settings, now, args.dry_run)
+        exit_code, result = run_job(
+            root, scheduled_at, settings, now, args.dry_run, tidy=lambda: close_instagram_space(root)
+        )
     except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 1
