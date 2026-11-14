@@ -412,6 +412,34 @@ class ScheduledRunnerTests(unittest.TestCase):
             state = settings["output_root"] / "scheduler" / "editions" / "2026-08-18-0700.json"
             self.assertEqual(json.loads(state.read_text(encoding="utf-8"))["status"], "published")
 
+    def test_run_job_tidies_ego_space_before_and_after_even_on_crash(self):
+        """회차마다 새 newspick-instagram 창으로 시작하고, 끝나면 닫는다(11-14 재사용 창 캡처 멈춤)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.make_root(tmp)
+            settings = self.settings(root / "output")
+            scheduled = MOD.edition_at("07:00", date(2026, 8, 18))
+            final = {"status": "skipped", "summary": "x", "story_headline": None, "run_directory": None, "instagram_url": None, "reason": "no_publishable_story"}
+            events = [{"type": "result", "subtype": "success", "is_error": False, "session_id": "s", "result": json.dumps(final), "structured_output": final}]
+            order = []
+            stream = fake_stream(events)
+
+            def run(command, **kwargs):
+                order.append("claude")
+                return stream(command, **kwargs)
+
+            with patch.object(MOD, "find_claude", return_value=Path(__file__)), patch.object(MOD.subprocess, "run", side_effect=run):
+                MOD.run_job(root, scheduled, settings, scheduled - timedelta(minutes=30), tidy=lambda: order.append("tidy"))
+            self.assertEqual(order, ["tidy", "claude", "tidy"])
+
+            order.clear()
+            scheduled2 = MOD.edition_at("12:00", date(2026, 8, 18))
+            with patch.object(MOD, "find_claude", return_value=Path(__file__)), patch.object(
+                MOD.subprocess, "run", side_effect=KeyboardInterrupt
+            ):
+                with self.assertRaises(KeyboardInterrupt):
+                    MOD.run_job(root, scheduled2, settings, scheduled2 - timedelta(minutes=30), tidy=lambda: order.append("tidy"))
+            self.assertEqual(order, ["tidy", "tidy"])
+
     def test_run_job_starts_claude_without_console_window(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = self.make_root(tmp)

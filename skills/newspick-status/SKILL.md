@@ -29,7 +29,7 @@ Git Bash라면 `PYTHONUTF8=1 python skills/newspick-status/scripts/daily_report.
 - `· 수동 대체`: 정규 회차가 빠져서 수동 게시로 대신하고, 사용자 지시로 `output/scheduler/editions/<날짜>-<HHMM>.replacement.json`에 기록한 경우다. 19시 스토리도 이 게시를 그 회차로 센다.
 - `ego: …`: 설정값이 아니라 게시 시각 직전에 게시 공간(`newspick-instagram`)이 실제로 붙어 있던 프로필이다(`output/logs/ego-sessions.jsonl`). 기록이 없으면 `기록 없음`. 정상은 `뉴스픽 (Profile 2)`다.
 - `팔로워 … (11/12 기준)`: 지금 보고는 Instagram을 읽지 않으므로 오늘 팔로워 기록이 아직 없으면 마지막 기록을 날짜와 함께 보여 준다. 오늘 숫자는 19:30 일일 보고가 프로필 페이지를 한 번 읽어 남긴다.
-- `ego 게시 공간: 지금 열린 공간 없음 · 마지막 연결 …`: 게시가 끝나면 게시용 공간이 닫히므로 낮에는 정상이다.
+- `ego 게시 공간: 지금 열린 공간 없음 · 마지막 연결 …`: 회차가 끝나면 실행기가 게시용 공간을 닫으므로 회차 사이에는 이게 정상이다. 회차가 돌지 않는 시간에 공간이 열려 있으면 정리가 안 된 것이다. 캡처 timeout으로 회차가 멈췄다면 `publish-news-pick/references/edge-browser-contract.md`의 정리 항목을 본다.
 
 ## 다른 날짜
 

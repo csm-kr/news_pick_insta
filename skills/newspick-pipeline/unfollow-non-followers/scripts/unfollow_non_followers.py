@@ -140,6 +140,14 @@ def ensure_browser() -> None:
     ego_harness.ensure_ego_running()
 
 
+def then_close_growth_space(work):
+    """팔로우·언팔 작업을 돌린 뒤 newspick-growth 공간을 닫는다. 실패로 끝나도 닫는다."""
+    try:
+        return work()
+    finally:
+        ego_harness.close_task_spaces([GROWTH_SPACE])
+
+
 def log_to_file_if_windowless(path: Path) -> None:
     """pythonw로 예약 실행되면 stdout이 없으므로 출력을 파일로 돌린다."""
     if sys.stdout is None:
@@ -245,13 +253,17 @@ def main() -> int:
         print("예약 run 시간대(시작 15분 전~종료)라 Instagram을 건드리지 않는다.")
         return 3
     ensure_browser()
-    if args.apply:
-        return apply(args.out_dir)
-    recent = recent_follow_ids(FOLLOW_LOG, now, args.min_follow_age_days)
-    collect(args.out_dir, {name for name in args.exclude.split(",") if name.strip()}, recent)
-    if args.auto:
-        return apply(args.out_dir)
-    return 0
+
+    def work() -> int:
+        if args.apply:
+            return apply(args.out_dir)
+        recent = recent_follow_ids(FOLLOW_LOG, now, args.min_follow_age_days)
+        collect(args.out_dir, {name for name in args.exclude.split(",") if name.strip()}, recent)
+        if args.auto:
+            return apply(args.out_dir)
+        return 0
+
+    return then_close_growth_space(work)
 
 
 if __name__ == "__main__":

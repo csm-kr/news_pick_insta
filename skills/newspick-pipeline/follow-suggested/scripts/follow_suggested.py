@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "unfollow-non-followers" / "scripts"))
 from unfollow_non_followers import (  # noqa: E402
     KST, ensure_browser, evaluate, in_busy_window, log_to_file_if_windowless, next_deadline, recent_follow_ids,
+    then_close_growth_space,
 )
 
 
@@ -211,7 +212,7 @@ def main() -> int:
         print("예약 run 시간대(시작 15분 전~종료)라 Instagram을 건드리지 않는다.")
         return 3
     ensure_browser()
-    return run(limit)
+    return then_close_growth_space(lambda: run(limit))
 
 
 if __name__ == "__main__":

@@ -50,7 +50,9 @@ ego lite는 원격 디버깅 포트를 열지 않아 Browser Harness가 붙을 �
 
 - `scripts/ego_harness.py`: Browser Harness helper(`cdp`, `js`, `click_at_xy`, `switch_tab`, `_send` 등)를 같은 이름으로 제공하고, 전송만 ego로 바꾼다. 실행 전 `Browser.getVersion`이 `ego-lite/`인지 확인한다.
 - `scripts/ego_bridge.mjs`: `ego-browser nodejs` 안에서 TaskSpace `newspick-instagram`을 열고 loopback TCP로 `page.cdp`·`task.cdp`·탭 조작만 중계한다. 10분 동안 요청이 없으면 스스로 종료한다.
-- 정리: 연결이 끝나면 bridge 프로세스를 끄고 임시 폴더(`%TEMP%\newspick-ego-*`)를 지운다. 작업 공간은 연결이 끝나면 ego가 닫는다. bridge가 시작 전에 죽어도 폴더를 지우고, 강제 종료로 남은 6시간 넘은 폴더는 다음 연결 때 치운다(`sweep_stale_bridge_dirs`).
+- 정리: 연결이 끝나면 bridge 프로세스를 끄고 임시 폴더(`%TEMP%\newspick-ego-*`)를 지운다. bridge가 시작 전에 죽어도 폴더를 지우고, 강제 종료로 남은 6시간 넘은 폴더는 다음 연결 때 치운다(`sweep_stale_bridge_dirs`).
+- 작업 공간은 연결이 끝나도 ego가 닫지 않는다. 한 회차 안의 helper들은 같은 공간을 이어 쓰고, 회차·스토리 실행기가 시작 전과 끝난 뒤에 `close_task_spaces(["newspick-instagram"])`로 `finish({keep: []})`한다. 팔로우·언팔은 끝나면 `newspick-growth`를 닫는다. agent가 만든, 설정 프로필의 같은 이름 공간만 닫고 사용자 공간과 다른 프로젝트 공간은 건드리지 않는다.
+- 이유(11-14~15): 닫지 않은 `newspick-instagram` 공간을 여러 회차가 이어 쓰다 창이 최소화 상태로 굳었고, 그 창에서는 복원해도 `Page.captureScreenshot`이 110초 timeout으로 멈춰 4:5 자르기 증거를 못 남기고 12·17·07시 회차가 공유 전에 멈췄다. 같은 잠긴 PC에서 새로 만든 공간은 0.1초에 캡처됐다. 회차 중 캡처가 멈추면 새 공간을 만들지 말고 needs_review로 끝낸다. 다음 회차가 새 공간으로 시작한다.
 - target·session은 ego Page 라벨(`p1`, `p2` …)로 바뀐다. `Target.getTargets`는 이 TaskSpace의 탭만 돌려주므로, 사용자가 ego에서 따로 연 Instagram 탭은 계산에 들어가지 않는다. `Target.createTarget`은 `task.newPage()`, `Target.closeTarget`은 `page.close()`, `Target.activateTarget`은 `Page.bringToFront`로 바뀐다. 그 밖의 `Target.*`·`Browser.*`(창 위치 조회·변경 제외)는 실패한다.
 - ego 창이 최소화돼 있으면 `Page.captureScreenshot` 앞뒤로 창을 잠깐 복원했다가 다시 최소화한다. `activate=True` 탭 전환은 창을 앞으로 가져온다.
 - `Target.createTarget(newWindow=True)`(스토리 검증)는 새 탭을 만들고 최소화된 창만 복원한다. ego 새 탭은 앞으로 가져오지 않아도 visible·unfocused라 스토리 영상이 재생되고, 포커스 보존 검사도 통과한다(11-06 실측).

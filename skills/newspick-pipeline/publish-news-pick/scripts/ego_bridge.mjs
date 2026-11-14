@@ -24,6 +24,21 @@ export async function openTask(config) {
   return task;
 }
 
+// 끝난 뉴스픽 공간을 finish로 닫는다. 같은 창을 여러 회차가 이어 쓰면 최소화로 굳어 캡처가 멈춘다(11-14).
+// agent가 만든, 이름과 프로필이 맞는 공간만 닫는다. 사용자 공간과 다른 프로젝트 공간은 건드리지 않는다.
+export async function closeTaskSpaces(config) {
+  const names = new Set(config.names || []);
+  const closed = [];
+  for (const space of await listTaskSpaces()) {
+    if (!names.has(space.name) || space.createdBy !== "agent") continue;
+    if (config.profileId && space.profileId !== config.profileId) continue;
+    const task = await taskSpace(space.id);
+    await task.finish({ keep: [] });
+    closed.push(space.id);
+  }
+  return { closed };
+}
+
 export async function serve(config) {
   const net = await import("node:net");
   const fs = await import("node:fs/promises");
