@@ -39,6 +39,8 @@ python scripts/orchestrate.py init --output-root $env:NEWS_PICK_OUTPUT_ROOT --ed
 python scripts/orchestrate.py status --run <run-directory>
 ```
 
+예약 run이 검색·기획·제작을 마치고 **게시 단계에서만** 멈췄고(공유 전 needs_review로 취소), 사용자가 그 카드를 지금 올리라고 하면 준비를 다시 하지 않는다. `python scripts/orchestrate.py clone-prepared --run <멈춘 run> --reason <사용자 지시>`로 새 run을 만든다. 이 명령은 원래 run의 세 준비 단계 hash가 완료 기록과 같은지 확인한 뒤 01~03·`references/`·`04-publish/caption.txt`만 복사하고, 같은 `edition_at`·계정으로 게시 단계에서 멈춘다. 원래 run과 그 queue job(승인됐지만 제출 안 됨)은 고치거나 `run-due`로 다시 쓰지 않는다. 새 run에서 새 queue job을 `prepare`→`approve`하고 아래 4단계를 그대로 밟는다. 카드에 박힌 기준시각은 원래 회차 기준이므로, 그사이 사실이 바뀌었으면 이 명령을 쓰지 말고 새 run으로 다시 만든다. 게시 뒤 사용자가 그 회차로 넣으라고 했으면 `newspick-pipeline/SKILL.md`의 "정규 회차 대체" 기록을 남긴다(2026-11-15 07시 MMA2026 카드가 이 경로로 17:45에 게시됐다).
+
 사용자가 중지했던 같은 작업을 명시적으로 재개하라고 하면 새 요청으로 다시 만들지 않고 `python scripts/orchestrate.py resume-run --run <run-directory> --reason <재개 지시>`로 준비 단계를 이어간다. 완료 단계의 hash를 다시 확인하며 바뀐 단계부터 재검증한다. 게시 단계 중지나 제출·queue 기록이 있으면 재개 명령으로 변경하지 않는다.
 
 입력 hash가 기존 완료 기록과 같으면 완료 단계를 다시 실행하지 않는다. 앞 단계 산출물이 바뀌면 그 뒤 단계 기록과 승인은 폐기하고 해당 단계부터 다시 시작한다. 자세한 계약은 [references/workflow-contract.md](references/workflow-contract.md)를 읽는다.
