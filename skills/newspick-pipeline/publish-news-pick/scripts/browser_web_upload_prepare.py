@@ -290,4 +290,4 @@ if state.get("input_present") and (
     state.get("file_count") != len(media) or state.get("multiple") is not True
 ):
     raise RuntimeError("retained multiple input does not contain the expected media")
-print("MANUAL_GATE=Open the media gallery and visually confirm every thumbnail before continuing")
+print("MANUAL_GATE=Run browser_web_check_composer.py with IG_COMPOSER_CHECK=gallery and visually confirm every thumbnail before continuing")

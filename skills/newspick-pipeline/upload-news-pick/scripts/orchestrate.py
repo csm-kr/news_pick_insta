@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -223,6 +224,43 @@ def resume_run(run: Path, reason: str) -> dict[str, Any]:
     return state
 
 
+PREPARATION = STAGES[:-1]
+
+
+def clone_prepared(runs_root: Path, source: Path, reason: str) -> dict[str, Any]:
+    """게시 단계에서 멈춘 run의 검증된 준비물을 새 run으로 옮기고 게시 단계에서 멈춘다.
+
+    원래 run은 고치지 않는다. 같은 회차(edition_at)와 계정을 이어받는다.
+    """
+    if not reason.strip():
+        raise ValueError("복제 사유가 필요하다.")
+    state = load_json(source / "run.json")
+    if state.get("status") != "cancelled":
+        raise ValueError(f"cancelled run만 복제할 수 있다: {state.get('status')}")
+    for stage in PREPARATION:
+        record = state["stages"][stage]
+        if record.get("status") != "completed":
+            raise ValueError(f"준비 단계 {stage}가 완료되지 않았다.")
+        if tree_hash(source / DIRS[stage]) != record.get("output_sha256"):
+            raise ValueError(f"{stage} 산출물 hash가 완료 기록과 다르다.")
+        validate_stage(source, stage)
+    created = init_run(runs_root, state["edition_at"], state["account"])
+    run = Path(created["run"])
+    for stage in PREPARATION:
+        shutil.copytree(source / DIRS[stage], run / DIRS[stage], dirs_exist_ok=True)
+    if (source / "references").is_dir():
+        shutil.copytree(source / "references", run / "references")
+    caption = source / DIRS["publish-news-pick"] / "caption.txt"
+    if caption.is_file():
+        shutil.copy2(caption, run / DIRS["publish-news-pick"] / "caption.txt")
+    for stage in PREPARATION:
+        complete_stage(run, stage)
+    cloned = load_json(run / "run.json")
+    cloned["cloned_from"] = {"run_id": state["run_id"], "reason": reason.strip(), "cloned_at": now_iso()}
+    atomic_json(run / "run.json", cloned)
+    return {"run": str(run.resolve()), **cloned}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -243,6 +281,9 @@ def main() -> int:
     resume = commands.add_parser("resume-run")
     resume.add_argument("--run", type=Path, required=True)
     resume.add_argument("--reason", required=True)
+    clone = commands.add_parser("clone-prepared")
+    clone.add_argument("--run", type=Path, required=True, help="게시 단계에서 멈춘(cancelled) 원래 run")
+    clone.add_argument("--reason", required=True)
     validate = commands.add_parser("validate-stage")
     validate.add_argument("--run", type=Path, required=True)
     validate.add_argument("--stage", choices=STAGES, required=True)
@@ -262,6 +303,8 @@ def main() -> int:
             result = cancel_run(args.run, args.reason)
         elif args.command == "resume-run":
             result = resume_run(args.run, args.reason)
+        elif args.command == "clone-prepared":
+            result = clone_prepared(args.run.resolve().parent, args.run.resolve(), args.reason)
         else:
             validate_stage(args.run, args.stage)
             result = {"valid": True, "stage": args.stage}
