@@ -179,6 +179,16 @@ class GrowthScheduleTests(unittest.TestCase):
         self.assertIn("-Weekly -DaysOfWeek Monday, Thursday -At ([datetime]::Today.AddMinutes(30))", script)
         self.assertIn("target = 'Monday, Thursday 00:30'", script)
 
+    def test_follow_tasks_start_late_when_the_scheduled_start_was_missed(self):
+        # 11-15 저녁 팔로우가 21:32 시작을 놓친 뒤 대신 돌지 않고 다음 날로 넘어갔다.
+        # 팔로우 세 작업만 놓친 시작을 나중에 대신 돈다(늦게 돌아도 하루 목표와 게시 시간대 보호는 스크립트가 지킨다).
+        script = PATH.with_name("manage_windows_growth_schedule.ps1").read_text(encoding="utf-8-sig")
+        specs = {line.split("name = '")[1].split("'")[0]: line
+                 for line in script.splitlines() if "@{ name = 'NewsPick" in line}
+        for name, line in specs.items():
+            self.assertEqual("catchUp = $true" in line, name.startswith("NewsPickFollow-"), name)
+        self.assertIn("-StartWhenAvailable:([bool]$spec.catchUp)", script)
+
 
 if __name__ == "__main__":
     unittest.main()
