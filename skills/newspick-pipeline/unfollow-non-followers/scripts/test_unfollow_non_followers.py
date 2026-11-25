@@ -76,6 +76,44 @@ class ResultTests(unittest.TestCase):
         self.assertTrue(MOD.is_success({"step": "skip_mutual"}))
         self.assertTrue(MOD.is_success({"step": "skip_not_following"}))
 
+    def test_missing_account_is_a_normal_result(self):
+        # 11-23 탈퇴한 것으로 보이는 계정에서 show가 404 HTML을 돌려줘 언팔 전체가 멈췄다
+        self.assertTrue(MOD.is_success({"step": "show", "status": 404, "body": "<!DOCTYPE html>"}))
+        self.assertFalse(MOD.is_success({"step": "show", "status": 429, "body": ""}))
+
+
+class ApplyTests(unittest.TestCase):
+    def run_apply(self, results):
+        calls = iter(results)
+        originals = (MOD.evaluate, MOD.time_module.sleep, MOD.next_deadline)
+        MOD.evaluate = lambda script, timeout: next(calls)
+        MOD.time_module.sleep = lambda seconds: None
+        MOD.next_deadline = lambda now: datetime(2999, 1, 1, tzinfo=KST)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                out = Path(tmp)
+                targets = [{"id": str(i), "username": f"u{i}"} for i in range(len(results))]
+                (out / "targets.json").write_text(json.dumps({"targets": targets}), encoding="utf-8")
+                code = MOD.apply(out)
+                log = out / "unfollow_log.jsonl"
+                rows = [json.loads(l) for l in log.read_text(encoding="utf-8").splitlines()] if log.is_file() else []
+                return code, rows
+        finally:
+            MOD.evaluate, MOD.time_module.sleep, MOD.next_deadline = originals
+
+    def test_missing_account_is_logged_and_the_run_continues(self):
+        missing = {"step": "show", "status": 404, "body": "<!DOCTYPE html>"}
+        ok = {"step": "unfollow", "status": 200, "body": '{"status": "ok", "following": false}'}
+        code, rows = self.run_apply([missing, ok])
+        self.assertEqual(code, 0)
+        self.assertEqual([(r["id"], r["step"]) for r in rows], [("0", "show"), ("1", "unfollow")])
+
+    def test_three_missing_in_a_row_stops_because_the_endpoint_may_be_broken(self):
+        missing = {"step": "show", "status": 404, "body": "<!DOCTYPE html>"}
+        code, rows = self.run_apply([missing, missing, missing, missing])
+        self.assertEqual(code, 2)
+        self.assertEqual(len(rows), 2)
+
     def test_resume_skips_ids_already_in_log(self):
         with tempfile.TemporaryDirectory() as tmp:
             log = Path(tmp) / "log.jsonl"
