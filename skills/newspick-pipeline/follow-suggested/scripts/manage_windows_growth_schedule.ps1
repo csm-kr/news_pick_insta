@@ -21,11 +21,11 @@ $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 # 팔로우는 오전·오후·저녁 구간마다 작업 스케줄러가 시작 시각을 매일 무작위로 정한다(게시 회차 시간대는 피한다).
 # 그날 몇 명을 몇 구간에 나눌지는 follow_suggested.py --session이 정한다. 맞팔 아닌 계정 정리는 매주 월·목요일 00:30
 $tasks = @(
-    @{ name = 'NewsPickFollow-Morning'; target = 'daily 08:00-10:50 random'; arguments = "`"$followScript`" --session morning"
+    @{ name = 'NewsPickFollow-Morning'; target = 'daily 08:00-10:50 random'; arguments = "`"$followScript`" --session morning"; catchUp = $true
        trigger = { New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours(8)) -RandomDelay (New-TimeSpan -Hours 2 -Minutes 50) }; limit = New-TimeSpan -Hours 2 },
-    @{ name = 'NewsPickFollow-Afternoon'; target = 'daily 13:00-15:30 random'; arguments = "`"$followScript`" --session afternoon"
+    @{ name = 'NewsPickFollow-Afternoon'; target = 'daily 13:00-15:30 random'; arguments = "`"$followScript`" --session afternoon"; catchUp = $true
        trigger = { New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours(13)) -RandomDelay (New-TimeSpan -Hours 2 -Minutes 30) }; limit = New-TimeSpan -Hours 2 },
-    @{ name = 'NewsPickFollow-Evening'; target = 'daily 20:00-23:00 random'; arguments = "`"$followScript`" --session evening"
+    @{ name = 'NewsPickFollow-Evening'; target = 'daily 20:00-23:00 random'; arguments = "`"$followScript`" --session evening"; catchUp = $true
        trigger = { New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours(20)) -RandomDelay (New-TimeSpan -Hours 3) }; limit = New-TimeSpan -Hours 2 },
     @{ name = 'NewsPickUnfollow-Weekly'; target = 'Monday, Thursday 00:30'; arguments = "`"$unfollowScript`" --auto"
        trigger = { New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday, Thursday -At ([datetime]::Today.AddMinutes(30)) }; limit = New-TimeSpan -Hours 6 },
@@ -61,7 +61,9 @@ if ($Command -eq 'install') {
     $principal = New-ScheduledTaskPrincipal -UserId $currentUser -LogonType Interactive -RunLevel Limited
     foreach ($spec in $tasks) {
         $action = New-ScheduledTaskAction -Execute $pythonw -Argument $spec.arguments -WorkingDirectory $projectRoot
+        # 팔로우는 시작 시각을 놓치면(11-15 저녁) 나중에 대신 돈다. 하루 목표·게시 시간대 보호는 follow_suggested.py가 지킨다
         $settings = New-ScheduledTaskSettingsSet `
+            -StartWhenAvailable:([bool]$spec.catchUp) `
             -WakeToRun `
             -RunOnlyIfNetworkAvailable `
             -AllowStartIfOnBatteries `

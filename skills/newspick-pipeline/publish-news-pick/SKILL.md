@@ -107,9 +107,11 @@ python scripts/carousel_queue.py record-web-submitted <job_id> --shortcode <code
 ```
 
 ```powershell
-$env:IG_EXPECTED_ALT_TOKENS = '<고유 토큰1>|<고유 토큰2>|<고유 토큰3>'
+$env:IG_EXPECTED_CAPTION_PREFIX = '<caption 첫 문장 앞부분>'
 python scripts/invoke_edge_browser_harness.py scripts/browser_web_find_latest_post.py
 ```
+
+Instagram 자동 alt는 `Photo by … on <미국 날짜>. 텍스트의 이미지일 수 있음.` 정도라 카드 문구가 거의 안 들어간다(11-20 리트 건에서 alt 토큰으로 못 찾음). 그래서 `IG_EXPECTED_CAPTION_PREFIX`로 최신 3개 permalink의 caption을 읽어 찾는 것을 기본으로 한다. `IG_EXPECTED_ALT_TOKENS`도 계속 쓸 수 있다.
 
 ## 제출 — 선택적 private API 경로
 

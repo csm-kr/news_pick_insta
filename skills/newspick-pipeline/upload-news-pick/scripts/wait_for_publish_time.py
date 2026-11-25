@@ -17,6 +17,9 @@ MAX_PUBLISH_OFFSET = timedelta(minutes=20)
 # 공유가 실패하고 미게시가 확인된 회차의 복구 공유: 지연 등록을 기다린 뒤 회차+60분 안에서만 허용한다.
 RECOVERY_DELAY = timedelta(minutes=10)
 MAX_RECOVERY_LATENESS = timedelta(minutes=60)
+# 한 번 실행은 도구 제한(10분) 안에 끝나야 한다. 아직이면 종료 코드 3으로 돌아오고 호출자가 같은 명령을 다시 실행한다.
+DEFAULT_MAX_WAIT_SECONDS = 540
+EXIT_STILL_WAITING = 3
 
 
 def parse_iso_datetime(value: str) -> datetime:
@@ -74,26 +77,56 @@ def validate_recovery_window(target: datetime, current: datetime, failed_at: dat
     return (failed_at + RECOVERY_DELAY - current).total_seconds()
 
 
-def wait_until(target: datetime, offset: timedelta = timedelta(0), failed_at: datetime | None = None) -> datetime:
+def wait_until(
+    target: datetime,
+    offset: timedelta = timedelta(0),
+    failed_at: datetime | None = None,
+    max_wait: float | None = None,
+    now_fn=datetime.now,
+    sleep_fn=time.sleep,
+) -> datetime | None:
+    """게이트가 풀리면 그 시각을, max_wait초 안에 안 풀리면 None을 돌려준다."""
+    waited = 0.0
     while True:
-        current = datetime.now(target.tzinfo)
+        current = now_fn(target.tzinfo)
         if failed_at is None:
             remaining = validate_window(target, current, offset)
         else:
             remaining = validate_recovery_window(target, current, failed_at)
         if remaining <= 0:
             return current
-        time.sleep(min(remaining, 30.0))
+        if max_wait is not None and waited >= max_wait:
+            return None
+        step = min(remaining, 30.0)
+        if max_wait is not None:
+            step = min(step, max_wait - waited)
+        sleep_fn(step)
+        waited += step
 
 
 def main() -> int:
     try:
         target = scheduled_time(dict(os.environ))
         offset = publish_offset(dict(os.environ))
-        released_at = wait_until(target, offset, recovery_failed_at(dict(os.environ)))
+        max_wait = float(os.environ.get("NEWS_PICK_GATE_MAX_WAIT_SECONDS") or DEFAULT_MAX_WAIT_SECONDS)
+        released_at = wait_until(target, offset, recovery_failed_at(dict(os.environ)), max_wait=max_wait)
     except (OSError, ValueError) as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 1
+    if released_at is None:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "waiting": True,
+                    "message": "아직 공유 시각 전이다. 같은 게이트 명령을 포그라운드로 바로 다시 실행한다.",
+                    "scheduled_at": target.isoformat(),
+                    "publish_offset_seconds": int(offset.total_seconds()),
+                },
+                ensure_ascii=False,
+            )
+        )
+        return EXIT_STILL_WAITING
     print(
         json.dumps(
             {

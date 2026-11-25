@@ -166,7 +166,7 @@ powershell -ExecutionPolicy Bypass -File scripts/manage_windows_schedule.ps1 sta
 powershell -ExecutionPolicy Bypass -File scripts/manage_windows_schedule.ps1 remove
 ```
 
-Windows 작업은 각 회차 30분 전인 `06:30`, `11:30`, `16:30` KST에 준비를 시작한다. 검색·기획·이미지 생성·QA와 게시 직전 검증을 미리 끝내고, `scripts/wait_for_publish_time.py`가 목표 회차 시각까지 대기한 뒤에만 Instagram `공유하기`를 누른다. 매일 같은 초에 올라가 자동화로 보이지 않도록 `scheduled_runner.py`가 회차마다 1~15분 무작위 편차를 골라 `NEWS_PICK_PUBLISH_OFFSET_SECONDS`로 넘기고 게이트는 그만큼 더 기다린다. 카드의 기준시각과 30분 게시 창은 edition_at 기준 그대로다. 웹 UI 공유 스크립트도 목표 시각 전 클릭과 목표 시각 30분 뒤의 보충 게시를 코드로 차단한다.
+Windows 작업은 각 회차 30분 전인 `06:30`, `11:30`, `16:30` KST에 준비를 시작한다. 검색·기획·이미지 생성·QA와 게시 직전 검증을 미리 끝내고, `scripts/wait_for_publish_time.py`가 목표 회차 시각까지 대기한 뒤에만 Instagram `공유하기`를 누른다. 매일 같은 초에 올라가 자동화로 보이지 않도록 `scheduled_runner.py`가 회차마다 1~15분 무작위 편차를 골라 `NEWS_PICK_PUBLISH_OFFSET_SECONDS`로 넘기고 게이트는 그만큼 더 기다린다. 카드의 기준시각과 30분 게시 창은 edition_at 기준 그대로다. 웹 UI 공유 스크립트도 목표 시각 전 클릭과 목표 시각 30분 뒤의 보충 게시를 코드로 차단한다. 게이트 한 번은 최대 9분만 기다리고, 아직이면 `"waiting": true`와 종료 코드 3으로 끝난다. 예약 실행은 종료 코드 0이 나올 때까지 같은 게이트를 포그라운드로 반복한다. 백그라운드·Monitor로 넘기고 턴을 끝내면 `claude -p` 무인 실행은 그대로 종료돼 결과가 강제 제출된다. 11-21·11-22 07시 회차가 이렇게 공유 전에 끝났다.
 
 예약 실행은 `output/scheduler/editions/<date>-<slot>.json`을 idempotency key로 사용한다. state가 한 번 생긴 회차, 목표 시각 30분 전보다 이른 실행, 목표 시각에서 30분 넘게 지난 실행, 다른 회차가 실행 중인 경우에는 새 게시를 시작하지 않는다. `needs_review`와 제출 뒤 오류를 자동 재시도하지 않는다. Windows 사용자가 로그인되어 있고 ego lite 프로필에 Instagram 세션이 있을 때만 동작하며(ego가 꺼져 있으면 실행기가 켠다), 컴퓨터가 꺼져 있던 회차는 나중에 몰아서 게시하지 않는다. 자세한 고정 prompt와 결과 schema는 `scripts/scheduled_runner.py`와 `references/scheduled-result.schema.json`을 사용한다.
 

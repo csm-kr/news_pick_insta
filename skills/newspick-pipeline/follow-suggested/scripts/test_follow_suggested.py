@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
+import subprocess
 import tempfile
 import unittest
 from datetime import date
@@ -79,6 +81,40 @@ class FollowResultTests(unittest.TestCase):
         self.assertIn("/api/v1/discover/chaining/?target_id=", MOD.FETCH_SIMILAR_JS)
 
 
+def run_similar_js(responses: list[str]) -> dict:
+    """FETCH_SIMILAR_JS를 node에서 돌린다. fetch는 responses를 차례로 200으로 돌려준다."""
+    seeds = [str(i) for i in range(len(responses))]
+    script = (
+        "globalThis.setTimeout = (f) => f();\n"
+        f"const bodies = {json.dumps(responses)};\n"
+        "let calls = 0;\n"
+        "globalThis.fetch = async () => { const b = bodies[calls++];\n"
+        "  return {ok: true, text: async () => b, json: async () => JSON.parse(b)}; };\n"
+        f"({MOD.FETCH_SIMILAR_JS % json.dumps(seeds)})\n"
+        "  .then(users => console.log(JSON.stringify({users, calls})))\n"
+        "  .catch(e => { console.log(JSON.stringify({error: String(e), calls})); });\n"
+    )
+    out = subprocess.run(["node", "-e", script], capture_output=True, text=True, encoding="utf-8", timeout=30)
+    return json.loads(out.stdout)
+
+
+@unittest.skipUnless(shutil.which("node"), "node가 없으면 JS 동작은 확인하지 않는다")
+class SimilarAccountScriptTests(unittest.TestCase):
+    def test_html_response_stops_quietly_and_keeps_users_already_fetched(self):
+        # 11-24 비슷한 계정 응답이 HTML로 와서 JSON 파싱 오류로 그날 팔로우 세 번이 모두 0명이 됐다.
+        # 비슷한 계정이 안 나오면 무리하지 않고 추천에서 고른 만큼만 팔로우한다(사용자 요청 11-25).
+        result = run_similar_js([json.dumps({"users": [{"pk": "8", "username": "u8"}]}),
+                                 "<!DOCTYPE html><html></html>",
+                                 json.dumps({"users": [{"pk": "9", "username": "u9"}]})])
+        self.assertNotIn("error", result)
+        self.assertEqual([u["pk"] for u in result["users"]], ["8"])
+        self.assertEqual(result["calls"], 2)
+
+    def test_json_responses_are_all_collected(self):
+        result = run_similar_js([json.dumps({"users": [{"pk": "8"}]}), json.dumps({"users": [{"pk": "9"}]})])
+        self.assertEqual([u["pk"] for u in result["users"]], ["8", "9"])
+
+
 class SimilarAccountTests(unittest.TestCase):
     def test_chaining_users_without_friendship_status_are_picked(self):
         users = [{"pk": "8", "username": "u8", "is_private": False},
@@ -142,6 +178,16 @@ class GrowthScheduleTests(unittest.TestCase):
         script = PATH.with_name("manage_windows_growth_schedule.ps1").read_text(encoding="utf-8-sig")
         self.assertIn("-Weekly -DaysOfWeek Monday, Thursday -At ([datetime]::Today.AddMinutes(30))", script)
         self.assertIn("target = 'Monday, Thursday 00:30'", script)
+
+    def test_follow_tasks_start_late_when_the_scheduled_start_was_missed(self):
+        # 11-15 저녁 팔로우가 21:32 시작을 놓친 뒤 대신 돌지 않고 다음 날로 넘어갔다.
+        # 팔로우 세 작업만 놓친 시작을 나중에 대신 돈다(늦게 돌아도 하루 목표와 게시 시간대 보호는 스크립트가 지킨다).
+        script = PATH.with_name("manage_windows_growth_schedule.ps1").read_text(encoding="utf-8-sig")
+        specs = {line.split("name = '")[1].split("'")[0]: line
+                 for line in script.splitlines() if "@{ name = 'NewsPick" in line}
+        for name, line in specs.items():
+            self.assertEqual("catchUp = $true" in line, name.startswith("NewsPickFollow-"), name)
+        self.assertIn("-StartWhenAvailable:([bool]$spec.catchUp)", script)
 
 
 if __name__ == "__main__":

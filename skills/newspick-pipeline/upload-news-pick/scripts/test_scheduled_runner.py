@@ -209,6 +209,15 @@ class ScheduledRunnerTests(unittest.TestCase):
         self.assertIn("NEWS_PICK_PUBLISH_OFFSET_SECONDS", prompt)
         self.assertIn("같은 게이트 명령을 다시 실행", prompt)
 
+    def test_prompt_forbids_backgrounding_gate_and_ending_turn(self):
+        # 11-21·11-22 07시: 게이트를 백그라운드·Monitor로 돌리고 "대기합니다"로 턴을 끝내 결과가 강제 제출됐다.
+        prompt = MOD.build_prompt(Path("C:/work"), MOD.edition_at("07:00", date(2026, 11, 22)), self.settings("C:/work/output"))
+        self.assertIn("run_in_background", prompt)
+        self.assertIn("Monitor", prompt)
+        self.assertIn("종료 코드 3", prompt)
+        self.assertIn("턴을 끝내면 이 회차가 즉시 종료", prompt)
+        self.assertIn("timeout 600000", prompt)
+
     def test_every_lane_prefers_hookable_news(self):
         settings = self.settings("C:/work/output")
         for slot in ("07:00", "12:00", "17:00"):

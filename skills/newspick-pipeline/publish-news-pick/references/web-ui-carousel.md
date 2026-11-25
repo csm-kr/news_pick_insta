@@ -48,7 +48,7 @@
 
 성공 문구 뒤 프로필 최신 permalink를 읽고 다음을 기록한다.
 
-프로필 grid의 링크는 `https://www.instagram.com/<account>/p/<code>/`일 수 있다. shortcode를 추출한 뒤 공개 검증 URL은 `https://www.instagram.com/p/<code>/`로 정규화하며, 최신 카드의 image alt에 `IG_EXPECTED_ALT_TOKENS`가 모두 있는 게시물만 선택한다.
+프로필 grid의 링크는 `https://www.instagram.com/<account>/p/<code>/`일 수 있다. shortcode를 추출한 뒤 공개 검증 URL은 `https://www.instagram.com/p/<code>/`로 정규화하며, 최신 3개 permalink 중 caption에 `IG_EXPECTED_CAPTION_PREFIX`가 있는 게시물을 선택한다(기본). Instagram 자동 alt에는 카드 문구가 거의 없어서다. `IG_EXPECTED_ALT_TOKENS`를 줄 때는 image alt에 토큰이 모두 있는 게시물만 선택한다.
 
 ```powershell
 python scripts/carousel_queue.py record-web-submitted <job_id> --shortcode <code> --card-count 5

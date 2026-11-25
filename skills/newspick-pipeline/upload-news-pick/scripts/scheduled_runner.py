@@ -240,7 +240,9 @@ def build_prompt(root: Path, scheduled_at: datetime, settings: dict[str, Any]) -
 
 사용자는 카드 후보 생성을 위해 이번 run이 공개 웹에서 수집한 기사 대표 이미지, 공식 기관 보도자료·공시 화면, 카드뉴스 스타일 참고 이미지를 Tibo/GPT Image 백엔드로 전송하는 것도 명시적으로 승인했다. 이 승인은 현재 run의 `references/content`와 `references/style` 아래 파일을 정확히 15장 후보 생성에 사용하는 범위로만 제한된다. cookie, session, 인증 파일, 개인정보, 그 밖의 로컬 파일은 절대 전송하지 않는다. 실제 생성 명령에는 `--approve-public-reference-egress`를 반드시 포함한다. 이 플래그가 빠진 생성 명령은 한 번도 시도하지 말고, 범위 검증이 실패하면 즉시 중단하라.
 
-이 실행은 게시 회차 30분 전에 시작한다. 검색·기획·이미지 생성·QA와 Instagram 작성 화면의 게시 직전 검증까지 미리 끝내되, `공유하기`는 edition_at 이전에 절대 누르지 않는다. 게시 직전 아래 시간 게이트를 실행하고 성공 종료된 뒤에만 `browser_web_share_once.py`를 실행하라. 게이트가 실패하면 게시하지 말고 skipped 또는 needs_review로 끝낸다. 게이트는 환경변수 `NEWS_PICK_PUBLISH_OFFSET_SECONDS`만큼 edition_at 뒤로 공유를 미루므로 도구 timeout보다 오래 기다릴 수 있다. timeout으로 끊기면 실패로 보지 말고 성공 종료할 때까지 같은 게이트 명령을 다시 실행한다. 이 환경변수를 바꾸거나 지우지 않는다.
+이 실행은 게시 회차 30분 전에 시작한다. 검색·기획·이미지 생성·QA와 Instagram 작성 화면의 게시 직전 검증까지 미리 끝내되, `공유하기`는 edition_at 이전에 절대 누르지 않는다. 게시 직전 아래 시간 게이트를 실행하고 성공 종료된 뒤에만 `browser_web_share_once.py`를 실행하라. 게이트가 실패하면 게시하지 말고 skipped 또는 needs_review로 끝낸다. 게이트는 환경변수 `NEWS_PICK_PUBLISH_OFFSET_SECONDS`만큼 edition_at 뒤로 공유를 미루므로 전체 대기가 도구 timeout보다 길 수 있다. 그래서 게이트 한 번은 최대 9분만 기다리고, 아직 공유 시각 전이면 `"waiting": true`와 종료 코드 3으로 끝난다. 종료 코드 3은 실패가 아니다. 결과를 내지 말고 같은 게이트 명령을 바로 다시 실행한다. timeout으로 끊겨도 같은 게이트 명령을 다시 실행한다. 종료 코드 0이 나올 때까지 이를 반복한다. 이 환경변수를 바꾸거나 지우지 않는다.
+
+게이트는 반드시 포그라운드 도구 호출(`timeout 600000`)로 실행한다. `run_in_background`, Monitor, 백그라운드 작업 알림 대기로 넘기지 않는다. 이 실행은 사람이 없는 `claude -p` 무인 실행이라, 도구 호출 없이 "기다리겠다" 같은 글만 쓰고 턴을 끝내면 이 회차가 즉시 종료되고 결과가 강제로 제출된다(11-21·11-22 07시 회차가 이렇게 공유 전에 끝났다). 게이트가 풀려 `browser_web_share_once.py`와 공개 검증까지 끝내기 전에는 턴을 끝내지 않는다.
 
 ```powershell
 python "{publish_gate_path}"
