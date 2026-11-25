@@ -78,5 +78,51 @@ class WaitForPublishTimeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             MOD.validate_recovery_window(target, failed, target - timedelta(minutes=1))
 
+    def _fake_clock(self, start):
+        state = {"now": start, "slept": 0.0}
+
+        def now(_tz=None):
+            return state["now"]
+
+        def sleep(seconds):
+            state["slept"] += seconds
+            state["now"] = state["now"] + timedelta(seconds=seconds)
+
+        return state, now, sleep
+
+    def test_wait_returns_none_after_max_wait_so_tool_call_ends_before_timeout(self):
+        # 11-21·11-22 07시: 게이트가 25분까지 기다려 도구 제한(10분)을 넘자 백그라운드로 돌리고 턴을 끝내 결과가 강제됐다.
+        target = datetime(2026, 11, 22, 7, 0, tzinfo=timezone(timedelta(hours=9)))
+        state, now, sleep = self._fake_clock(target - timedelta(minutes=10))
+        released = MOD.wait_until(target, timedelta(minutes=15), max_wait=540, now_fn=now, sleep_fn=sleep)
+        self.assertIsNone(released)
+        self.assertLessEqual(state["slept"], 540)
+
+    def test_wait_releases_within_max_wait(self):
+        target = datetime(2026, 11, 22, 7, 0, tzinfo=timezone(timedelta(hours=9)))
+        state, now, sleep = self._fake_clock(target - timedelta(minutes=2))
+        released = MOD.wait_until(target, timedelta(minutes=1), max_wait=540, now_fn=now, sleep_fn=sleep)
+        self.assertEqual(released, target + timedelta(minutes=1))
+
+    def test_main_exits_3_while_still_waiting(self):
+        import io
+        import os
+        from contextlib import redirect_stdout
+        from unittest.mock import patch
+
+        target = datetime.now(timezone(timedelta(hours=9))) + timedelta(minutes=20)
+        environment = {"NEWS_PICK_SCHEDULED_MODE": "1", "NEWS_PICK_EDITION_AT": target.isoformat(),
+                       "NEWS_PICK_PUBLISH_OFFSET_SECONDS": "0", "NEWS_PICK_GATE_MAX_WAIT_SECONDS": "0"}
+        output = io.StringIO()
+        with patch.dict(os.environ, environment, clear=False), redirect_stdout(output):
+            code = MOD.main()
+        self.assertEqual(code, 3)
+        self.assertIn('"waiting": true', output.getvalue())
+        self.assertIn('"ok": false', output.getvalue())
+
+    def test_default_max_wait_is_below_ten_minute_tool_limit(self):
+        self.assertLessEqual(MOD.DEFAULT_MAX_WAIT_SECONDS, 540)
+
+
 if __name__ == "__main__":
     unittest.main()
