@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import sys
+import time
 from datetime import date, datetime
 from pathlib import Path
 
@@ -16,6 +17,28 @@ import render_story_video as legacy
 
 STORY_COUNT = 3
 EDITION_SLOTS = ("07:00", "12:00", "17:00")
+
+
+PROOF_ATTEMPTS = 3
+PROOF_RETRY_SECONDS = 2.0
+
+
+def extract_proof(ffmpeg: str, video: Path, proof: Path, index: int, sleep=time.sleep) -> None:
+    """영상 3초 지점을 확인용 사진으로 뽑는다.
+
+    11-24·11-25에 영상은 정상인데 이 단계만 3221225786(0xC000013A)으로 끝나 Story가 빠졌다.
+    잠깐 뒤 다시 하면 되는 일이라 몇 번 다시 시도한다.
+    """
+    command = [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-ss", "3.000", "-i", str(video),
+               "-frames:v", "1", "-q:v", "2", str(proof)]
+    for attempt in range(1, PROOF_ATTEMPTS + 1):
+        try:
+            legacy.run_checked(command, f"Story {index} proof")
+            return
+        except RuntimeError:
+            if attempt == PROOF_ATTEMPTS:
+                raise
+            sleep(PROOF_RETRY_SECONDS)
 
 
 def slot_replacements(output_root: Path, target_date: date) -> dict[str, str]:
@@ -134,25 +157,7 @@ def render_one(
     legacy.run_checked(command, f"FFmpeg Story {index} render")
     os.replace(temporary, video)
     technical = legacy.probe_video(video, ffprobe)
-    legacy.run_checked(
-        [
-            ffmpeg,
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
-            "-ss",
-            "3.000",
-            "-i",
-            str(video),
-            "-frames:v",
-            "1",
-            "-q:v",
-            "2",
-            str(proof),
-        ],
-        f"Story {index} proof",
-    )
+    extract_proof(ffmpeg, video, proof, index)
     return {
         "index": index,
         "source": source.record(),

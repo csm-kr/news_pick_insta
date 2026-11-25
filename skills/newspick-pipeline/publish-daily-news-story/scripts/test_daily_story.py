@@ -21,6 +21,34 @@ import render_story_batch
 import render_story_video
 
 
+class ProofRetryTests(unittest.TestCase):
+    # 11-24·11-25 영상은 정상으로 만들어졌는데 확인용 장면 추출만 3221225786(0xC000013A)으로 끝나
+    # 19시 Story가 통째로 빠졌다. 잠깐 뒤 다시 하면 되는 일이라 몇 번 다시 시도한다.
+    def run_extract(self, failures: int) -> list[str]:
+        calls: list[str] = []
+
+        def fake_run_checked(command, label):
+            calls.append(label)
+            if len(calls) <= failures:
+                raise RuntimeError(f"{label} failed (3221225786): Error opening input file")
+
+        original = render_story_batch.legacy.run_checked
+        render_story_batch.legacy.run_checked = fake_run_checked
+        try:
+            render_story_batch.extract_proof("ffmpeg", Path("story-02.mp4"), Path("proof-02.jpg"), 2,
+                                             sleep=lambda seconds: None)
+        finally:
+            render_story_batch.legacy.run_checked = original
+        return calls
+
+    def test_transient_failure_is_retried(self):
+        self.assertEqual(self.run_extract(failures=2), ["Story 2 proof"] * 3)
+
+    def test_gives_up_after_three_attempts(self):
+        with self.assertRaisesRegex(RuntimeError, "Story 2 proof failed"):
+            self.run_extract(failures=3)
+
+
 class DiscoveryTests(unittest.TestCase):
     def make_run(
         self,
