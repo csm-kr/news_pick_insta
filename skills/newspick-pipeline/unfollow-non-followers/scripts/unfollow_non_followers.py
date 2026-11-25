@@ -87,8 +87,13 @@ def non_mutual(following: list[dict], followers: list[dict], exclude: set[str] =
     return result
 
 
+def is_missing(result: dict) -> bool:
+    """탈퇴·아이디 변경으로 없어진 계정은 show가 404를 돌려준다(11-23 사례)."""
+    return result["step"] == "show" and result.get("status") == 404
+
+
 def is_success(result: dict) -> bool:
-    if result["step"].startswith("skip_"):
+    if result["step"].startswith("skip_") or is_missing(result):
         return True
     return result["step"] == "unfollow" and result.get("status") == 200 and '"ok"' in result.get("body", "")
 
@@ -212,6 +217,7 @@ def apply(out_dir: Path) -> int:
     todo = pending(targets, log_path)
     print(f"남은 대상 {len(todo)}개, {deadline:%H:%M}에 자동 중단", flush=True)
     unfollowed = 0
+    missing_in_row = 0
     for user in todo:
         if datetime.now(KST) >= deadline:
             print("예약 run 전 중단 시각에 도달했다. 같은 명령으로 이어서 실행하면 된다.")
@@ -220,6 +226,11 @@ def apply(out_dir: Path) -> int:
         record = {"id": user["id"], "username": user["username"],
                   "at": datetime.now(KST).isoformat(timespec="seconds"), **result}
         print(json.dumps(record, ensure_ascii=False), flush=True)
+        missing_in_row = missing_in_row + 1 if is_missing(result) else 0
+        if missing_in_row >= 3:
+            # 없는 계정이 연달아 나오면 계정 문제가 아니라 조회 주소가 바뀌었을 수 있다
+            print("없는 계정이 3번 연속 나와 중단한다. 조회 주소가 바뀌었는지 확인한다.")
+            return 2
         if not is_success(result):
             # 로그에 남기지 않아야 재개할 때 이 계정을 다시 시도한다
             print("비정상 응답이라 중단한다. 작업 차단일 수 있으니 몇 시간 뒤 재개한다.")
