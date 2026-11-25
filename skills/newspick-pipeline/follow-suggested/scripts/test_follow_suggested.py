@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
+import subprocess
 import tempfile
 import unittest
 from datetime import date
@@ -77,6 +79,40 @@ class FollowResultTests(unittest.TestCase):
 
     def test_similar_accounts_use_chaining_endpoint(self):
         self.assertIn("/api/v1/discover/chaining/?target_id=", MOD.FETCH_SIMILAR_JS)
+
+
+def run_similar_js(responses: list[str]) -> dict:
+    """FETCH_SIMILAR_JS를 node에서 돌린다. fetch는 responses를 차례로 200으로 돌려준다."""
+    seeds = [str(i) for i in range(len(responses))]
+    script = (
+        "globalThis.setTimeout = (f) => f();\n"
+        f"const bodies = {json.dumps(responses)};\n"
+        "let calls = 0;\n"
+        "globalThis.fetch = async () => { const b = bodies[calls++];\n"
+        "  return {ok: true, text: async () => b, json: async () => JSON.parse(b)}; };\n"
+        f"({MOD.FETCH_SIMILAR_JS % json.dumps(seeds)})\n"
+        "  .then(users => console.log(JSON.stringify({users, calls})))\n"
+        "  .catch(e => { console.log(JSON.stringify({error: String(e), calls})); });\n"
+    )
+    out = subprocess.run(["node", "-e", script], capture_output=True, text=True, encoding="utf-8", timeout=30)
+    return json.loads(out.stdout)
+
+
+@unittest.skipUnless(shutil.which("node"), "node가 없으면 JS 동작은 확인하지 않는다")
+class SimilarAccountScriptTests(unittest.TestCase):
+    def test_html_response_stops_quietly_and_keeps_users_already_fetched(self):
+        # 11-24 비슷한 계정 응답이 HTML로 와서 JSON 파싱 오류로 그날 팔로우 세 번이 모두 0명이 됐다.
+        # 비슷한 계정이 안 나오면 무리하지 않고 추천에서 고른 만큼만 팔로우한다(사용자 요청 11-25).
+        result = run_similar_js([json.dumps({"users": [{"pk": "8", "username": "u8"}]}),
+                                 "<!DOCTYPE html><html></html>",
+                                 json.dumps({"users": [{"pk": "9", "username": "u9"}]})])
+        self.assertNotIn("error", result)
+        self.assertEqual([u["pk"] for u in result["users"]], ["8"])
+        self.assertEqual(result["calls"], 2)
+
+    def test_json_responses_are_all_collected(self):
+        result = run_similar_js([json.dumps({"users": [{"pk": "8"}]}), json.dumps({"users": [{"pk": "9"}]})])
+        self.assertEqual([u["pk"] for u in result["users"]], ["8", "9"])
 
 
 class SimilarAccountTests(unittest.TestCase):

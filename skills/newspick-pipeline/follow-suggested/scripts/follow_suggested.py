@@ -53,7 +53,11 @@ FETCH_SIMILAR_JS = """(async (ids) => {
   const users = [];
   for (const id of ids) {
     const r = await fetch(`/api/v1/discover/chaining/?target_id=${id}`, {headers: H, credentials: "include"});
-    if (r.ok) users.push(...((await r.json()).users || []));
+    let data;
+    try { data = r.ok ? JSON.parse(await r.text()) : null; } catch (e) { data = null; }
+    // HTML 등 JSON이 아닌 응답이 오면 무리하지 않고 여기까지 모은 계정만 쓴다
+    if (r.ok && !data) break;
+    if (data) users.push(...(data.users || []));
     await new Promise(r => setTimeout(r, 1500 + Math.random() * 1500));
   }
   return users;
