@@ -29,6 +29,7 @@ description: 뉴스픽(@newspick_studio) Instagram 카드뉴스 운영 전체를
 - **Instagram 브라우저**: ego lite의 `뉴스픽` 프로필(`workspace.json`의 `browser.ego_profile_id`)만 쓴다. Instagram 조작은 `publish-news-pick/scripts/invoke_edge_browser_harness.py`를 거친다. 프로필이 다르면 연결이 막히며, 다른 프로필이나 브라우저로 우회하지 않는다. 연결마다 실제 프로필이 `output/logs/ego-sessions.jsonl`에 남는다.
 - **ego 공간 정리**: 회차·스토리 실행기는 시작 전과 끝난 뒤에 `newspick-instagram` 공간을 닫고, 팔로우·언팔은 끝나면 `newspick-growth`를 닫는다(`ego_harness.close_task_spaces`). 수동으로 게시했을 때도 끝나면 같은 함수로 닫는다. 공간을 여러 회차가 이어 쓰면 창이 최소화로 굳어 화면 캡처가 멈춘다(11-14~15 세 회차 실패). 회차 중 캡처가 멈추면 새 공간을 만들어 우회하지 말고 needs_review로 끝낸다.
 - **공개 조사 브라우저**: 기사·공식 자료·reference 수집은 `aside-browser` 스킬과 Aside CLI로 한다. Instagram용 ego 공간에서 언론사·기관 사이트를 열지 않는다. 사용자가 연 탭은 건드리지 않는다.
+- **Instagram 보안 화면**: 회차가 `instagram_challenge_required`로 끝나면 사용자가 뉴스픽 프로필에서 직접 풀 때까지 기다리고, 그동안 팔로우·언팔 예약은 사용자 승인으로 꺼 둔다. 11-16~20 사례와 대응은 `publish-news-pick/references/login-and-session.md` "겪은 사례".
 - **게시 승인**: 모든 QA를 통과한 exact payload hash를 잠근 뒤 그 한 건만 승인한다. 공유는 한 번만 누르고, 실패하면 자동 재시도하지 않고 공개 프로필을 읽기 전용으로 확인한다. 기존 게시물을 지우거나 고치지 않는다.
 - **정규 회차 대체**: 정규 회차가 빠져서 수동으로 올린 게시를 사용자가 그 회차로 넣으라고 하면 `output/scheduler/editions/<YYYY-MM-DD>-<HHMM>.replacement.json`에 `{slot, run_id, reason, approved_by: "user"}`를 남긴다. run 기록(`run.json`)은 고치지 않는다. 19시 Story와 보고가 이 기록을 읽는다. 빠진 회차가 게시 단계에서만 멈췄다면 그 카드를 `orchestrate.py clone-prepared`로 새 run에 옮겨 올린다(`upload-news-pick/SKILL.md` "시작과 재개").
 

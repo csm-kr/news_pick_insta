@@ -48,6 +48,14 @@ Instagram은 background target에서 `프로필 편집`과 `보관함 보기`를
 
 브라우저가 현재 다른 사람의 공개 프로필 URL을 보고 있어도 로그인 계정은 `IG_ACCOUNT`일 수 있다. 작성 전에는 현재 URL 대신 왼쪽 rail의 정확한 계정 profile 링크와 그 링크 안 image alt를 확인한다. `browser_web_upload_prepare.py`가 이 신호를 확인한 뒤 설정 계정 프로필로 이동하고 작성기를 연다.
 
+## 겪은 사례: "이메일이 안전하지 않을 수 있습니다" 보안 화면 (2026-11-16~20)
+
+- **현상**: instagram.com에 들어가면 `/accounts/update_risky_contactpoint/`로 넘어가 "회원님의 이메일이 안전하지 않을 수 있습니다… 다른 이메일 주소를 추가하세요" 화면만 뜨고 닫을 수 없다. ego 뉴스픽 프로필과 로그인 자체는 정상이다. 프로필 페이지도 이 화면으로 넘어가서 19:30 보고가 팔로워 수를 읽지 못한다(`og:description이 나타나지 않음`).
+- **예약 실행의 반응**: 게시 회차는 preflight에서 `instagram_challenge_required`로 게시 없이 needs_review로 끝난다. 제작 전 preflight에서 걸리면 run을 만들지 않는다. 정규 게시가 없으니 19시 Story도 건너뛴다. 계정에 올라간 것은 없었다.
+- **막혔던 것**: "이메일 주소 업데이트"를 누르면 계정센터 연락처 페이지가 "현재 이 페이지를 이용할 수 없습니다 / 요청을 처리할 수 없습니다"로 열리지 않았다. 휴대폰 앱에서는 번호가 맞는데도 인증 SMS가 오지 않았다. 2026년에 같은 증상의 Meta 버그 제보가 많다(24시간 단위로 재시도, 앱에서 휴대폰 흔들기로 문제 신고, 새 이메일은 다른 IG 계정과 겹치지 않게).
+- **걸린 시간**: 11-16 22시쯤 시작해 11-20 새벽에 풀렸다. 약 3일 반 동안 정규 회차 9건, Story 3건이 빠졌다.
+- **대응**: 보안 화면 중에는 팔로우·언팔 예약 4개(`NewsPickFollow-*`, `NewsPickUnfollow-Weekly`)를 사용자 승인으로 꺼 둔다. 재전송·재시도를 몰아서 하지 않는다. 사용자가 풀었다고 하면 Profile 2로 instagram.com 피드가 열리는지 확인한 뒤 다시 켠다.
+
 ## 선택적 private API의 cookie
 
 private API 경로만 Instagram 도메인의 `sessionid`가 필요하다. 구현은 helper 프로세스 메모리에서 ego 탭의 cookie를 읽어 `Client.login_by_sessionid()`에 한 번 전달하고 즉시 참조를 버린다.
